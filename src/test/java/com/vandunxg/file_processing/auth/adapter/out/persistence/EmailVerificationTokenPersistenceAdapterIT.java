@@ -7,6 +7,7 @@ import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -97,7 +98,8 @@ class EmailVerificationTokenPersistenceAdapterIT extends PostgresTestContainerBa
 
     EmailVerificationToken reloaded =
         emailVerificationTokenRepositoryPort.findByTokenHashForUpdate(tokenHash).orElseThrow();
-    assertThat(reloaded.getUsedAt()).isEqualTo(now);
+    assertThat(reloaded.getUsedAt().truncatedTo(ChronoUnit.MICROS))
+        .isEqualTo(now.truncatedTo(ChronoUnit.MICROS));
 
     assertThatThrownBy(() -> reloaded.consume(now))
         .isInstanceOf(AuthDomainException.class)
@@ -131,14 +133,16 @@ class EmailVerificationTokenPersistenceAdapterIT extends PostgresTestContainerBa
             emailVerificationTokenRepositoryPort
                 .findByTokenHashForUpdate(firstHash)
                 .orElseThrow()
-                .getUsedAt())
-        .isEqualTo(invalidatedAt);
+                .getUsedAt()
+                .truncatedTo(ChronoUnit.MICROS))
+        .isEqualTo(invalidatedAt.truncatedTo(ChronoUnit.MICROS));
     assertThat(
             emailVerificationTokenRepositoryPort
                 .findByTokenHashForUpdate(secondHash)
                 .orElseThrow()
-                .getUsedAt())
-        .isEqualTo(invalidatedAt);
+                .getUsedAt()
+                .truncatedTo(ChronoUnit.MICROS))
+        .isEqualTo(invalidatedAt.truncatedTo(ChronoUnit.MICROS));
   }
 
   @Test

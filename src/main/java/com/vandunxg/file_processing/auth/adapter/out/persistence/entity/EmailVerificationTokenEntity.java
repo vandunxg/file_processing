@@ -34,7 +34,7 @@ public class EmailVerificationTokenEntity {
   @Column(name = "user_id", nullable = false)
   private UUID userId;
 
-  @Column(name = "token_hash", nullable = false, length = 64)
+  @Column(name = "token_hash", nullable = false, length = 64, columnDefinition = "char(64)")
   private String tokenHash;
 
   @Column(name = "issued_at", nullable = false)
