@@ -49,7 +49,12 @@ public class VerifyEmailService implements VerifyEmailUseCase {
                 });
 
     Instant now = Instant.now(clock);
-    token.consume(now);
+    try {
+      token.consume(now);
+    } catch (AuthDomainException e) {
+      log.warn("[verifyEmail] token consume rejected tokenId={}", token.getId());
+      throw e;
+    }
     tokenRepositoryPort.save(token);
 
     User user =
