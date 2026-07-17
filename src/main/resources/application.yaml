@@ -210,6 +210,14 @@ app:
       allow-credentials: true
       max-age: 3600
 
+    register:
+      max-attempts-per-hour: ${AUTH_REGISTER_MAX_PER_HOUR:10}
+
+    email-verification:
+      token-ttl: ${AUTH_EMAIL_VERIFICATION_TOKEN_TTL:PT24H}
+      base-url: ${AUTH_EMAIL_VERIFICATION_BASE_URL:http://localhost:5173/verify-email}
+      resend-max-attempts-per-hour: ${AUTH_EMAIL_VERIFICATION_RESEND_MAX_PER_HOUR:10}
+
   api:
     version: ${APP_API_VERSION:v1}
     prefix: ${APP_API_PREFIX:/api}

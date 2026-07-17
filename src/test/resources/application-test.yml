@@ -42,3 +42,9 @@ app:
     bootstrap:
       admin:
         enabled: false
+    register:
+      max-attempts-per-hour: 10
+    email-verification:
+      token-ttl: PT24H
+      base-url: http://localhost:5173/verify-email
+      resend-max-attempts-per-hour: 10
