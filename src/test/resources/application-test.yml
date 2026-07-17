@@ -1,0 +1,44 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 500ms
+logging:
+  level:
+    org.hibernate.SQL: INFO
+    org.testcontainers: INFO
+
+app:
+  auth:
+    jwt:
+      issuer: file-processing-test
+      audience: file-processing-api-test
+      access-token-ttl: PT15M
+      password-change-token-ttl: PT5M
+      clock-skew: PT60S
+      active-kid: auth-test-key-1
+      # Non-production test-only RSA-2048 key; must not be reused outside this profile.
+      private-key-pem-base64: MIIEogIBAAKCAQEAyW0u/rXudBuZ6uNhbOY6EEy32jYCZ558UJgmyM68CtbdoxqWsdy4phLXxX5YwgC4+zDcIam1fn+d573Lkw5ihTJ6NiWvpfCPen95rEgqeCohGqhxQ7cpa1KNzLpPggkKune8g3aFaj7KimG0TYiRFosIbpcAu6o+Hl/pNRE/AoQy/uURMkIkcATj6/bcb3jFO/EAakRig2BHFrMOMRWZ/mGKzZTgcEE0m9mcFulzM9GbmHTEZOpCNd2zD1pHcW4l+ZvtKX8BntXXFbJZFHQioFvG36+YtZ4cwfW6ptRVLxcLvT5Y1vyN/mDLz8OMNDg1A/QNzeBQxoq3nysdQ5hJowIDAQABAoIBAAaf+DE5c5/O/pd6pgwqYFOD6nIbX6Xf0Q/niTMGlam3mm+QYs9zxoDz0rP0rV+oHW1plHvo9Ia2FM/37pemG/hsihd40tee22E4ixxu/TKZlCAn1R3Yity0SOSoZhANUxSB9qnOPqIZcZjukLsSGE+JABx/C++gME3YcrejmxJujrXRzCaveJ75M9cG8nzWz0TgTxY176psj6gpBMbTGwzNhkXTBBl0mQJs7U0pCgkJ2NFISdMU2dg8fClKh0tRjz4OB7zyWS+m3tHc9J7NAh3Wmekv1cCAW0sem24DWXX0Qm608fjI/WVnuvKBPXCTT0LNxFuzKZxBAR2vh83WQMkCgYEA8UIta4LVU/cho3R45FbYHBWxn5Cv1V1naOAWOmlPEGajYVRaZoR2us0zDbN4SXkQVGZAUXRCiDsR3CP5E1aWaCKYSrOy/dvszxhSSctCDQMCpRAQhewBlFQ1DHFrVvkU15VCZ2FkuLTWZYQfMl5bac0bnQPDHBps7dT/fOLddVkCgYEA1bvxyWBfLeNh4ORs+9zaXj7SpwnL6TVigC8M1L/F1vrI5r67SXfK5Umj6pmPEZxdab3cbkOm2DH7tuEVeuhTQDs4ZCuO1Z7q4B20zRpTw68yU01dhZgh7nOVgNNlIt+jvSgeETOuu8PawyR8gvNJbLjzQy/0E22DWTyGTjUiy1sCgYB+FjL8rDznjBHlhjqkQ4rgaqoRFaH/pbgkxHB5iI4MqUeb12UDjRksGZAkCfbEl2PkaCgXKeaXoh98aMSEyc0DkYj8CZxzNhw2Q6TF8leLy1X3hETOaQCOT9AFt8T8iGLPJK+2rdzg94nRNlLDlTK7Qbm7vrqalmj1h0sbLsnEyQKBgFSNQztM2ppGp4PWGZ8RYXmDFMZrw7UAH3ViJ4tKSjOfhjZyIZkQwL0wAp5eHRD0cKfSKg+cx7YjH9ba+CplGfoA82/9I0Yy1evPFKVG0vhIqHn30xV0d4fjRbNu7UV8f0PnSO25KlixRCuKlY8gO129VM6xe7brzdhRbzglIRydAoGACzXR+u1qnt5iSUEl0D8JJVdgxLuMlpbIgSIcyPGyDS31JBtC8GJZDipwOPHnnXl0CmlkgaczA9LAgkgCnV7u+w3TEzT7mp8LbygEEA9/tE7b2UkCevSTEwx4DdMG5B94GCxh6JnwHRj2CTg13zp2HN+qEJzPr2Aw85ibUGNJpzc=
+      public-keys:
+        - kid: auth-test-key-1
+          pem-base64: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyW0u/rXudBuZ6uNhbOY6EEy32jYCZ558UJgmyM68CtbdoxqWsdy4phLXxX5YwgC4+zDcIam1fn+d573Lkw5ihTJ6NiWvpfCPen95rEgqeCohGqhxQ7cpa1KNzLpPggkKune8g3aFaj7KimG0TYiRFosIbpcAu6o+Hl/pNRE/AoQy/uURMkIkcATj6/bcb3jFO/EAakRig2BHFrMOMRWZ/mGKzZTgcEE0m9mcFulzM9GbmHTEZOpCNd2zD1pHcW4l+ZvtKX8BntXXFbJZFHQioFvG36+YtZ4cwfW6ptRVLxcLvT5Y1vyN/mDLz8OMNDg1A/QNzeBQxoq3nysdQ5hJowIDAQAB
+    password:
+      encoder: bcrypt
+      bcrypt-cost: 4
+      min-length: 8
+      max-length: 128
+    login:
+      max-failures: 5
+      failure-window: PT15M
+      lock-duration: PT15M
+    bootstrap:
+      admin:
+        enabled: false

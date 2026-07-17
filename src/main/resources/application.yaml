@@ -66,8 +66,27 @@ spring:
   servlet:
     multipart:
       enabled: true
-      max-file-size: ${MAX_FILE_SIZE:20MB}
-      max-request-size: ${MAX_REQUEST_SIZE:25MB}
+      max-file-size: ${MAX_FILE_SIZE:500MB}
+      max-request-size: ${MAX_REQUEST_SIZE:500MB}
+
+springdoc:
+  api-docs:
+    enabled: true
+    path: /api-docs
+
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui
+    display-request-duration: true
+    operations-sorter: method
+    tags-sorter: alpha
+    persist-authorization: true
+
+  packages-to-scan:
+    - com.vandunxg.file_processing.auth.adapter.in.web
+
+  paths-to-match:
+    - ${app.api.prefix}/${app.api.version}/**
 
 server:
   port: ${SERVER_PORT:8080}
@@ -123,6 +142,9 @@ management:
       environment: ${SPRING_PROFILES_ACTIVE:dev}
 
 logging:
+  file:
+    path: /var/log/file-processing
+
   level:
     root: INFO
     org.springframework: INFO
@@ -138,28 +160,55 @@ logging:
       %logger{36}
       - %msg%n
 
+  logback:
+    rollingpolicy:
+      max-file-size: 100MB
+      max-history: 30
+      total-size-cap: 10GB
+      clean-history-on-start: false
+
 app:
-  security:
+  gc:
+    cron-time: 15 53 */4 * * *
+
+  auth:
     jwt:
-      issuer: ${JWT_ISSUER:file_processing}
-      audience: ${JWT_AUDIENCE:file_processing-api}
-
-      secret: ${JWT_SECRET:local-dev-only-change-this-secret-key-minimum-32-bytes}
-
-      access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:15m}
-      refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION:30d}
-      clock-skew: ${JWT_CLOCK_SKEW:30s}
+      issuer: ${AUTH_JWT_ISSUER:file-processing}
+      audience: ${AUTH_JWT_AUDIENCE:file-processing-api}
+      access-token-ttl: ${AUTH_JWT_ACCESS_TOKEN_TTL:PT15M}
+      password-change-token-ttl: ${AUTH_JWT_PW_CHG_TOKEN_TTL:PT5M}
+      clock-skew: ${AUTH_JWT_CLOCK_SKEW:PT60S}
+      active-kid: ${AUTH_JWT_ACTIVE_KID}
+      private-key-pem-base64: ${AUTH_JWT_PRIVATE_KEY_PEM}
+      public-keys:
+        - kid: ${AUTH_JWT_ACTIVE_KID}
+          pem-base64: ${AUTH_JWT_ACTIVE_PUBLIC_KEY_PEM}
 
     password:
-      bcrypt-strength: ${BCRYPT_STRENGTH:12}
+      encoder: bcrypt
+      bcrypt-cost: ${AUTH_BCRYPT_COST:12}
+      min-length: 8
+      max-length: 128
+
+    login:
+      max-failures: 5
+      failure-window: PT15M
+      lock-duration: PT15M
+
+    bootstrap:
+      admin:
+        enabled: ${AUTH_BOOTSTRAP_ENABLED:false}
+        username: ${AUTH_BOOTSTRAP_ADMIN_USERNAME:}
+        email: ${AUTH_BOOTSTRAP_ADMIN_EMAIL:}
+        password: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:}
+        display-name: ${AUTH_BOOTSTRAP_ADMIN_DISPLAY_NAME:System Administrator}
 
     cors:
       allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
-      allowed-methods: ${CORS_ALLOWED_METHODS:GET,POST,PUT,PATCH,DELETE,OPTIONS}
-      allowed-headers: ${CORS_ALLOWED_HEADERS:Authorization,Content-Type,Accept,X-Requested-With,X-Correlation-Id}
-      exposed-headers: ${CORS_EXPOSED_HEADERS:X-Correlation-Id}
-      allow-credentials: ${CORS_ALLOW_CREDENTIALS:true}
-      max-age: ${CORS_MAX_AGE:3600}
+      allowed-methods: GET,POST,PATCH,DELETE,OPTIONS
+      allowed-headers: Authorization,Content-Type,Accept,X-Requested-With,X-CSRF-Token,X-Request-Id
+      allow-credentials: true
+      max-age: 3600
 
   api:
     version: ${APP_API_VERSION:v1}

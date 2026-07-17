@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration scan="false">
+
+    <!--
+        Production-ready Logback configuration for Spring Boot 3.x / 4.x.
+
+        Profiles:
+        - local, dev, test: human-readable colored console logs only.
+        - prod, production, staging: plain console logs + rolling application/error files.
+        - any other profile: plain console logs only.
+
+        Put this file at: src/main/resources/logback-spring.xml
+    -->
+
+    <!-- Enables Spring Boot conversion rules such as %clr and %wEx. -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- Values are externalized through application.yml or environment variables. -->
+    <springProperty scope="context"
+                    name="APP_NAME"
+                    source="spring.application.name"
+                    defaultValue="application"/>
+
+    <springProperty scope="context"
+                    name="ACTIVE_PROFILE"
+                    source="spring.profiles.active"
+                    defaultValue="default"/>
+
+    <springProperty scope="context"
+                    name="ROOT_LOG_LEVEL"
+                    source="logging.level.root"
+                    defaultValue="INFO"/>
+
+    <springProperty scope="context"
+                    name="LOG_PATH"
+                    source="logging.file.path"
+                    defaultValue="./logs"/>
+
+    <springProperty scope="context"
+                    name="MAX_FILE_SIZE"
+                    source="logging.logback.rollingpolicy.max-file-size"
+                    defaultValue="100MB"/>
+
+    <springProperty scope="context"
+                    name="MAX_HISTORY"
+                    source="logging.logback.rollingpolicy.max-history"
+                    defaultValue="30"/>
+
+    <springProperty scope="context"
+                    name="TOTAL_SIZE_CAP"
+                    source="logging.logback.rollingpolicy.total-size-cap"
+                    defaultValue="10GB"/>
+
+    <springProperty scope="context"
+                    name="CLEAN_HISTORY_ON_START"
+                    source="logging.logback.rollingpolicy.clean-history-on-start"
+                    defaultValue="false"/>
+
+    <!--
+        Keep the pattern single-line so log collectors can ingest each event safely.
+        traceId/spanId/requestId are empty when the corresponding MDC key is absent.
+        Avoid caller data (%class, %method, %line) because it is expensive in production.
+    -->
+    <property name="PLAIN_LOG_PATTERN"
+              value="%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%-5level app=${APP_NAME} profile=${ACTIVE_PROFILE} pid=${PID} thread=[%thread] traceId=%X{traceId} spanId=%X{spanId} requestId=%X{requestId} logger=%logger{48} - %msg%n%wEx"/>
+
+    <property name="DEV_LOG_PATTERN"
+              value="%clr(%d{HH:mm:ss.SSS}){faint} %clr(%-5level) %clr(${APP_NAME}){cyan} %clr([%thread]){faint} %clr(traceId=%X{traceId} spanId=%X{spanId}){faint} %clr(%logger{40}){blue} - %msg%n%wEx"/>
+
+    <!-- Human-readable console appender for local development. -->
+    <appender name="DEV_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <charset>UTF-8</charset>
+            <pattern>${DEV_LOG_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Plain console appender for container/platform log collectors. -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <charset>UTF-8</charset>
+            <pattern>${PLAIN_LOG_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Keep framework loggers at sensible production levels. Override in application.yml when needed. -->
+    <logger name="org.springframework" level="INFO"/>
+    <logger name="org.hibernate" level="WARN"/>
+    <logger name="org.apache.kafka" level="WARN"/>
+    <logger name="io.netty" level="WARN"/>
+
+    <springProfile name="local | dev | test">
+        <root level="${ROOT_LOG_LEVEL}">
+            <appender-ref ref="DEV_CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="prod | production | staging">
+        <!-- Main application log: rolls daily and whenever a file reaches MAX_FILE_SIZE. -->
+        <appender name="APPLICATION_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>${LOG_PATH}/${APP_NAME}.log</file>
+            <append>true</append>
+
+            <encoder>
+                <charset>UTF-8</charset>
+                <pattern>${PLAIN_LOG_PATTERN}</pattern>
+            </encoder>
+
+            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+                <fileNamePattern>${LOG_PATH}/archive/${APP_NAME}.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+                <maxFileSize>${MAX_FILE_SIZE}</maxFileSize>
+                <maxHistory>${MAX_HISTORY}</maxHistory>
+                <totalSizeCap>${TOTAL_SIZE_CAP}</totalSizeCap>
+                <cleanHistoryOnStart>${CLEAN_HISTORY_ON_START}</cleanHistoryOnStart>
+            </rollingPolicy>
+        </appender>
+
+        <!-- Dedicated ERROR log for faster incident investigation. -->
+        <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>${LOG_PATH}/${APP_NAME}-error.log</file>
+            <append>true</append>
+
+            <filter class="ch.qos.logback.classic.filter.LevelFilter">
+                <level>ERROR</level>
+                <onMatch>ACCEPT</onMatch>
+                <onMismatch>DENY</onMismatch>
+            </filter>
+
+            <encoder>
+                <charset>UTF-8</charset>
+                <pattern>${PLAIN_LOG_PATTERN}</pattern>
+            </encoder>
+
+            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+                <fileNamePattern>${LOG_PATH}/archive/${APP_NAME}-error.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+                <maxFileSize>${MAX_FILE_SIZE}</maxFileSize>
+                <maxHistory>${MAX_HISTORY}</maxHistory>
+                <totalSizeCap>${TOTAL_SIZE_CAP}</totalSizeCap>
+                <cleanHistoryOnStart>${CLEAN_HISTORY_ON_START}</cleanHistoryOnStart>
+            </rollingPolicy>
+        </appender>
+
+        <!--
+            File I/O is asynchronous to reduce request-thread latency.
+            Low-priority events may be discarded when the queue is under pressure.
+            ERROR events are still written synchronously to ERROR_FILE.
+        -->
+        <appender name="ASYNC_APPLICATION_FILE" class="ch.qos.logback.classic.AsyncAppender">
+            <queueSize>8192</queueSize>
+            <neverBlock>true</neverBlock>
+            <includeCallerData>false</includeCallerData>
+            <maxFlushTime>5000</maxFlushTime>
+            <appender-ref ref="APPLICATION_FILE"/>
+        </appender>
+
+        <root level="${ROOT_LOG_LEVEL}">
+            <appender-ref ref="STDOUT"/>
+            <appender-ref ref="ASYNC_APPLICATION_FILE"/>
+            <appender-ref ref="ERROR_FILE"/>
+        </root>
+    </springProfile>
+
+    <!-- Safe fallback when no known profile is active. -->
+    <springProfile name="!local &amp; !dev &amp; !test &amp; !prod &amp; !production &amp; !staging">
+        <root level="${ROOT_LOG_LEVEL}">
+            <appender-ref ref="STDOUT"/>
+        </root>
+    </springProfile>
+
+</configuration>
