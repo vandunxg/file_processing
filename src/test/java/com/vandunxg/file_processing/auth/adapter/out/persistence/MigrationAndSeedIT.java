@@ -1,22 +1,28 @@
 package com.vandunxg.file_processing.auth.adapter.out.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import com.vandunxg.file_processing.testsupport.PostgresIntegrationTest;
 import com.vandunxg.file_processing.testsupport.PostgresTestContainerBase;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * Verifies the 7 Flyway migrations (V202607170900 - V202607170906) apply cleanly against a real
  * Postgres instance and that the default role / permission seed data lands as expected.
  *
- * <p>Task 2 introduces {@code EmailVerificationTokenEntity}; until then this file only asserts that
- * its backing table exists (via a raw JDBC round-trip), not that the entity round-trips.
+ * <p>Task 2 owns {@code EmailVerificationTokenEntity}; the entity round-trip itself is covered by
+ * {@link EmailVerificationTokenPersistenceAdapterIT}. This file only proves the migration's own
+ * DDL — table presence and the {@code UNIQUE(token_hash)} constraint — via raw JDBC.
  */
 @PostgresIntegrationTest
 class MigrationAndSeedIT extends PostgresTestContainerBase {
@@ -67,5 +73,48 @@ class MigrationAndSeedIT extends PostgresTestContainerBase {
         jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM auth_email_verification_tokens", Integer.class);
     assertThat(count).isEqualTo(0);
+  }
+
+  @Test
+  void migrations_enforceUniqueTokenHash_onAuthEmailVerificationTokens() {
+    UUID userId = UUID.randomUUID();
+    Instant now = Instant.now();
+    jdbcTemplate.update(
+        "INSERT INTO auth_users (id, username, normalized_username, email, normalized_email, "
+            + "display_name, password_hash, status, password_changed_at, created_at,"
+            + " last_modified_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        userId,
+        "migration-it-unique-token",
+        "migration-it-unique-token",
+        "migration-it-unique-token@example.com",
+        "migration-it-unique-token@example.com",
+        "Migration IT Unique Token User",
+        "{bcrypt}$2a$stubhash",
+        "PENDING_VERIFY",
+        Timestamp.from(now),
+        Timestamp.from(now),
+        Timestamp.from(now));
+
+    String sharedTokenHash = "a".repeat(64);
+    jdbcTemplate.update(
+        "INSERT INTO auth_email_verification_tokens (id, user_id, token_hash, issued_at,"
+            + " expires_at) VALUES (?, ?, ?, ?, ?)",
+        UUID.randomUUID(),
+        userId,
+        sharedTokenHash,
+        Timestamp.from(now),
+        Timestamp.from(now.plusSeconds(3600)));
+
+    assertThatThrownBy(
+            () ->
+                jdbcTemplate.update(
+                    "INSERT INTO auth_email_verification_tokens (id, user_id, token_hash,"
+                        + " issued_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+                    UUID.randomUUID(),
+                    userId,
+                    sharedTokenHash,
+                    Timestamp.from(now),
+                    Timestamp.from(now.plusSeconds(3600))))
+        .isInstanceOf(DataIntegrityViolationException.class);
   }
 }
