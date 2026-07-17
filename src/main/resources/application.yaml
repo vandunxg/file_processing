@@ -22,6 +22,12 @@ spring:
       whitelabel:
         enabled: false
 
+  messages:
+    basename: i18n/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+    use-code-as-default-message: false
+
   datasource:
     driver-class-name: org.postgresql.Driver
     hikari:
