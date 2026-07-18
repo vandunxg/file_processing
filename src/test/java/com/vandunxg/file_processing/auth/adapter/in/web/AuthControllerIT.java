@@ -1,10 +1,12 @@
 package com.vandunxg.file_processing.auth.adapter.in.web;
 
+import static org.awaitility.Awaitility.await;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -23,20 +25,31 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.RabbitMQContainer;
+import org.testcontainers.utility.DockerImageName;
 
 /**
  * Covers the public register / verify-email / resend-verification HTTP contract end to end against
- * a real Postgres. Each test method (other than the dedicated throttle test) uses a distinct fake
- * client IP via the {@code X-Real-IP} header so the process-wide Caffeine throttle counter ({@link
- * com.vandunxg.file_processing.auth.adapter.out.cache.CaffeineRegisterThrottleAdapter}) does not
- * leak attempts between unrelated test methods sharing the same Spring context.
+ * a real Postgres, Redis, and RabbitMQ. Each test method (other than the dedicated throttle test)
+ * uses a distinct fake client IP via the {@code X-Real-IP} header so the shared Redis
+ * sliding-window throttle counter ({@link
+ * com.vandunxg.file_processing.auth.adapter.out.cache.RedisRegisterThrottleAdapter}) does not leak
+ * attempts between unrelated test methods sharing the same Spring context.
  *
  * <p>{@code app.auth.register.max-attempts-per-hour} is lowered just for this test class (via
  * {@link TestPropertySource}, not the shared {@code application-test.yml}) so the 429 case can be
  * reached with a handful of requests instead of the production-matching default of 10.
+ *
+ * <p>Audit-log recording and verification-email sending now happen asynchronously via RabbitMQ
+ * (publish in the HTTP request thread, consume on a separate listener container thread), so the
+ * test that needs the captured verification link polls with Awaitility instead of asserting
+ * immediately after the HTTP response returns.
  */
 @PostgresIntegrationTest
 @AutoConfigureMockMvc
@@ -44,6 +57,29 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class AuthControllerIT extends PostgresTestContainerBase {
 
   private static final String BASE_URL = "/api/v1/auth";
+
+  private static final GenericContainer<?> REDIS =
+      new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
+          .withExposedPorts(6379)
+          .withReuse(true);
+
+  private static final RabbitMQContainer RABBITMQ =
+      new RabbitMQContainer(DockerImageName.parse("rabbitmq:4-management-alpine")).withReuse(true);
+
+  static {
+    REDIS.start();
+    RABBITMQ.start();
+  }
+
+  @DynamicPropertySource
+  static void infraProperties(DynamicPropertyRegistry registry) {
+    registry.add("spring.data.redis.host", REDIS::getHost);
+    registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
+    registry.add("spring.rabbitmq.host", RABBITMQ::getHost);
+    registry.add("spring.rabbitmq.port", RABBITMQ::getAmqpPort);
+    registry.add("spring.rabbitmq.username", RABBITMQ::getAdminUsername);
+    registry.add("spring.rabbitmq.password", RABBITMQ::getAdminPassword);
+  }
 
   @Autowired private MockMvc mockMvc;
   @Autowired private ObjectMapper objectMapper;
@@ -123,6 +159,7 @@ class AuthControllerIT extends PostgresTestContainerBase {
         registerRequest("verify-ok", "verify-ok@example.com", "Verify Ok", "StrongPassw0rd!");
     mockMvc.perform(registerCall(registerRequest, ip)).andExpect(status().isCreated());
 
+    await().atMost(Duration.ofSeconds(10)).until(capturingEmailSenderPort::hasVerificationLink);
     String rawToken = extractToken(capturingEmailSenderPort.lastVerificationLink());
     VerifyEmailRequest verifyEmailRequest = new VerifyEmailRequest();
     verifyEmailRequest.setToken(rawToken);
@@ -223,7 +260,9 @@ class AuthControllerIT extends PostgresTestContainerBase {
   /**
    * Test-only {@link EmailSenderPort} double that captures the last verification link instead of
    * sending real email, so the IT can pull the raw token out of it (the controller never returns
-   * the raw token, correctly, since it is a secret).
+   * the raw token, correctly, since it is a secret). Now invoked from {@code
+   * VerificationEmailEventListener} rather than directly from the service, hence the {@code
+   * hasVerificationLink} poll helper used by the caller.
    */
   static class CapturingEmailSenderPort implements EmailSenderPort {
 
@@ -232,6 +271,10 @@ class AuthControllerIT extends PostgresTestContainerBase {
     @Override
     public void sendVerificationEmail(String toEmail, String displayName, String verificationLink) {
       verificationLinks.add(verificationLink);
+    }
+
+    boolean hasVerificationLink() {
+      return !verificationLinks.isEmpty();
     }
 
     String lastVerificationLink() {
