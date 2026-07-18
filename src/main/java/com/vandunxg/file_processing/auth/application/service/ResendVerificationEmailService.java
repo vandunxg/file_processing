@@ -98,8 +98,7 @@ public class ResendVerificationEmailService implements ResendVerificationEmailUs
     log.info("[resend] issued new verification token userId={}", user.getId());
 
     if (TransactionSynchronizationManager.isSynchronizationActive()) {
-      String verificationLink =
-          authProperties.emailVerification().baseUrl() + "?token=" + rawToken;
+      String verificationLink = authProperties.emailVerification().baseUrl() + "?token=" + rawToken;
       TransactionSynchronizationManager.registerSynchronization(
           new TransactionSynchronization() {
             @Override

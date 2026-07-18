@@ -18,14 +18,6 @@ import java.util.ArrayList;
 import java.util.Optional;
 import java.util.UUID;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
 import com.vandunxg.common.utils.HashUtils;
 import com.vandunxg.file_processing.auth.application.command.ResendVerificationEmailCommand;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogPort;
@@ -42,6 +34,13 @@ import com.vandunxg.file_processing.auth.domain.model.EmailVerificationToken;
 import com.vandunxg.file_processing.auth.domain.model.OperationType;
 import com.vandunxg.file_processing.auth.domain.model.User;
 import com.vandunxg.file_processing.auth.domain.model.UserStatus;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -159,8 +158,7 @@ class ResendVerificationEmailServiceTest {
   @Test
   void resendThrowsRateLimitedBeforeIdentifierLookupWhenThrottleExceeded() {
     ResendVerificationEmailCommand command = command("operator1@example.com");
-    when(throttlePort.tryConsume(eq("resend:" + command.getIpAddress()), eq(5)))
-        .thenReturn(false);
+    when(throttlePort.tryConsume(eq("resend:" + command.getIpAddress()), eq(5))).thenReturn(false);
 
     assertThatThrownBy(() -> resendVerificationEmailService.resend(command))
         .isInstanceOf(AuthDomainException.class)

@@ -2,15 +2,13 @@ package com.vandunxg.file_processing.auth.adapter.out.password;
 
 import java.util.Map;
 
+import com.vandunxg.file_processing.auth.application.port.out.PasswordHasherPort;
+import com.vandunxg.file_processing.auth.configuration.AuthProperties;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.DelegatingPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-
-import com.vandunxg.file_processing.auth.application.port.out.PasswordHasherPort;
-import com.vandunxg.file_processing.auth.configuration.AuthProperties;
-
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * Wraps a {@link DelegatingPasswordEncoder} so the stored password is prefixed with the encoding

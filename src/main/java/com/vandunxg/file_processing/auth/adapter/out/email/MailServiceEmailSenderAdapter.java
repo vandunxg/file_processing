@@ -1,14 +1,12 @@
 package com.vandunxg.file_processing.auth.adapter.out.email;
 
-import org.springframework.stereotype.Component;
-
 import com.vandunxg.common.email.MailService;
 import com.vandunxg.common.utils.StrUtils;
 import com.vandunxg.file_processing.auth.application.port.out.EmailSenderPort;
-
 import jakarta.mail.MessagingException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor

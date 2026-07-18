@@ -30,9 +30,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * Covers {@link EmailVerificationTokenRepositoryPort} end to end against a real Postgres:
- * hash-only persistence, pessimistic-lock lookup, consume/re-consume, bulk invalidation and
- * expiry.
+ * Covers {@link EmailVerificationTokenRepositoryPort} end to end against a real Postgres: hash-only
+ * persistence, pessimistic-lock lookup, consume/re-consume, bulk invalidation and expiry.
  */
 @PostgresIntegrationTest
 class EmailVerificationTokenPersistenceAdapterIT extends PostgresTestContainerBase {

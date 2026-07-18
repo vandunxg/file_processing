@@ -3,9 +3,8 @@ package com.vandunxg.file_processing.auth.adapter.out.security;
 import java.security.SecureRandom;
 import java.util.Base64;
 
-import org.springframework.stereotype.Component;
-
 import com.vandunxg.file_processing.auth.application.port.out.VerificationTokenGeneratorPort;
+import org.springframework.stereotype.Component;
 
 @Component
 public class SecureVerificationTokenGeneratorAdapter implements VerificationTokenGeneratorPort {

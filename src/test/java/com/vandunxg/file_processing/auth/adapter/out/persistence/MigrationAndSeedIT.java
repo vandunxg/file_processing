@@ -21,8 +21,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Postgres instance and that the default role / permission seed data lands as expected.
  *
  * <p>Task 2 owns {@code EmailVerificationTokenEntity}; the entity round-trip itself is covered by
- * {@link EmailVerificationTokenPersistenceAdapterIT}. This file only proves the migration's own
- * DDL — table presence and the {@code UNIQUE(token_hash)} constraint — via raw JDBC.
+ * {@link EmailVerificationTokenPersistenceAdapterIT}. This file only proves the migration's own DDL
+ * — table presence and the {@code UNIQUE(token_hash)} constraint — via raw JDBC.
  */
 @PostgresIntegrationTest
 class MigrationAndSeedIT extends PostgresTestContainerBase {

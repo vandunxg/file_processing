@@ -82,8 +82,7 @@ public class VerifyEmailService implements VerifyEmailUseCase {
             .changedAt(now)
             .build());
 
-    log.info(
-        "[verifyEmail] verified email userId={} status={}", saved.getId(), saved.getStatus());
+    log.info("[verifyEmail] verified email userId={} status={}", saved.getId(), saved.getStatus());
 
     return RegisterResult.from(saved);
   }

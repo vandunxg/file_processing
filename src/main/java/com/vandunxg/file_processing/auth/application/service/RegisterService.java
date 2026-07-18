@@ -166,8 +166,7 @@ public class RegisterService implements RegisterUseCase {
     log.info("[register] registered user userId={} status={}", saved.getId(), saved.getStatus());
 
     if (TransactionSynchronizationManager.isSynchronizationActive()) {
-      String verificationLink =
-          authProperties.emailVerification().baseUrl() + "?token=" + rawToken;
+      String verificationLink = authProperties.emailVerification().baseUrl() + "?token=" + rawToken;
       TransactionSynchronizationManager.registerSynchronization(
           new TransactionSynchronization() {
             @Override

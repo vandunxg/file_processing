@@ -16,13 +16,6 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
 import com.vandunxg.common.utils.HashUtils;
 import com.vandunxg.file_processing.auth.application.command.VerifyEmailCommand;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogPort;
@@ -36,6 +29,12 @@ import com.vandunxg.file_processing.auth.domain.model.EmailVerificationToken;
 import com.vandunxg.file_processing.auth.domain.model.OperationType;
 import com.vandunxg.file_processing.auth.domain.model.User;
 import com.vandunxg.file_processing.auth.domain.model.UserStatus;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class VerifyEmailServiceTest {

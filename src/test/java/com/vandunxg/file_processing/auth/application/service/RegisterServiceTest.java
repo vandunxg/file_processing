@@ -19,14 +19,6 @@ import java.util.ArrayList;
 import java.util.Optional;
 import java.util.UUID;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
 import com.vandunxg.common.utils.HashUtils;
 import com.vandunxg.file_processing.auth.application.command.RegisterCommand;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogPort;
@@ -50,6 +42,13 @@ import com.vandunxg.file_processing.auth.domain.model.Role;
 import com.vandunxg.file_processing.auth.domain.model.User;
 import com.vandunxg.file_processing.auth.domain.model.UserRole;
 import com.vandunxg.file_processing.auth.domain.model.UserStatus;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -211,7 +210,8 @@ class RegisterServiceTest {
         .extracting("error")
         .isEqualTo(AuthErrorCode.USERNAME_ALREADY_EXISTS);
 
-    verifyNoInteractions(userRoleRepositoryPort, tokenRepositoryPort, auditLogPort, emailSenderPort);
+    verifyNoInteractions(
+        userRoleRepositoryPort, tokenRepositoryPort, auditLogPort, emailSenderPort);
   }
 
   @Test
@@ -232,7 +232,8 @@ class RegisterServiceTest {
         .extracting("error")
         .isEqualTo(AuthErrorCode.EMAIL_ALREADY_EXISTS);
 
-    verifyNoInteractions(userRoleRepositoryPort, tokenRepositoryPort, auditLogPort, emailSenderPort);
+    verifyNoInteractions(
+        userRoleRepositoryPort, tokenRepositoryPort, auditLogPort, emailSenderPort);
   }
 
   @Test

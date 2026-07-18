@@ -3,11 +3,10 @@ package com.vandunxg.file_processing.auth.adapter.out.cache;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.springframework.stereotype.Component;
-
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.vandunxg.file_processing.auth.application.port.out.RegisterThrottlePort;
+import org.springframework.stereotype.Component;
 
 /**
  * Fixed-window-per-first-request counter, per-instance (not cluster-wide). Acceptable for this
@@ -21,7 +20,8 @@ public class CaffeineRegisterThrottleAdapter implements RegisterThrottlePort {
 
   @Override
   public boolean tryConsume(String key, int maxPerHour) {
-    int attempts = counters.asMap().computeIfAbsent(key, k -> new AtomicInteger()).incrementAndGet();
+    int attempts =
+        counters.asMap().computeIfAbsent(key, k -> new AtomicInteger()).incrementAndGet();
     return attempts <= maxPerHour;
   }
 }
