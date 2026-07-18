@@ -36,7 +36,11 @@ public class RedisRegisterThrottleAdapter implements RegisterThrottlePort {
             String.valueOf(windowSeconds));
 
     boolean result = allowed != null && allowed == 1L;
-    log.debug("[tryConsume] evaluated rate limit key={} maxPerHour={} allowed={}", key, maxPerHour, result);
+    log.debug(
+        "[tryConsume] evaluated rate limit key={} maxPerHour={} allowed={}",
+        key,
+        maxPerHour,
+        result);
     return result;
   }
 }
