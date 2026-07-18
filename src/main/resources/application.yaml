@@ -220,6 +220,11 @@ app:
       base-url: ${AUTH_EMAIL_VERIFICATION_BASE_URL:http://localhost:5173/verify-email}
       resend-max-attempts-per-hour: ${AUTH_EMAIL_VERIFICATION_RESEND_MAX_PER_HOUR:10}
 
+    redis:
+      throttle:
+        key-prefix: ${AUTH_THROTTLE_REDIS_PREFIX:auth:throttle:}
+        window: ${AUTH_THROTTLE_REDIS_WINDOW:PT1H}
+
   api:
     version: ${APP_API_VERSION:v1}
     prefix: ${APP_API_PREFIX:/api}

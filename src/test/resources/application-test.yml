@@ -48,3 +48,8 @@ app:
       token-ttl: PT24H
       base-url: http://localhost:5173/verify-email
       resend-max-attempts-per-hour: 10
+
+    redis:
+      throttle:
+        key-prefix: "test:auth:throttle:"
+        window: PT1H

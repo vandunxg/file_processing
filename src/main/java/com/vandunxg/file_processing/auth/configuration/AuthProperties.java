@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "app.auth")
 public record AuthProperties(
-    Password password, Register register, EmailVerification emailVerification) {
+    Password password, Register register, EmailVerification emailVerification, Redis redis) {
 
   public record Password(String encoder, int bcryptCost, int minLength, int maxLength) {}
 
@@ -14,4 +14,9 @@ public record AuthProperties(
 
   public record EmailVerification(
       Duration tokenTtl, String baseUrl, int resendMaxAttemptsPerHour) {}
+
+  public record Redis(Throttle throttle) {
+
+    public record Throttle(String keyPrefix, Duration window) {}
+  }
 }

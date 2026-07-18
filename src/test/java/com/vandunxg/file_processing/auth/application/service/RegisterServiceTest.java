@@ -77,7 +77,8 @@ class RegisterServiceTest {
             new AuthProperties.Password("bcrypt", 10, 8, 128),
             new AuthProperties.Register(5),
             new AuthProperties.EmailVerification(
-                Duration.ofMinutes(15), "https://app.example.com/verify", 5));
+                Duration.ofMinutes(15), "https://app.example.com/verify", 5),
+            new AuthProperties.Redis(new AuthProperties.Redis.Throttle("test:throttle:", Duration.ofHours(1))));
     Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
     registerService =
         new RegisterService(
