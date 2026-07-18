@@ -16,4 +16,20 @@ public class AuthRedisConfiguration {
     script.setResultType(Long.class);
     return script;
   }
+
+  @Bean
+  RedisScript<Long> emailVerificationIssueScript() {
+    DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+    script.setLocation(new ClassPathResource("scripts/email-verification-issue.lua"));
+    script.setResultType(Long.class);
+    return script;
+  }
+
+  @Bean
+  RedisScript<Long> emailVerificationInvalidateScript() {
+    DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+    script.setLocation(new ClassPathResource("scripts/email-verification-invalidate.lua"));
+    script.setResultType(Long.class);
+    return script;
+  }
 }

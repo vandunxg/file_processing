@@ -15,8 +15,10 @@ public record AuthProperties(
   public record EmailVerification(
       Duration tokenTtl, String baseUrl, int resendMaxAttemptsPerHour) {}
 
-  public record Redis(Throttle throttle) {
+  public record Redis(Throttle throttle, EmailVerificationKeys emailVerification) {
 
     public record Throttle(String keyPrefix, Duration window) {}
+
+    public record EmailVerificationKeys(String tokenKeyPrefix, String userKeyPrefix) {}
   }
 }

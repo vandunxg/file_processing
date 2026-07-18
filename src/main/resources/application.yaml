@@ -224,6 +224,9 @@ app:
       throttle:
         key-prefix: ${AUTH_THROTTLE_REDIS_PREFIX:auth:throttle:}
         window: ${AUTH_THROTTLE_REDIS_WINDOW:PT1H}
+      email-verification:
+        token-key-prefix: ${AUTH_EMAIL_VERIFY_TOKEN_PREFIX:auth:email-verify:token:}
+        user-key-prefix: ${AUTH_EMAIL_VERIFY_USER_PREFIX:auth:email-verify:user:}
 
   api:
     version: ${APP_API_VERSION:v1}
