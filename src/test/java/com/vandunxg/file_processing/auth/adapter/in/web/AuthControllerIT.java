@@ -8,8 +8,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.net.URI;
 import java.time.Duration;
 import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.RegisterRequest;
@@ -159,8 +159,11 @@ class AuthControllerIT extends PostgresTestContainerBase {
         registerRequest("verify-ok", "verify-ok@example.com", "Verify Ok", "StrongPassw0rd!");
     mockMvc.perform(registerCall(registerRequest, ip)).andExpect(status().isCreated());
 
-    await().atMost(Duration.ofSeconds(10)).until(capturingEmailSenderPort::hasVerificationLink);
-    String rawToken = extractToken(capturingEmailSenderPort.lastVerificationLink());
+    await()
+        .atMost(Duration.ofSeconds(10))
+        .until(() -> capturingEmailSenderPort.hasVerificationLinkFor("verify-ok@example.com"));
+    String rawToken =
+        extractToken(capturingEmailSenderPort.verificationLinkFor("verify-ok@example.com"));
     VerifyEmailRequest verifyEmailRequest = new VerifyEmailRequest();
     verifyEmailRequest.setToken(rawToken);
 
@@ -258,27 +261,30 @@ class AuthControllerIT extends PostgresTestContainerBase {
   }
 
   /**
-   * Test-only {@link EmailSenderPort} double that captures the last verification link instead of
-   * sending real email, so the IT can pull the raw token out of it (the controller never returns
-   * the raw token, correctly, since it is a secret). Now invoked from {@code
-   * VerificationEmailEventListener} rather than directly from the service, hence the {@code
-   * hasVerificationLink} poll helper used by the caller.
+   * Test-only {@link EmailSenderPort} double that captures verification links by recipient instead
+   * of sending real email, so the IT can pull the raw token out of it (the controller never returns
+   * the raw token, correctly, since it is a secret). Keyed by {@code toEmail} — not just the last
+   * link received — because this bean is a singleton shared across every test method in this
+   * class's cached Spring context, and several other tests register their own accounts (each
+   * publishing their own verification-email event) before or after this one runs. Now invoked from
+   * {@code VerificationEmailEventListener} rather than directly from the service, hence the {@code
+   * hasVerificationLinkFor} poll helper used by the caller.
    */
   static class CapturingEmailSenderPort implements EmailSenderPort {
 
-    private final List<String> verificationLinks = new CopyOnWriteArrayList<>();
+    private final Map<String, String> verificationLinksByEmail = new ConcurrentHashMap<>();
 
     @Override
     public void sendVerificationEmail(String toEmail, String displayName, String verificationLink) {
-      verificationLinks.add(verificationLink);
+      verificationLinksByEmail.put(toEmail, verificationLink);
     }
 
-    boolean hasVerificationLink() {
-      return !verificationLinks.isEmpty();
+    boolean hasVerificationLinkFor(String email) {
+      return verificationLinksByEmail.containsKey(email);
     }
 
-    String lastVerificationLink() {
-      return verificationLinks.get(verificationLinks.size() - 1);
+    String verificationLinkFor(String email) {
+      return verificationLinksByEmail.get(email);
     }
   }
 }
