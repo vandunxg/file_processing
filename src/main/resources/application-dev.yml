@@ -4,14 +4,41 @@ spring:
       on-profile: dev
 
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/base_project}
-    username: ${DB_USERNAME:base_user}
-    password: ${DB_PASSWORD:base_password}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/file_processing}
+    username: ${DB_USERNAME:file_processing_user}
+    password: ${DB_PASSWORD:file_processing_password}
 
     hikari:
-      minimum-idle: 1
-      maximum-pool-size: 5
+      minimum-idle: ${DB_POOL_MIN_IDLE:1}
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:5}
       leak-detection-threshold: 60000
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    from: ${MAIL_FROM:no-reply@file-processing.local}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:false}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:false}
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Dev-only: satisfies SecurityConfiguration's oauth2ResourceServer().jwt() so the
+          # context can start before real JWT issuance (Login) exists. No token is ever issued
+          # against this key yet; it only lets Spring build a JwtDecoder bean at startup.
+          public-key-location: ${AUTH_JWT_DEV_PUBLIC_KEY_LOCATION:file:local/jwt/dev-public.pem}
 
   jpa:
     show-sql: false
@@ -29,6 +56,7 @@ spring:
       enabled: true
     livereload:
       enabled: true
+
   web:
     error:
       include-message: always
@@ -51,23 +79,8 @@ management:
 logging:
   level:
     root: INFO
-    com.example.baseproject: DEBUG
+    com.vandunxg.file_processing: DEBUG
     org.springframework.web: DEBUG
     org.springframework.security: DEBUG
 
     org.hibernate.SQL: DEBUG
-    org.hibernate.orm.jdbc.bind: TRACE
-
-app:
-  security:
-    jwt:
-      issuer: ${JWT_ISSUER:base-project-dev}
-      audience: ${JWT_AUDIENCE:base-project-dev-api}
-
-      secret: ${JWT_SECRET:dev-base-project-jwt-secret-key-change-me-2026}
-
-      access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:30m}
-      refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION:7d}
-
-    cors:
-      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:4200,http://localhost:5173}

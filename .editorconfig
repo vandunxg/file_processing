@@ -4,14 +4,45 @@ root = true
 charset = utf-8
 end_of_line = lf
 insert_final_newline = true
+indent_style = space
 trim_trailing_whitespace = true
 
 [*.java]
-indent_style = space
-indent_size = 4
+indent_size = 2
+tab_width = 2
+max_line_length = 100
+
+[*.{xml,pom}]
+indent_size = 2
 
 [*.{yml,yaml}]
 indent_size = 2
 
+[*.properties]
+indent_size = 2
+
+[*.{json,json5}]
+indent_size = 2
+
+[*.{js,jsx,ts,tsx}]
+indent_size = 2
+
+[*.{html,css,scss}]
+indent_size = 2
+
+[*.sql]
+indent_size = 2
+
+[*.sh]
+indent_size = 2
+
 [*.md]
+indent_size = 2
 trim_trailing_whitespace = false
+max_line_length = off
+
+[Makefile]
+indent_style = tab
+
+[*.bat]
+end_of_line = crlf
