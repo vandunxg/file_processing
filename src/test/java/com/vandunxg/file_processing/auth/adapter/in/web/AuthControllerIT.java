@@ -16,8 +16,8 @@ import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.RegisterRequ
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.ResendVerificationRequest;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.VerifyEmailRequest;
 import com.vandunxg.file_processing.auth.application.port.out.EmailSenderPort;
+import com.vandunxg.file_processing.testsupport.AuthIntegrationTestBase;
 import com.vandunxg.file_processing.testsupport.PostgresIntegrationTest;
-import com.vandunxg.file_processing.testsupport.PostgresTestContainerBase;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -25,14 +25,9 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.RabbitMQContainer;
-import org.testcontainers.utility.DockerImageName;
 
 /**
  * Covers the public register / verify-email / resend-verification HTTP contract end to end against
@@ -54,32 +49,9 @@ import org.testcontainers.utility.DockerImageName;
 @PostgresIntegrationTest
 @AutoConfigureMockMvc
 @TestPropertySource(properties = "app.auth.register.max-attempts-per-hour=3")
-class AuthControllerIT extends PostgresTestContainerBase {
+class AuthControllerIT extends AuthIntegrationTestBase {
 
   private static final String BASE_URL = "/api/v1/auth";
-
-  private static final GenericContainer<?> REDIS =
-      new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-          .withExposedPorts(6379)
-          .withReuse(true);
-
-  private static final RabbitMQContainer RABBITMQ =
-      new RabbitMQContainer(DockerImageName.parse("rabbitmq:4-management-alpine")).withReuse(true);
-
-  static {
-    REDIS.start();
-    RABBITMQ.start();
-  }
-
-  @DynamicPropertySource
-  static void infraProperties(DynamicPropertyRegistry registry) {
-    registry.add("spring.data.redis.host", REDIS::getHost);
-    registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
-    registry.add("spring.rabbitmq.host", RABBITMQ::getHost);
-    registry.add("spring.rabbitmq.port", RABBITMQ::getAmqpPort);
-    registry.add("spring.rabbitmq.username", RABBITMQ::getAdminUsername);
-    registry.add("spring.rabbitmq.password", RABBITMQ::getAdminPassword);
-  }
 
   @Autowired private MockMvc mockMvc;
   @Autowired private ObjectMapper objectMapper;

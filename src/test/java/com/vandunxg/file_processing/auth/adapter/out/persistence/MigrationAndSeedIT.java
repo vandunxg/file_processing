@@ -9,8 +9,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.vandunxg.file_processing.testsupport.AuthIntegrationTestBase;
 import com.vandunxg.file_processing.testsupport.PostgresIntegrationTest;
-import com.vandunxg.file_processing.testsupport.PostgresTestContainerBase;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -20,12 +20,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Verifies the 7 Flyway migrations (V202607170900 - V202607170906) apply cleanly against a real
  * Postgres instance and that the default role / permission seed data lands as expected.
  *
- * <p>Task 2 owns {@code EmailVerificationTokenEntity}; the entity round-trip itself is covered by
- * {@link EmailVerificationTokenPersistenceAdapterIT}. This file only proves the migration's own DDL
- * — table presence and the {@code UNIQUE(token_hash)} constraint — via raw JDBC.
+ * <p>This file only proves the migration's own DDL — table presence and the {@code
+ * UNIQUE(token_hash)} constraint — via raw JDBC. Extends {@link AuthIntegrationTestBase} (not just
+ * Postgres) because this test's full Spring context also loads the auth module's Redis-backed
+ * adapters and always-on {@code @RabbitListener} beans.
  */
 @PostgresIntegrationTest
-class MigrationAndSeedIT extends PostgresTestContainerBase {
+class MigrationAndSeedIT extends AuthIntegrationTestBase {
 
   @Autowired private JdbcTemplate jdbcTemplate;
 
@@ -68,11 +69,12 @@ class MigrationAndSeedIT extends PostgresTestContainerBase {
 
   @Test
   void migrations_createEmailVerificationTokensTable() {
-    // Task 2 owns the JPA entity for this table; here we only assert the migration created it.
-    // PostgresTestContainerBase reuses a single static container across every IT class in the
-    // run, and sibling IT classes (AuthControllerIT, EmailVerificationTokenPersistenceAdapterIT)
-    // legitimately commit rows into this same table, so we don't assert it's empty - only that
-    // the table exists and the query is well-formed.
+    // This table is left on disk, unused, by explicit decision: email verification tokens now
+    // live in Redis only (see RedisEmailVerificationTokenAdapter) - no application code writes to
+    // auth_email_verification_tokens anymore. We only assert the migration created the table with
+    // the expected shape, not that it's empty (PostgresTestContainerBase reuses a single static
+    // container across every IT class in the run, so a prior run of this same test can leave rows
+    // behind).
     Integer count =
         jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM auth_email_verification_tokens", Integer.class);

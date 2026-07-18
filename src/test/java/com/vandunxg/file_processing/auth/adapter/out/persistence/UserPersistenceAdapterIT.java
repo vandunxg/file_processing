@@ -14,8 +14,8 @@ import com.vandunxg.file_processing.auth.application.port.out.RoleRepositoryPort
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
 import com.vandunxg.file_processing.auth.domain.model.Role;
 import com.vandunxg.file_processing.auth.domain.model.User;
+import com.vandunxg.file_processing.testsupport.AuthIntegrationTestBase;
 import com.vandunxg.file_processing.testsupport.PostgresIntegrationTest;
-import com.vandunxg.file_processing.testsupport.PostgresTestContainerBase;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -24,10 +24,12 @@ import org.springframework.dao.DataIntegrityViolationException;
  * Proves that {@link UserRepositoryPort#save(User)} uses {@code saveAndFlush} under the hood, so
  * the unique-constraint race on {@code normalized_username} surfaces synchronously to the caller
  * (as {@link DataIntegrityViolationException}) instead of at a later transaction commit. This is
- * what {@code RegisterService} (Task 4) depends on to turn a race into a clean 409 response.
+ * what {@code RegisterService} depends on to turn a race into a clean 409 response. Extends {@link
+ * AuthIntegrationTestBase} (not just Postgres) because this test's full Spring context also loads
+ * the auth module's Redis-backed adapters and always-on {@code @RabbitListener} beans.
  */
 @PostgresIntegrationTest
-class UserPersistenceAdapterIT extends PostgresTestContainerBase {
+class UserPersistenceAdapterIT extends AuthIntegrationTestBase {
 
   @Autowired private UserRepositoryPort userRepositoryPort;
   @Autowired private RoleRepositoryPort roleRepositoryPort;
