@@ -10,7 +10,8 @@ class PasswordPolicyTest {
 
   @Test
   void rejectsBlankPassword() {
-    PasswordPolicy.ValidationResult result = policy.validate(" \t", "operator", "operator@example.com");
+    PasswordPolicy.ValidationResult result =
+        policy.validate(" \t", "operator", "operator@example.com");
 
     assertThat(result.valid()).isFalse();
     assertThat(result.reason()).isEqualTo(PasswordPolicy.Reason.BLANK);
@@ -18,7 +19,8 @@ class PasswordPolicyTest {
 
   @Test
   void rejectsPasswordShorterThanEightUnicodeCodePoints() {
-    PasswordPolicy.ValidationResult result = policy.validate("seven77", "operator", "operator@example.com");
+    PasswordPolicy.ValidationResult result =
+        policy.validate("seven77", "operator", "operator@example.com");
 
     assertThat(result.valid()).isFalse();
     assertThat(result.reason()).isEqualTo(PasswordPolicy.Reason.TOO_SHORT);
@@ -44,7 +46,8 @@ class PasswordPolicyTest {
 
   @Test
   void rejectsPasswordEqualToNormalizedUsernameIgnoringCase() {
-    PasswordPolicy.ValidationResult result = policy.validate("OPERATOR", "operator", "operator@example.com");
+    PasswordPolicy.ValidationResult result =
+        policy.validate("OPERATOR", "operator", "operator@example.com");
 
     assertThat(result.valid()).isFalse();
     assertThat(result.reason()).isEqualTo(PasswordPolicy.Reason.MATCHES_USERNAME);

@@ -9,10 +9,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class SystemGC {
 
-    @Scheduled(cron = "${app.gc.cron-time}")
-    public void runSystemGC() {
-        log.info("Starting trigger gc");
-        SystemUtil.gc();
-        log.info("Finishing trigger gc !!!");
-    }
+  @Scheduled(cron = "${app.gc.cron-time}")
+  public void runSystemGC() {
+    log.info("Starting trigger gc");
+    SystemUtil.gc();
+    log.info("Finishing trigger gc !!!");
+  }
 }

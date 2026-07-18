@@ -12,10 +12,9 @@ import java.util.Locale;
 import java.util.ResourceBundle;
 import java.util.UUID;
 
-import org.junit.jupiter.api.Test;
-
 import com.vandunxg.file_processing.auth.domain.exception.AuthDomainException;
 import com.vandunxg.file_processing.auth.domain.exception.AuthErrorCode;
+import org.junit.jupiter.api.Test;
 
 class RegisterDomainTest {
 
@@ -60,7 +59,8 @@ class RegisterDomainTest {
   @Test
   void verifyEmailActivatesPendingUserAndRecordsVerificationTime() {
     User user =
-        User.register("operator", "operator@example.com", "Operator", "hashed", operatorRole(), NOW);
+        User.register(
+            "operator", "operator@example.com", "Operator", "hashed", operatorRole(), NOW);
 
     user.verifyEmail(NOW.plusSeconds(1));
 
@@ -73,7 +73,8 @@ class RegisterDomainTest {
   @Test
   void verifyEmailRejectsAlreadyVerifiedUser() {
     User user =
-        User.register("operator", "operator@example.com", "Operator", "hashed", operatorRole(), NOW);
+        User.register(
+            "operator", "operator@example.com", "Operator", "hashed", operatorRole(), NOW);
     user.verifyEmail(NOW.plusSeconds(1));
 
     assertThatThrownBy(() -> user.verifyEmail(NOW.plusSeconds(2)))
@@ -88,7 +89,11 @@ class RegisterDomainTest {
     assertInvalidRole(
         Role.builder().id(UUID.randomUUID()).code("ADMIN").status(ActiveStatus.ACTIVE).build());
     assertInvalidRole(
-        Role.builder().id(UUID.randomUUID()).code("OPERATOR").status(ActiveStatus.INACTIVE).build());
+        Role.builder()
+            .id(UUID.randomUUID())
+            .code("OPERATOR")
+            .status(ActiveStatus.INACTIVE)
+            .build());
     assertInvalidRole(
         Role.builder()
             .id(UUID.randomUUID())
@@ -102,7 +107,12 @@ class RegisterDomainTest {
   void issueStoresOnlyTokenHash() {
     EmailVerificationToken token =
         EmailVerificationToken.issue(
-            UUID.randomUUID(), UUID.randomUUID(), TOKEN_HASH, NOW, Duration.ofMinutes(15), "ip-hash");
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            TOKEN_HASH,
+            NOW,
+            Duration.ofMinutes(15),
+            "ip-hash");
 
     assertThat(token.getTokenHash()).isEqualTo(TOKEN_HASH);
     List<String> stringFieldNames =
@@ -143,19 +153,27 @@ class RegisterDomainTest {
     UUID userId = UUID.randomUUID();
 
     assertThatThrownBy(
-            () -> EmailVerificationToken.issue(null, userId, TOKEN_HASH, NOW, Duration.ofMinutes(15), null))
+            () ->
+                EmailVerificationToken.issue(
+                    null, userId, TOKEN_HASH, NOW, Duration.ofMinutes(15), null))
         .isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(
-            () -> EmailVerificationToken.issue(id, null, TOKEN_HASH, NOW, Duration.ofMinutes(15), null))
+            () ->
+                EmailVerificationToken.issue(
+                    id, null, TOKEN_HASH, NOW, Duration.ofMinutes(15), null))
         .isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(
-            () -> EmailVerificationToken.issue(id, userId, TOKEN_HASH, null, Duration.ofMinutes(15), null))
+            () ->
+                EmailVerificationToken.issue(
+                    id, userId, TOKEN_HASH, null, Duration.ofMinutes(15), null))
         .isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(
             () -> EmailVerificationToken.issue(id, userId, TOKEN_HASH, NOW, Duration.ZERO, null))
         .isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(
-            () -> EmailVerificationToken.issue(id, userId, TOKEN_HASH, NOW, Duration.ofMinutes(15), " "))
+            () ->
+                EmailVerificationToken.issue(
+                    id, userId, TOKEN_HASH, NOW, Duration.ofMinutes(15), " "))
         .isInstanceOf(IllegalArgumentException.class);
   }
 
@@ -163,7 +181,12 @@ class RegisterDomainTest {
   void consumeRejectsExpiredToken() {
     EmailVerificationToken token =
         EmailVerificationToken.issue(
-            UUID.randomUUID(), UUID.randomUUID(), TOKEN_HASH, NOW, Duration.ofMinutes(15), "ip-hash");
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            TOKEN_HASH,
+            NOW,
+            Duration.ofMinutes(15),
+            "ip-hash");
 
     assertThatThrownBy(() -> token.consume(NOW.plus(Duration.ofMinutes(15))))
         .isInstanceOf(AuthDomainException.class)
@@ -175,7 +198,12 @@ class RegisterDomainTest {
   void consumeRejectsPreviouslyUsedToken() {
     EmailVerificationToken token =
         EmailVerificationToken.issue(
-            UUID.randomUUID(), UUID.randomUUID(), TOKEN_HASH, NOW, Duration.ofMinutes(15), "ip-hash");
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            TOKEN_HASH,
+            NOW,
+            Duration.ofMinutes(15),
+            "ip-hash");
     token.consume(NOW.plusSeconds(1));
 
     assertThat(token.getUsedAt()).isEqualTo(NOW.plusSeconds(1));
@@ -188,7 +216,8 @@ class RegisterDomainTest {
   @Test
   void authErrorCodesAreUniqueAndHaveLocalizedMessages() {
     ResourceBundle english = ResourceBundle.getBundle("i18n.messages", Locale.ENGLISH);
-    ResourceBundle vietnamese = ResourceBundle.getBundle("i18n.messages", Locale.forLanguageTag("vi"));
+    ResourceBundle vietnamese =
+        ResourceBundle.getBundle("i18n.messages", Locale.forLanguageTag("vi"));
 
     assertThat(Arrays.stream(AuthErrorCode.values()).map(AuthErrorCode::getCode).toList())
         .doesNotHaveDuplicates();
@@ -200,14 +229,17 @@ class RegisterDomainTest {
   }
 
   private static Role operatorRole() {
-    return Role.builder().id(UUID.randomUUID()).code("OPERATOR").status(ActiveStatus.ACTIVE).build();
+    return Role.builder()
+        .id(UUID.randomUUID())
+        .code("OPERATOR")
+        .status(ActiveStatus.ACTIVE)
+        .build();
   }
 
   private static void assertInvalidRole(Role role) {
     assertThatThrownBy(
             () ->
-                User.register(
-                    "operator", "operator@example.com", "Operator", "hashed", role, NOW))
+                User.register("operator", "operator@example.com", "Operator", "hashed", role, NOW))
         .isInstanceOf(AuthDomainException.class)
         .extracting("error")
         .isEqualTo(AuthErrorCode.INVALID_ROLE);

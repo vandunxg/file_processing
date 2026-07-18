@@ -13,7 +13,8 @@ public class AuthDomainException extends ResponseException {
     super(error, params);
   }
 
-  public AuthDomainException(String message, Throwable cause, ResponseError error, Object... params) {
+  public AuthDomainException(
+      String message, Throwable cause, ResponseError error, Object... params) {
     super(message, cause, error, params);
   }
 }

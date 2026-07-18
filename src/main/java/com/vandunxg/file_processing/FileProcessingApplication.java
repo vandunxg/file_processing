@@ -7,18 +7,16 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication(
     scanBasePackages = {
-        "com.vandunxg.common.web.security",
-        "com.vandunxg.file_processing.*",
-    }
-)
+      "com.vandunxg.common.web.security",
+      "com.vandunxg.file_processing.*",
+    })
 @OpenAPIDefinition(
     servers = {
-        @Server(url = "${springdoc.api-docs.url}", description = "Server URL of File Processing")
-    }
-)
+      @Server(url = "${springdoc.api-docs.url}", description = "Server URL of File Processing")
+    })
 public class FileProcessingApplication {
 
-    public static void main(String[] args) {
-        SpringApplication.run(FileProcessingApplication.class, args);
-    }
+  public static void main(String[] args) {
+    SpringApplication.run(FileProcessingApplication.class, args);
+  }
 }
