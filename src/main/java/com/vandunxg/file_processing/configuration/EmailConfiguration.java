@@ -19,13 +19,7 @@ public class EmailConfiguration {
 
   @Bean
   @ConditionalOnMissingBean(MailService.class)
-  MailService mailService(
-    JavaMailSender javaMailSender,
-    MailSenderFactory mailSenderFactory
-  ) {
-    return new MailServiceImpl(
-      javaMailSender,
-      mailSenderFactory
-    );
+  MailService mailService(JavaMailSender javaMailSender, MailSenderFactory mailSenderFactory) {
+    return new MailServiceImpl(javaMailSender, mailSenderFactory);
   }
 }

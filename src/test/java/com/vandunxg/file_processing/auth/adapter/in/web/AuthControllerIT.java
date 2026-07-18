@@ -93,9 +93,7 @@ class AuthControllerIT extends PostgresTestContainerBase {
     RegisterRequest request =
         registerRequest("weak-pass", "weak-pass@example.com", "Weak Pass", "short1");
 
-    mockMvc
-        .perform(registerCall(request, "203.0.113.13"))
-        .andExpect(status().isBadRequest());
+    mockMvc.perform(registerCall(request, "203.0.113.13")).andExpect(status().isBadRequest());
   }
 
   @Test
