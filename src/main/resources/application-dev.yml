@@ -13,6 +13,33 @@ spring:
       maximum-pool-size: ${DB_POOL_MAX_SIZE:5}
       leak-detection-threshold: 60000
 
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    from: ${MAIL_FROM:no-reply@file-processing.local}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:false}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:false}
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Dev-only: satisfies SecurityConfiguration's oauth2ResourceServer().jwt() so the
+          # context can start before real JWT issuance (Login) exists. No token is ever issued
+          # against this key yet; it only lets Spring build a JwtDecoder bean at startup.
+          public-key-location: ${AUTH_JWT_DEV_PUBLIC_KEY_LOCATION:file:local/jwt/dev-public.pem}
+
   jpa:
     show-sql: false
     properties:
