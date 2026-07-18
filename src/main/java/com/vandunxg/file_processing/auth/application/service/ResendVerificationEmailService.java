@@ -8,11 +8,11 @@ import com.vandunxg.common.utils.HashUtils;
 import com.vandunxg.common.utils.IdUtils;
 import com.vandunxg.file_processing.auth.application.command.ResendVerificationEmailCommand;
 import com.vandunxg.file_processing.auth.application.port.in.ResendVerificationEmailUseCase;
-import com.vandunxg.file_processing.auth.application.port.out.AuditLogPort;
-import com.vandunxg.file_processing.auth.application.port.out.EmailSenderPort;
+import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.EmailVerificationTokenRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.RegisterThrottlePort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
+import com.vandunxg.file_processing.auth.application.port.out.VerificationEmailEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.VerificationTokenGeneratorPort;
 import com.vandunxg.file_processing.auth.configuration.AuthProperties;
 import com.vandunxg.file_processing.auth.domain.exception.AuthDomainException;
@@ -39,9 +39,9 @@ public class ResendVerificationEmailService implements ResendVerificationEmailUs
   private final RegisterThrottlePort throttlePort;
   private final UserRepositoryPort userRepositoryPort;
   private final EmailVerificationTokenRepositoryPort tokenRepositoryPort;
-  private final AuditLogPort auditLogPort;
+  private final AuditLogEventPublisherPort auditLogEventPublisherPort;
   private final VerificationTokenGeneratorPort tokenGeneratorPort;
-  private final EmailSenderPort emailSenderPort;
+  private final VerificationEmailEventPublisherPort verificationEmailEventPublisherPort;
   private final AuthProperties authProperties;
   private final Clock clock;
 
@@ -84,7 +84,7 @@ public class ResendVerificationEmailService implements ResendVerificationEmailUs
             ipHash);
     tokenRepositoryPort.save(token);
 
-    auditLogPort.record(
+    AuditLog auditLog =
         AuditLog.builder()
             .id(IdUtils.nextId())
             .domain(AuditLogDomain.AUTH)
@@ -93,7 +93,7 @@ public class ResendVerificationEmailService implements ResendVerificationEmailUs
             .changedBy(user.getId())
             .changedAt(now)
             .ipAddress(ipHash)
-            .build());
+            .build();
 
     log.info("[resend] issued new verification token userId={}", user.getId());
 
@@ -104,11 +104,19 @@ public class ResendVerificationEmailService implements ResendVerificationEmailUs
             @Override
             public void afterCommit() {
               try {
-                emailSenderPort.sendVerificationEmail(
+                auditLogEventPublisherPort.publish(auditLog);
+              } catch (Exception e) {
+                log.warn(
+                    "[resend] failed to publish audit log event after commit userId={}",
+                    user.getId(),
+                    e);
+              }
+              try {
+                verificationEmailEventPublisherPort.publish(
                     user.getEmail(), user.getDisplayName(), verificationLink);
               } catch (Exception e) {
                 log.warn(
-                    "[resend] failed to send verification email after commit userId={}",
+                    "[resend] failed to publish verification email event after commit userId={}",
                     user.getId(),
                     e);
               }

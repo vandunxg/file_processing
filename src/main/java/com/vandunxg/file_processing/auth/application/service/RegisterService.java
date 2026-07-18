@@ -10,14 +10,14 @@ import com.vandunxg.common.utils.IdUtils;
 import com.vandunxg.common.utils.StrUtils;
 import com.vandunxg.file_processing.auth.application.command.RegisterCommand;
 import com.vandunxg.file_processing.auth.application.port.in.RegisterUseCase;
-import com.vandunxg.file_processing.auth.application.port.out.AuditLogPort;
-import com.vandunxg.file_processing.auth.application.port.out.EmailSenderPort;
+import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.EmailVerificationTokenRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.PasswordHasherPort;
 import com.vandunxg.file_processing.auth.application.port.out.RegisterThrottlePort;
 import com.vandunxg.file_processing.auth.application.port.out.RoleRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRoleRepositoryPort;
+import com.vandunxg.file_processing.auth.application.port.out.VerificationEmailEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.VerificationTokenGeneratorPort;
 import com.vandunxg.file_processing.auth.application.result.RegisterResult;
 import com.vandunxg.file_processing.auth.configuration.AuthProperties;
@@ -51,11 +51,11 @@ public class RegisterService implements RegisterUseCase {
   private final UserRepositoryPort userRepositoryPort;
   private final RoleRepositoryPort roleRepositoryPort;
   private final UserRoleRepositoryPort userRoleRepositoryPort;
-  private final AuditLogPort auditLogPort;
+  private final AuditLogEventPublisherPort auditLogEventPublisherPort;
   private final EmailVerificationTokenRepositoryPort tokenRepositoryPort;
   private final PasswordHasherPort passwordHasherPort;
   private final VerificationTokenGeneratorPort tokenGeneratorPort;
-  private final EmailSenderPort emailSenderPort;
+  private final VerificationEmailEventPublisherPort verificationEmailEventPublisherPort;
   private final AuthProperties authProperties;
   private final Clock clock;
 
@@ -152,7 +152,7 @@ public class RegisterService implements RegisterUseCase {
             ipHash);
     tokenRepositoryPort.save(token);
 
-    auditLogPort.record(
+    AuditLog auditLog =
         AuditLog.builder()
             .id(IdUtils.nextId())
             .domain(AuditLogDomain.AUTH)
@@ -161,7 +161,7 @@ public class RegisterService implements RegisterUseCase {
             .changedBy(saved.getId())
             .changedAt(now)
             .ipAddress(ipHash)
-            .build());
+            .build();
 
     log.info("[register] registered user userId={} status={}", saved.getId(), saved.getStatus());
 
@@ -172,11 +172,19 @@ public class RegisterService implements RegisterUseCase {
             @Override
             public void afterCommit() {
               try {
-                emailSenderPort.sendVerificationEmail(
+                auditLogEventPublisherPort.publish(auditLog);
+              } catch (Exception e) {
+                log.warn(
+                    "[register] failed to publish audit log event after commit userId={}",
+                    saved.getId(),
+                    e);
+              }
+              try {
+                verificationEmailEventPublisherPort.publish(
                     saved.getEmail(), saved.getDisplayName(), verificationLink);
               } catch (Exception e) {
                 log.warn(
-                    "[register] failed to send verification email after commit userId={}",
+                    "[register] failed to publish verification email event after commit userId={}",
                     saved.getId(),
                     e);
               }

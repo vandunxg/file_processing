@@ -8,7 +8,7 @@ import com.vandunxg.common.utils.HashUtils;
 import com.vandunxg.common.utils.IdUtils;
 import com.vandunxg.file_processing.auth.application.command.VerifyEmailCommand;
 import com.vandunxg.file_processing.auth.application.port.in.VerifyEmailUseCase;
-import com.vandunxg.file_processing.auth.application.port.out.AuditLogPort;
+import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.EmailVerificationTokenRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
 import com.vandunxg.file_processing.auth.application.result.RegisterResult;
@@ -23,6 +23,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @RequiredArgsConstructor
@@ -31,7 +33,7 @@ public class VerifyEmailService implements VerifyEmailUseCase {
 
   private final EmailVerificationTokenRepositoryPort tokenRepositoryPort;
   private final UserRepositoryPort userRepositoryPort;
-  private final AuditLogPort auditLogPort;
+  private final AuditLogEventPublisherPort auditLogEventPublisherPort;
   private final Clock clock;
 
   @Override
@@ -72,7 +74,7 @@ public class VerifyEmailService implements VerifyEmailUseCase {
     user.verifyEmail(now);
     User saved = userRepositoryPort.save(user);
 
-    auditLogPort.record(
+    AuditLog auditLog =
         AuditLog.builder()
             .id(IdUtils.nextId())
             .domain(AuditLogDomain.AUTH)
@@ -80,9 +82,26 @@ public class VerifyEmailService implements VerifyEmailUseCase {
             .operation(OperationType.EMAIL_VERIFIED)
             .changedBy(saved.getId())
             .changedAt(now)
-            .build());
+            .build();
 
     log.info("[verifyEmail] verified email userId={} status={}", saved.getId(), saved.getStatus());
+
+    if (TransactionSynchronizationManager.isSynchronizationActive()) {
+      TransactionSynchronizationManager.registerSynchronization(
+          new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+              try {
+                auditLogEventPublisherPort.publish(auditLog);
+              } catch (Exception e) {
+                log.warn(
+                    "[verifyEmail] failed to publish audit log event after commit userId={}",
+                    saved.getId(),
+                    e);
+              }
+            }
+          });
+    }
 
     return RegisterResult.from(saved);
   }

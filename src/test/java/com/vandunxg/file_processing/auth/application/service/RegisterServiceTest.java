@@ -21,14 +21,14 @@ import java.util.UUID;
 
 import com.vandunxg.common.utils.HashUtils;
 import com.vandunxg.file_processing.auth.application.command.RegisterCommand;
-import com.vandunxg.file_processing.auth.application.port.out.AuditLogPort;
-import com.vandunxg.file_processing.auth.application.port.out.EmailSenderPort;
+import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.EmailVerificationTokenRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.PasswordHasherPort;
 import com.vandunxg.file_processing.auth.application.port.out.RegisterThrottlePort;
 import com.vandunxg.file_processing.auth.application.port.out.RoleRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRoleRepositoryPort;
+import com.vandunxg.file_processing.auth.application.port.out.VerificationEmailEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.VerificationTokenGeneratorPort;
 import com.vandunxg.file_processing.auth.application.result.RegisterResult;
 import com.vandunxg.file_processing.auth.configuration.AuthProperties;
@@ -62,11 +62,11 @@ class RegisterServiceTest {
   @Mock private UserRepositoryPort userRepositoryPort;
   @Mock private RoleRepositoryPort roleRepositoryPort;
   @Mock private UserRoleRepositoryPort userRoleRepositoryPort;
-  @Mock private AuditLogPort auditLogPort;
+  @Mock private AuditLogEventPublisherPort auditLogEventPublisherPort;
   @Mock private EmailVerificationTokenRepositoryPort tokenRepositoryPort;
   @Mock private PasswordHasherPort passwordHasherPort;
   @Mock private VerificationTokenGeneratorPort tokenGeneratorPort;
-  @Mock private EmailSenderPort emailSenderPort;
+  @Mock private VerificationEmailEventPublisherPort verificationEmailEventPublisherPort;
 
   private RegisterService registerService;
 
@@ -82,7 +82,11 @@ class RegisterServiceTest {
                 new AuthProperties.Redis.Throttle("test:throttle:", Duration.ofHours(1)),
                 new AuthProperties.Redis.EmailVerificationKeys(
                     "test:email-verify:token:", "test:email-verify:user:")),
-            null);
+            new AuthProperties.Amqp(
+                "test.auth.events",
+                new AuthProperties.Amqp.RoutingKey("test.audit-log", "test.verification-email"),
+                new AuthProperties.Amqp.Queue(
+                    "test.audit-log.queue", "test.verification-email.queue")));
     Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
     registerService =
         new RegisterService(
@@ -90,11 +94,11 @@ class RegisterServiceTest {
             userRepositoryPort,
             roleRepositoryPort,
             userRoleRepositoryPort,
-            auditLogPort,
+            auditLogEventPublisherPort,
             tokenRepositoryPort,
             passwordHasherPort,
             tokenGeneratorPort,
-            emailSenderPort,
+            verificationEmailEventPublisherPort,
             authProperties,
             clock);
   }
@@ -107,7 +111,7 @@ class RegisterServiceTest {
   }
 
   @Test
-  void registerReturnsPendingVerifyResultAndSchedulesEmailAfterCommitWhenValid() {
+  void registerReturnsPendingVerifyResultAndPublishesEventsAfterCommitWhenValid() {
     Role operatorRole = operatorRole();
     RegisterCommand command = validCommand();
     givenThrottleAllows();
@@ -146,19 +150,19 @@ class RegisterServiceTest {
     assertThat(tokenCaptor.getValue().getTokenHash()).isNotEqualTo("raw-verification-token");
     assertThat(tokenCaptor.getValue().getUserId()).isEqualTo(result.getId());
 
-    ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
-    verify(auditLogPort).record(auditCaptor.capture());
-    assertThat(auditCaptor.getValue().getOperation()).isEqualTo(OperationType.USER_REGISTERED);
-    assertThat(auditCaptor.getValue().getObjectId()).isEqualTo(result.getId());
-    assertThat(auditCaptor.getValue().getChangedBy()).isEqualTo(result.getId());
-
-    verifyNoInteractions(emailSenderPort);
+    verifyNoInteractions(auditLogEventPublisherPort, verificationEmailEventPublisherPort);
 
     new ArrayList<>(TransactionSynchronizationManager.getSynchronizations())
         .forEach(TransactionSynchronization::afterCommit);
 
-    verify(emailSenderPort)
-        .sendVerificationEmail(
+    ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
+    verify(auditLogEventPublisherPort).publish(auditCaptor.capture());
+    assertThat(auditCaptor.getValue().getOperation()).isEqualTo(OperationType.USER_REGISTERED);
+    assertThat(auditCaptor.getValue().getObjectId()).isEqualTo(result.getId());
+    assertThat(auditCaptor.getValue().getChangedBy()).isEqualTo(result.getId());
+
+    verify(verificationEmailEventPublisherPort)
+        .publish(
             "operator1@example.com",
             "Operator One",
             "https://app.example.com/verify?token=raw-verification-token");
@@ -216,7 +220,10 @@ class RegisterServiceTest {
         .isEqualTo(AuthErrorCode.USERNAME_ALREADY_EXISTS);
 
     verifyNoInteractions(
-        userRoleRepositoryPort, tokenRepositoryPort, auditLogPort, emailSenderPort);
+        userRoleRepositoryPort,
+        tokenRepositoryPort,
+        auditLogEventPublisherPort,
+        verificationEmailEventPublisherPort);
   }
 
   @Test
@@ -238,7 +245,10 @@ class RegisterServiceTest {
         .isEqualTo(AuthErrorCode.EMAIL_ALREADY_EXISTS);
 
     verifyNoInteractions(
-        userRoleRepositoryPort, tokenRepositoryPort, auditLogPort, emailSenderPort);
+        userRoleRepositoryPort,
+        tokenRepositoryPort,
+        auditLogEventPublisherPort,
+        verificationEmailEventPublisherPort);
   }
 
   @Test
@@ -281,8 +291,8 @@ class RegisterServiceTest {
         roleRepositoryPort,
         userRoleRepositoryPort,
         tokenRepositoryPort,
-        auditLogPort,
-        emailSenderPort);
+        auditLogEventPublisherPort,
+        verificationEmailEventPublisherPort);
   }
 
   @Test
@@ -302,8 +312,8 @@ class RegisterServiceTest {
         tokenGeneratorPort,
         userRoleRepositoryPort,
         tokenRepositoryPort,
-        auditLogPort,
-        emailSenderPort);
+        auditLogEventPublisherPort,
+        verificationEmailEventPublisherPort);
   }
 
   @Test

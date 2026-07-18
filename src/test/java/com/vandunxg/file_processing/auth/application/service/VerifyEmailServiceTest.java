@@ -13,12 +13,13 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Optional;
 import java.util.UUID;
 
 import com.vandunxg.common.utils.HashUtils;
 import com.vandunxg.file_processing.auth.application.command.VerifyEmailCommand;
-import com.vandunxg.file_processing.auth.application.port.out.AuditLogPort;
+import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.EmailVerificationTokenRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
 import com.vandunxg.file_processing.auth.application.result.RegisterResult;
@@ -29,12 +30,15 @@ import com.vandunxg.file_processing.auth.domain.model.EmailVerificationToken;
 import com.vandunxg.file_processing.auth.domain.model.OperationType;
 import com.vandunxg.file_processing.auth.domain.model.User;
 import com.vandunxg.file_processing.auth.domain.model.UserStatus;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @ExtendWith(MockitoExtension.class)
 class VerifyEmailServiceTest {
@@ -46,7 +50,7 @@ class VerifyEmailServiceTest {
 
   @Mock private EmailVerificationTokenRepositoryPort tokenRepositoryPort;
   @Mock private UserRepositoryPort userRepositoryPort;
-  @Mock private AuditLogPort auditLogPort;
+  @Mock private AuditLogEventPublisherPort auditLogEventPublisherPort;
 
   private VerifyEmailService verifyEmailService;
 
@@ -54,11 +58,19 @@ class VerifyEmailServiceTest {
   void setUp() {
     Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
     verifyEmailService =
-        new VerifyEmailService(tokenRepositoryPort, userRepositoryPort, auditLogPort, clock);
+        new VerifyEmailService(
+            tokenRepositoryPort, userRepositoryPort, auditLogEventPublisherPort, clock);
+  }
+
+  @AfterEach
+  void tearDown() {
+    if (TransactionSynchronizationManager.isSynchronizationActive()) {
+      TransactionSynchronizationManager.clearSynchronization();
+    }
   }
 
   @Test
-  void verifyEmailActivatesUserConsumesTokenAndRecordsAuditWhenTokenValid() {
+  void verifyEmailActivatesUserConsumesTokenAndPublishesAuditEventAfterCommitWhenTokenValid() {
     UUID userId = UUID.randomUUID();
     EmailVerificationToken token = pendingToken(userId);
     User user = pendingUser(userId);
@@ -70,6 +82,8 @@ class VerifyEmailServiceTest {
     when(userRepositoryPort.save(any(User.class)))
         .thenAnswer(invocation -> invocation.getArgument(0));
 
+    TransactionSynchronizationManager.initSynchronization();
+
     RegisterResult result =
         verifyEmailService.verifyEmail(VerifyEmailCommand.builder().token(RAW_TOKEN).build());
 
@@ -78,8 +92,13 @@ class VerifyEmailServiceTest {
     assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
     assertThat(token.getUsedAt()).isEqualTo(NOW);
 
+    verifyNoInteractions(auditLogEventPublisherPort);
+
+    new ArrayList<>(TransactionSynchronizationManager.getSynchronizations())
+        .forEach(TransactionSynchronization::afterCommit);
+
     ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
-    verify(auditLogPort).record(auditCaptor.capture());
+    verify(auditLogEventPublisherPort).publish(auditCaptor.capture());
     assertThat(auditCaptor.getValue().getOperation()).isEqualTo(OperationType.EMAIL_VERIFIED);
     assertThat(auditCaptor.getValue().getObjectId()).isEqualTo(userId);
     assertThat(auditCaptor.getValue().getChangedBy()).isEqualTo(userId);
@@ -108,7 +127,7 @@ class VerifyEmailServiceTest {
         .isEqualTo(AuthErrorCode.EMAIL_VERIFICATION_TOKEN_INVALID);
 
     verify(tokenRepositoryPort, never()).save(any());
-    verifyNoInteractions(userRepositoryPort, auditLogPort);
+    verifyNoInteractions(userRepositoryPort, auditLogEventPublisherPort);
   }
 
   @Test
@@ -125,7 +144,7 @@ class VerifyEmailServiceTest {
         .isEqualTo(AuthErrorCode.EMAIL_VERIFICATION_TOKEN_INVALID);
 
     verify(tokenRepositoryPort, never()).save(any());
-    verifyNoInteractions(userRepositoryPort, auditLogPort);
+    verifyNoInteractions(userRepositoryPort, auditLogEventPublisherPort);
   }
 
   @Test
@@ -142,7 +161,7 @@ class VerifyEmailServiceTest {
         .isEqualTo(AuthErrorCode.EMAIL_VERIFICATION_TOKEN_INVALID);
 
     verify(tokenRepositoryPort, never()).save(any());
-    verifyNoInteractions(userRepositoryPort, auditLogPort);
+    verifyNoInteractions(userRepositoryPort, auditLogEventPublisherPort);
   }
 
   private static EmailVerificationToken pendingToken(UUID userId) {

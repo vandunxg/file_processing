@@ -20,11 +20,11 @@ import java.util.UUID;
 
 import com.vandunxg.common.utils.HashUtils;
 import com.vandunxg.file_processing.auth.application.command.ResendVerificationEmailCommand;
-import com.vandunxg.file_processing.auth.application.port.out.AuditLogPort;
-import com.vandunxg.file_processing.auth.application.port.out.EmailSenderPort;
+import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.EmailVerificationTokenRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.RegisterThrottlePort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
+import com.vandunxg.file_processing.auth.application.port.out.VerificationEmailEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.VerificationTokenGeneratorPort;
 import com.vandunxg.file_processing.auth.configuration.AuthProperties;
 import com.vandunxg.file_processing.auth.domain.exception.AuthDomainException;
@@ -52,9 +52,9 @@ class ResendVerificationEmailServiceTest {
   @Mock private RegisterThrottlePort throttlePort;
   @Mock private UserRepositoryPort userRepositoryPort;
   @Mock private EmailVerificationTokenRepositoryPort tokenRepositoryPort;
-  @Mock private AuditLogPort auditLogPort;
+  @Mock private AuditLogEventPublisherPort auditLogEventPublisherPort;
   @Mock private VerificationTokenGeneratorPort tokenGeneratorPort;
-  @Mock private EmailSenderPort emailSenderPort;
+  @Mock private VerificationEmailEventPublisherPort verificationEmailEventPublisherPort;
 
   private ResendVerificationEmailService resendVerificationEmailService;
 
@@ -70,16 +70,20 @@ class ResendVerificationEmailServiceTest {
                 new AuthProperties.Redis.Throttle("test:throttle:", Duration.ofHours(1)),
                 new AuthProperties.Redis.EmailVerificationKeys(
                     "test:email-verify:token:", "test:email-verify:user:")),
-            null);
+            new AuthProperties.Amqp(
+                "test.auth.events",
+                new AuthProperties.Amqp.RoutingKey("test.audit-log", "test.verification-email"),
+                new AuthProperties.Amqp.Queue(
+                    "test.audit-log.queue", "test.verification-email.queue")));
     Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
     resendVerificationEmailService =
         new ResendVerificationEmailService(
             throttlePort,
             userRepositoryPort,
             tokenRepositoryPort,
-            auditLogPort,
+            auditLogEventPublisherPort,
             tokenGeneratorPort,
-            emailSenderPort,
+            verificationEmailEventPublisherPort,
             authProperties,
             clock);
   }
@@ -100,7 +104,8 @@ class ResendVerificationEmailServiceTest {
 
     resendVerificationEmailService.resend(command);
 
-    verifyNoInteractions(tokenRepositoryPort, auditLogPort, emailSenderPort);
+    verifyNoInteractions(
+        tokenRepositoryPort, auditLogEventPublisherPort, verificationEmailEventPublisherPort);
   }
 
   @Test
@@ -112,11 +117,12 @@ class ResendVerificationEmailServiceTest {
 
     resendVerificationEmailService.resend(command);
 
-    verifyNoInteractions(tokenRepositoryPort, auditLogPort, emailSenderPort);
+    verifyNoInteractions(
+        tokenRepositoryPort, auditLogEventPublisherPort, verificationEmailEventPublisherPort);
   }
 
   @Test
-  void resendInvalidatesOldTokensIssuesNewTokenRecordsAuditAndSchedulesEmailWhenAccountPending() {
+  void resendInvalidatesOldTokensIssuesNewTokenAndPublishesEventsAfterCommitWhenAccountPending() {
     UUID userId = UUID.randomUUID();
     User pendingUser = pendingUser(userId);
     ResendVerificationEmailCommand command = command("operator1@example.com");
@@ -141,20 +147,20 @@ class ResendVerificationEmailServiceTest {
     assertThat(tokenCaptor.getValue().getTokenHash()).isNotEqualTo("new-raw-token");
     assertThat(tokenCaptor.getValue().getUserId()).isEqualTo(userId);
 
+    verifyNoInteractions(auditLogEventPublisherPort, verificationEmailEventPublisherPort);
+
+    new ArrayList<>(TransactionSynchronizationManager.getSynchronizations())
+        .forEach(TransactionSynchronization::afterCommit);
+
     ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
-    verify(auditLogPort).record(auditCaptor.capture());
+    verify(auditLogEventPublisherPort).publish(auditCaptor.capture());
     assertThat(auditCaptor.getValue().getOperation())
         .isEqualTo(OperationType.EMAIL_VERIFICATION_REQUESTED);
     assertThat(auditCaptor.getValue().getObjectId()).isEqualTo(userId);
     assertThat(auditCaptor.getValue().getChangedBy()).isEqualTo(userId);
 
-    verifyNoInteractions(emailSenderPort);
-
-    new ArrayList<>(TransactionSynchronizationManager.getSynchronizations())
-        .forEach(TransactionSynchronization::afterCommit);
-
-    verify(emailSenderPort)
-        .sendVerificationEmail(
+    verify(verificationEmailEventPublisherPort)
+        .publish(
             "operator1@example.com",
             "Operator One",
             "https://app.example.com/verify?token=new-raw-token");
@@ -171,7 +177,11 @@ class ResendVerificationEmailServiceTest {
         .isEqualTo(AuthErrorCode.AUTH_RATE_LIMITED);
 
     verifyNoInteractions(
-        userRepositoryPort, tokenRepositoryPort, auditLogPort, tokenGeneratorPort, emailSenderPort);
+        userRepositoryPort,
+        tokenRepositoryPort,
+        auditLogEventPublisherPort,
+        tokenGeneratorPort,
+        verificationEmailEventPublisherPort);
   }
 
   private void givenThrottleAllows() {
