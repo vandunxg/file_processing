@@ -18,8 +18,8 @@ import com.vandunxg.file_processing.testsupport.PostgresIntegrationTest;
 import com.vandunxg.file_processing.testsupport.PostgresTestContainerBase;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
@@ -28,11 +28,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
- * Covers the public register / verify-email / resend-verification HTTP contract end to end
- * against a real Postgres. Each test method (other than the dedicated throttle test) uses a
- * distinct fake client IP via the {@code X-Real-IP} header so the process-wide Caffeine throttle
- * counter ({@link com.vandunxg.file_processing.auth.adapter.out.cache.CaffeineRegisterThrottleAdapter})
- * does not leak attempts between unrelated test methods sharing the same Spring context.
+ * Covers the public register / verify-email / resend-verification HTTP contract end to end against
+ * a real Postgres. Each test method (other than the dedicated throttle test) uses a distinct fake
+ * client IP via the {@code X-Real-IP} header so the process-wide Caffeine throttle counter ({@link
+ * com.vandunxg.file_processing.auth.adapter.out.cache.CaffeineRegisterThrottleAdapter}) does not
+ * leak attempts between unrelated test methods sharing the same Spring context.
  *
  * <p>{@code app.auth.register.max-attempts-per-hour} is lowered just for this test class (via
  * {@link TestPropertySource}, not the shared {@code application-test.yml}) so the 429 case can be
@@ -105,7 +105,10 @@ class AuthControllerIT extends PostgresTestContainerBase {
     for (int i = 0; i < 3; i++) {
       RegisterRequest request =
           registerRequest(
-              "throttle-" + i, "throttle-" + i + "@example.com", "Throttle User", "StrongPassw0rd!");
+              "throttle-" + i,
+              "throttle-" + i + "@example.com",
+              "Throttle User",
+              "StrongPassw0rd!");
       mockMvc.perform(registerCall(request, ip)).andExpect(status().isCreated());
     }
 
