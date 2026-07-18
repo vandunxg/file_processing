@@ -28,18 +28,15 @@ class RedisRegisterThrottleAdapterIT {
   private static RedisScript<Long> script;
 
   @BeforeAll
-  static void startRedisAndTemplate() throws java.io.IOException {
+  static void startRedisAndTemplate() {
     REDIS.start();
     connectionFactory =
         new LettuceConnectionFactory(REDIS.getHost(), REDIS.getMappedPort(6379));
     connectionFactory.afterPropertiesSet();
     stringRedisTemplate = new StringRedisTemplate(connectionFactory);
     stringRedisTemplate.afterPropertiesSet();
-    String scriptContent = new String(
-        new ClassPathResource("scripts/sliding-window-rate-limiter.lua").getContentAsByteArray(),
-        java.nio.charset.StandardCharsets.UTF_8);
     DefaultRedisScript<Long> redisScript = new DefaultRedisScript<>();
-    redisScript.setScriptText(scriptContent);
+    redisScript.setLocation(new ClassPathResource("scripts/sliding-window-rate-limiter.lua"));
     redisScript.setResultType(Long.class);
     script = redisScript;
   }
