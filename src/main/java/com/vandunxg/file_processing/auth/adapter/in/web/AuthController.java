@@ -41,7 +41,7 @@ public class AuthController {
   public Response<RegisterResponse> register(
       @Valid @RequestBody RegisterRequest request, HttpServletRequest http) {
     String clientIp = clientIp(http);
-    log.info("[register] username={} ip={}", request.getUsername(), clientIp);
+    log.info("[register] username={}", request.getUsername());
     var command = webMapper.toCommand(request, clientIp);
     var result = registerUseCase.register(command);
     return Response.of(webMapper.toResponse(result));

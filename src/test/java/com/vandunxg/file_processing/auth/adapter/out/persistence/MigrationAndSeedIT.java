@@ -69,10 +69,14 @@ class MigrationAndSeedIT extends PostgresTestContainerBase {
   @Test
   void migrations_createEmailVerificationTokensTable() {
     // Task 2 owns the JPA entity for this table; here we only assert the migration created it.
+    // PostgresTestContainerBase reuses a single static container across every IT class in the
+    // run, and sibling IT classes (AuthControllerIT, EmailVerificationTokenPersistenceAdapterIT)
+    // legitimately commit rows into this same table, so we don't assert it's empty - only that
+    // the table exists and the query is well-formed.
     Integer count =
         jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM auth_email_verification_tokens", Integer.class);
-    assertThat(count).isEqualTo(0);
+    assertThat(count).isNotNull();
   }
 
   @Test
