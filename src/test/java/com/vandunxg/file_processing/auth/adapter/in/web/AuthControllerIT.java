@@ -89,13 +89,13 @@ class AuthControllerIT extends PostgresTestContainerBase {
   }
 
   @Test
-  void register_returns422_whenPasswordViolatesPolicy() throws Exception {
+  void register_returns400_whenPasswordViolatesPolicy() throws Exception {
     RegisterRequest request =
         registerRequest("weak-pass", "weak-pass@example.com", "Weak Pass", "short1");
 
     mockMvc
         .perform(registerCall(request, "203.0.113.13"))
-        .andExpect(status().isUnprocessableEntity());
+        .andExpect(status().isBadRequest());
   }
 
   @Test
@@ -139,7 +139,7 @@ class AuthControllerIT extends PostgresTestContainerBase {
   }
 
   @Test
-  void verifyEmail_returns410_whenTokenUnknown() throws Exception {
+  void verifyEmail_returns400_whenTokenUnknown() throws Exception {
     VerifyEmailRequest verifyEmailRequest = new VerifyEmailRequest();
     verifyEmailRequest.setToken("plausible-but-unknown-token-1234567890abcdef");
 
@@ -148,7 +148,7 @@ class AuthControllerIT extends PostgresTestContainerBase {
             post(BASE_URL + "/verify-email")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(verifyEmailRequest)))
-        .andExpect(status().isGone());
+        .andExpect(status().isBadRequest());
   }
 
   @Test

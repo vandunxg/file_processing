@@ -1,6 +1,7 @@
 spring:
   application:
     name: file_processing
+    version: 1.0.0
 
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
@@ -53,7 +54,7 @@ spring:
         batch_versioned_data: true
         generate_statistics: false
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
 
   flyway:
     enabled: true
@@ -73,6 +74,7 @@ springdoc:
   api-docs:
     enabled: true
     path: /api-docs
+    url: http://localhost:8080
 
   swagger-ui:
     enabled: true

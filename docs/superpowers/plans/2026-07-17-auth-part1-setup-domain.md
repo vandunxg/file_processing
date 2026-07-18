@@ -17,6 +17,7 @@
 ## Global Constraints
 
 **Từ `RULE.md` (bắt buộc):**
+
 - Java 21, Spring Boot parent 4.1.0 (pin sẵn trong `pom.xml`).
 - Package layout Hexagonal: `com.vandunxg.file_processing.auth.{domain,application,adapter,configuration}` (`RULE.md §3`).
 - Naming: `<Xxx>UseCase`, `<Xxx>RepositoryPort`, `<Xxx>Service`, `<Xxx>Command`, `<Xxx>Query`, `<Xxx>Controller`, `<Xxx>Request`, `<Xxx>Response`, `<Xxx>Entity`, `Jpa<Xxx>Repository`, `<Xxx>PersistenceAdapter`, `<Xxx>PersistenceMapper`, `<Xxx>WebMapper` (`RULE.md §4`).
@@ -38,10 +39,12 @@
 - Common library dependencies dùng khi có sẵn: `AuditableDomain`, `AuditableEntity`, `Response<T>`, `PagingResponse<T>`, `PagingQuery`, `ResponseException`, `UserAuthentication`, `IdUtils.nextId()`, `HashUtils.sha256(...)`, `StrUtils.emailFormat(...)`, `LocaleStringService` (`RULE.md §10`).
 
 **Từ `AGENTS.md`:**
+
 - Không thêm framework mới (không Kafka, không CQRS framework, không Event Sourcing) ngoài scope đã duyệt.
 - Không tạo interface cho mọi class — chỉ khi có ranh giới thay thế/kiểm thử thật.
 
 **Từ spec `docs/specs/auth-module-requirements.md`:**
+
 - Password 8-128 ký tự, không bắt buộc đủ loại, cấm trùng username/email (`§8.3`).
 - Login lockout 5 lần thất bại trong 15 phút → khóa 15 phút (`§8.4`).
 - Session absolute TTL 30 ngày, access token TTL 15 phút, clock skew 60s (`§8.5`, `§9.1`).
@@ -58,6 +61,7 @@
 ## File Structure
 
 **Modify:**
+
 - `pom.xml` — thêm dependency, MapStruct processor path, xoá `modelmapper.version`.
 - `src/main/resources/application.yaml` — bổ sung `app.auth.*` namespace.
 - `src/main/resources/application-dev.yml` — dev-only key/secret placeholder.
@@ -76,9 +80,11 @@
 - `src/main/java/com/vandunxg/file_processing/auth/adapter/in/web/AuthController.java` — implement `/login`, `/me`.
 
 **Delete:**
+
 - `src/main/java/com/vandunxg/file_processing/auth/domain/model/Permission.java` — thay bằng `RolePermission.java`.
 
 **Create (domain):**
+
 - `auth/domain/model/RolePermission.java`
 - `auth/domain/model/UserRole.java`
 - `auth/domain/model/ActiveStatus.java`
@@ -93,6 +99,7 @@
 - `auth/domain/exception/AuthDomainException.java`
 
 **Create (application port):**
+
 - `auth/application/port/in/LoginUseCase.java`
 - `auth/application/port/in/GetCurrentUserUseCase.java`
 - `auth/application/port/in/BootstrapAdminUseCase.java`
@@ -109,6 +116,7 @@
 - `auth/application/port/out/AuthorityQueryPort.java`
 
 **Create (application service, command, result):**
+
 - `auth/application/service/LoginService.java` (rewrite stub)
 - `auth/application/service/GetCurrentUserService.java`
 - `auth/application/service/BootstrapAdminService.java`
@@ -118,6 +126,7 @@
 - `auth/application/result/UserAuthoritySnapshot.java`
 
 **Create (adapter out — persistence):**
+
 - `auth/adapter/out/persistence/entity/UserEntity.java`
 - `auth/adapter/out/persistence/entity/RoleEntity.java`
 - `auth/adapter/out/persistence/entity/RolePermissionEntity.java`
@@ -140,11 +149,13 @@
 - `auth/adapter/out/persistence/AuditLogPersistenceAdapter.java`
 
 **Create (adapter out — security / jwt):**
+
 - `auth/adapter/out/jwt/JwkKeyRing.java`
 - `auth/adapter/out/jwt/NimbusRsaTokenService.java`
 - `auth/adapter/out/jwt/JwksEndpoint.java`
 
 **Create (adapter out — cache / throttle):**
+
 - `auth/adapter/out/cache/RedisCredentialVersionCache.java`
 - `auth/adapter/out/cache/CaffeineCredentialVersionCache.java`
 - `auth/adapter/out/cache/CredentialVersionCacheComposite.java`
@@ -152,11 +163,13 @@
 - `auth/adapter/out/cache/CaffeineLoginThrottle.java`
 
 **Create (adapter out — password / clock / id):**
+
 - `auth/adapter/out/password/BcryptPasswordHasherAdapter.java`
 - `auth/adapter/out/system/SystemClockAdapter.java`
 - `auth/adapter/out/system/UuidIdGeneratorAdapter.java`
 
 **Create (adapter in — web / security):**
+
 - `auth/adapter/in/web/dto/request/LoginRequest.java`
 - `auth/adapter/in/web/dto/response/LoginResponse.java`
 - `auth/adapter/in/web/dto/response/UserSummaryResponse.java`
@@ -165,11 +178,13 @@
 - `auth/adapter/in/security/BootstrapAdminListener.java`
 
 **Create (configuration):**
+
 - `auth/configuration/AuthProperties.java` (typed @ConfigurationProperties)
 - `auth/configuration/AuthPersistenceConfiguration.java` (bean wiring)
 - `auth/configuration/AuthSecurityConfiguration.java` (JwtDecoder + converter beans)
 
 **Create (migration Flyway):**
+
 - `src/main/resources/db/migration/V202607170900__create_auth_users.sql`
 - `src/main/resources/db/migration/V202607170901__create_role.sql`
 - `src/main/resources/db/migration/V202607170902__create_role_permission.sql`
@@ -178,6 +193,7 @@
 - `src/main/resources/db/migration/V202607170905__seed_default_roles.sql`
 
 **Create (test):**
+
 - `src/test/java/com/vandunxg/file_processing/testsupport/PostgresIntegrationTest.java` — abstract Testcontainers base.
 - `src/test/java/com/vandunxg/file_processing/auth/domain/model/UserTest.java`
 - `src/test/java/com/vandunxg/file_processing/auth/domain/model/RoleTest.java`
@@ -198,9 +214,11 @@
 ## Task 1: Cập nhật `pom.xml` — dependency, MapStruct processor path, xoá ModelMapper
 
 **Files:**
+
 - Modify: `pom.xml`
 
 **Interfaces:**
+
 - Produces: Maven build với Flyway, common-email, Redis, Caffeine, Testcontainers, MapStruct annotation processor active.
 
 - [ ] **Step 1: Xoá property `modelmapper.version` và bổ sung properties mới**
@@ -316,6 +334,7 @@ Thay 2 block `<configuration><annotationProcessorPaths>` (một trong `default-c
 ```bash
 ./mvnw -DskipTests clean compile
 ```
+
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 6: Commit**
@@ -337,9 +356,11 @@ git commit -m "chore(auth): add flyway/redis/testcontainers/caffeine and mapstru
 ## Task 2: Test infrastructure — Testcontainers base class
 
 **Files:**
+
 - Create: `src/test/java/com/vandunxg/file_processing/testsupport/PostgresIntegrationTest.java`
 
 **Interfaces:**
+
 - Produces: `@PostgresIntegrationTest` composed annotation kích hoạt `@SpringBootTest` + Testcontainers PostgreSQL 16 shared between test classes trong cùng JVM.
 
 - [ ] **Step 1: Tạo file `PostgresIntegrationTest.java`**
@@ -456,12 +477,14 @@ git commit -m "test(auth): add testcontainers postgres base and test profile"
 ## Task 3: Sinh RSA key pair cho dev/test và bổ sung `application-dev.yml` / `application-test.yml`
 
 **Files:**
+
 - Modify: `src/main/resources/application.yaml` — bổ sung `app.auth.*` namespace.
 - Modify: `src/main/resources/application-dev.yml` — dev-only key placeholder.
 - Modify: `src/test/resources/application-test.yml` — test key placeholder.
 - Create: `docs/superpowers/plans/generate-test-rsa-key.sh` — helper script sinh key pair.
 
 **Interfaces:**
+
 - Produces: `AuthProperties` bind namespace `app.auth.*` với issuer/audience/kid/PEM.
 
 - [ ] **Step 1: Tạo script sinh RSA key pair dev/test**
@@ -606,6 +629,7 @@ app:
 ```bash
 ./mvnw -DskipTests clean compile
 ```
+
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 6: Commit**
@@ -628,6 +652,7 @@ git commit -m "feat(auth): add app.auth.* configuration namespace with RSA JWT k
 ## Task 4: Domain enum — `UserStatus`, `ActiveStatus`, `AuditLogDomain`, `OperationType`, `ResourceCode`, `RevocationReason`
 
 **Files:**
+
 - Modify: `auth/domain/model/UserStatus.java` — thêm `PENDING_VERIFY`, đổi `INACTIVE` thành `DISABLED`.
 - Modify: `auth/domain/model/AuditLogDomain.java` — populate 5 giá trị.
 - Modify: `auth/domain/model/OperationType.java` — mở rộng.
@@ -636,6 +661,7 @@ git commit -m "feat(auth): add app.auth.* configuration namespace with RSA JWT k
 - Create: `auth/domain/model/RevocationReason.java`
 
 **Interfaces:**
+
 - Produces:
   - `UserStatus { PENDING_VERIFY, ACTIVE, DISABLED }`
   - `ActiveStatus { ACTIVE, INACTIVE }` — dùng cho `Role.status`.
@@ -764,6 +790,7 @@ public enum RevocationReason {
 ```bash
 ./mvnw -DskipTests clean compile
 ```
+
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 8: Commit**
@@ -785,10 +812,12 @@ git commit -m "feat(auth): populate domain enums per spec §11.9-11.12
 ## Task 5: `AuthErrorCode` + `AuthDomainException` — module error catalog
 
 **Files:**
+
 - Create: `auth/domain/exception/AuthErrorCode.java`
 - Create: `auth/domain/exception/AuthDomainException.java`
 
 **Interfaces:**
+
 - Consumes: `com.vandunxg.common.models.error.ResponseError` interface.
 - Produces:
   - `AuthErrorCode` enum implements `ResponseError` với các code từ spec §42 (Phase 1+2 subset).
@@ -965,12 +994,13 @@ auth.error.invalid_action=Hành động không hợp lệ
 ```bash
 ./mvnw -DskipTests clean compile
 ```
+
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/main/java/com/vandunxg/file_processing/auth/domain/exception/ src/main/resources/i18n/messages.properties src/main/resources/i18n/messages_vi.properties
+git add src/main/java/com/vandunxg/file_processing/auth/domain/exception/ src/main/resources/i18n/messages.properties src/main/resources/i18n/message_vi.properties
 git commit -m "feat(auth): add AuthErrorCode enum and AuthDomainException per spec §42
 
 - 25 error codes covering authentication, authorization, password, user/role management
@@ -985,9 +1015,11 @@ git commit -m "feat(auth): add AuthErrorCode enum and AuthDomainException per sp
 ## Task 6: Mở rộng domain aggregate `User`
 
 **Files:**
+
 - Modify: `auth/domain/model/User.java`
 
 **Interfaces:**
+
 - Consumes: `UserStatus` (Task 4), `AuditableDomain`, `IdUtils.nextId()`.
 - Produces: `User` aggregate với đầy đủ field theo spec §11.1, method `applyLoginSuccess`, `applyLoginFailure`, `changePassword`, `resetPasswordByAdmin`, `verifyEmail`, `disable`, `enable`, `unlock`, `assignRoles`, `revokeRole`.
 
@@ -1151,6 +1183,7 @@ public class User extends AuditableDomain {
 ```bash
 ./mvnw -DskipTests clean compile
 ```
+
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 3: Commit**
@@ -1174,9 +1207,11 @@ git commit -m "feat(auth): expand User aggregate with security state per spec §
 ## Task 7: Rewrite domain aggregate `Role`
 
 **Files:**
+
 - Modify: `auth/domain/model/Role.java`
 
 **Interfaces:**
+
 - Consumes: `ActiveStatus` (Task 4), `ResourceCode` (Task 4), `com.vandunxg.common.models.enums.Action`, `AuditableDomain`.
 - Produces: `Role` với các trường `code`, `roleInheritedId`, `status`, `isConst`, `permissions: List<RolePermission>`, `userRoles: List<UserRole>`, method domain clone theo be-v2 nhưng dùng `deletedAt Instant?`.
 
@@ -1406,10 +1441,12 @@ git commit -m "feat(auth): rewrite Role aggregate per spec §11.2 (clone be-v2 w
 ## Task 8: Xoá `Permission.java` cũ và tạo `RolePermission.java` mới
 
 **Files:**
+
 - Delete: `auth/domain/model/Permission.java`
 - Create: `auth/domain/model/RolePermission.java`
 
 **Interfaces:**
+
 - Consumes: `Action` from common-models, `AuditableDomain`, `IdUtils.nextId()`.
 - Produces: `RolePermission` entity với `roleId`, `resourceCode`, `action`, `resourceGroup`, `deletedAt`, method `softDelete(Instant now)`, `restore()`, `isDeleted()`.
 
@@ -1497,9 +1534,11 @@ git commit -m "feat(auth): replace Permission.java with RolePermission per spec 
 ## Task 9: Tạo `UserRole.java`
 
 **Files:**
+
 - Create: `auth/domain/model/UserRole.java`
 
 **Interfaces:**
+
 - Consumes: `AuditableDomain`, `IdUtils.nextId()`.
 - Produces: `UserRole` với `userId`, `roleId`, `deletedAt`, method `softDelete`, `restore`.
 
@@ -1561,6 +1600,7 @@ public class UserRole extends AuditableDomain {
 ```bash
 ./mvnw -DskipTests clean compile
 ```
+
 Expected: `BUILD SUCCESS`.
 
 - [ ] **Step 3: Commit**
@@ -1579,10 +1619,12 @@ git commit -m "feat(auth): add UserRole entity per spec §11.4
 ## Task 10: `PasswordPolicy` + unit test
 
 **Files:**
+
 - Create: `auth/domain/policy/PasswordPolicy.java`
 - Create: `src/test/java/com/vandunxg/file_processing/auth/domain/policy/PasswordPolicyTest.java`
 
 **Interfaces:**
+
 - Produces: `PasswordPolicy` value class với method `validate(String rawPassword, String normalizedUsername, String normalizedEmail, String currentPasswordHash, PasswordHasherFn matcher)` trả về `ValidationResult`. Configurable `minLength`, `maxLength`.
 
 - [ ] **Step 1: Viết failing test**
@@ -1647,6 +1689,7 @@ class PasswordPolicyTest {
 ```bash
 ./mvnw -Dtest=PasswordPolicyTest test
 ```
+
 Expected: compile error.
 
 - [ ] **Step 3: Implement `PasswordPolicy.java`**
@@ -1721,6 +1764,7 @@ public final class PasswordPolicy {
 ```bash
 ./mvnw -Dtest=PasswordPolicyTest test
 ```
+
 Expected: `Tests run: 6, Failures: 0`.
 
 - [ ] **Step 5: Commit**
@@ -1741,10 +1785,12 @@ git commit -m "feat(auth): PasswordPolicy per NIST 800-63B (spec §8.3)
 ## Task 11: `LoginLockPolicy` + unit test
 
 **Files:**
+
 - Create: `auth/domain/policy/LoginLockPolicy.java`
 - Create: `src/test/java/com/vandunxg/file_processing/auth/domain/policy/LoginLockPolicyTest.java`
 
 **Interfaces:**
+
 - Consumes: `User` (Task 6).
 - Produces: `LoginLockPolicy` với method `applyFailure(User, Instant now)` mutation + `boolean isLocked(User, Instant now)`.
 
@@ -1878,6 +1924,7 @@ public final class LoginLockPolicy {
 ```bash
 ./mvnw -Dtest=LoginLockPolicyTest test
 ```
+
 Expected: `Tests run: 4, Failures: 0`.
 
 - [ ] **Step 5: Commit**
@@ -1896,9 +1943,11 @@ git commit -m "feat(auth): LoginLockPolicy per spec §8.4 (5 failures/15min → 
 ## Task 12: `LastActiveAdminPolicy`
 
 **Files:**
+
 - Create: `auth/domain/policy/LastActiveAdminPolicy.java`
 
 **Interfaces:**
+
 - Produces: `LastActiveAdminPolicy` — chỉ chứa method `check(int currentActiveAdminCount, boolean thisChangeRemovesActiveAdmin)` throw `IllegalStateException` nếu invariant vỡ. Actual query nằm ở repository/application layer.
 
 - [ ] **Step 1: Tạo file**
@@ -1937,10 +1986,12 @@ git commit -m "feat(auth): LastActiveAdminPolicy static guard per spec §8.2
 ## Task 13: `PermissionExpression` helper
 
 **Files:**
+
 - Create: `auth/domain/policy/PermissionExpression.java`
 - Create: `src/test/java/com/vandunxg/file_processing/auth/domain/policy/PermissionExpressionTest.java`
 
 **Interfaces:**
+
 - Consumes: `ResourceCode`, `Action`.
 - Produces:
   - `PermissionExpression.of(ResourceCode, Action) → String` returns `"resource:action"` lowercase.
@@ -2054,10 +2105,12 @@ git commit -m "feat(auth): PermissionExpression helper for JWT claim ↔ enum tu
 ## Task 14: Domain aggregate unit tests — `UserTest`, `RoleTest`
 
 **Files:**
+
 - Create: `src/test/java/com/vandunxg/file_processing/auth/domain/model/UserTest.java`
 - Create: `src/test/java/com/vandunxg/file_processing/auth/domain/model/RoleTest.java`
 
 **Interfaces:**
+
 - Consumes: `User`, `Role`, `UserRole`, `RolePermission`, `ResourceCode`, `Action`.
 
 - [ ] **Step 1: Viết `UserTest.java`**
@@ -2297,6 +2350,7 @@ class RoleTest {
 ```bash
 ./mvnw test -Dtest='UserTest,RoleTest'
 ```
+
 Expected: All tests pass.
 
 - [ ] **Step 4: Commit**

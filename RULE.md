@@ -16,11 +16,11 @@ Precedence when rules disagree: `AGENTS.md` (business) > this file (how to code)
 Before you write, edit, or plan any code, do these in order.
 
 1. **CodeGraph** (fast, index-backed). This repo is indexed under `.codegraph/`.
-   - MCP tools: call `codegraph_explore` first — one call returns the verbatim
-     source of the relevant symbols plus the call paths between them. Fall back
-     to `codegraph_node` to read a whole file or one symbol with its callers.
-   - Shell fallback: `codegraph explore "<question or symbols>"` and
-     `codegraph node <symbol-or-file>`.
+  - MCP tools: call `codegraph_explore` first — one call returns the verbatim
+    source of the relevant symbols plus the call paths between them. Fall back
+    to `codegraph_node` to read a whole file or one symbol with its callers.
+  - Shell fallback: `codegraph explore "<question or symbols>"` and
+    `codegraph node <symbol-or-file>`.
 2. **`LIBRARY.md`** — scan for reusable base classes / utils before writing
    your own. If it exists in the common lib, reuse it.
 3. **`AGENTS.md`** — read the relevant business section before changing
@@ -37,22 +37,22 @@ already exists in `com.vandunxg.common.utils.*`.
 
 ## 2. Technology baseline (frozen)
 
-| Layer          | Technology                                                    |
-|----------------|---------------------------------------------------------------|
-| Language       | Java 21                                                       |
-| Framework      | Spring Boot 4.1.x (parent already pinned in `pom.xml`)        |
-| Build          | Maven (wrapper `./mvnw`)                                      |
-| Persistence    | PostgreSQL + Spring Data JPA + Hibernate                      |
-| Migrations     | Flyway (`src/main/resources/db/migration`)                    |
-| Security       | Spring Security + JWT (access + rotating refresh)             |
-| Cache          | `com.vandunxg.common:common-cache` (Redis-backed)             |
-| Messaging      | `com.vandunxg.common:common-amqp` (only when a spec requires) |
-| Mapping        | MapStruct (compile-time). ModelMapper is **not** allowed for new code. |
-| Logging        | SLF4J 2.0.17 via Lombok `@Slf4j`                              |
-| Formatting     | Spotless + Google Java Format 1.27.0                          |
-| i18n           | Spring `MessageSource` at `classpath:i18n/messages`           |
-| Testing        | JUnit 5 + Mockito + AssertJ + Testcontainers                  |
-| API docs       | Springdoc OpenAPI (`springdoc-openapi-starter-webmvc-ui`)     |
+| Layer       | Technology                                                             |
+|-------------|------------------------------------------------------------------------|
+| Language    | Java 21                                                                |
+| Framework   | Spring Boot 4.1.x (parent already pinned in `pom.xml`)                 |
+| Build       | Maven (wrapper `./mvnw`)                                               |
+| Persistence | PostgreSQL + Spring Data JPA + Hibernate                               |
+| Migrations  | Flyway (`src/main/resources/db/migration`)                             |
+| Security    | Spring Security + JWT (access + rotating refresh)                      |
+| Cache       | `com.vandunxg.common:common-cache` (Redis-backed)                      |
+| Messaging   | `com.vandunxg.common:common-amqp` (only when a spec requires)          |
+| Mapping     | MapStruct (compile-time). ModelMapper is **not** allowed for new code. |
+| Logging     | SLF4J 2.0.17 via Lombok `@Slf4j`                                       |
+| Formatting  | Spotless + Google Java Format 1.27.0                                   |
+| i18n        | Spring `MessageSource` at `classpath:i18n/messages`                    |
+| Testing     | JUnit 5 + Mockito + AssertJ + Testcontainers                           |
+| API docs    | Springdoc OpenAPI (`springdoc-openapi-starter-webmvc-ui`)              |
 
 **Do not add** a new framework, messaging system, or ORM without an explicit
 change request. No Kafka, no CQRS framework, no Event Sourcing, no native
@@ -113,27 +113,27 @@ Dependency rule (hexagonal):
 
 ## 4. Naming conventions
 
-| Concept                       | Suffix / pattern              | Location                            |
-|-------------------------------|-------------------------------|-------------------------------------|
-| Domain aggregate/entity       | `User`, `AuditLog`            | `domain/model/`                     |
-| Domain enum                   | `UserStatus`, `OperationType` | `domain/model/`                     |
-| Module error catalog          | `<Module>ErrorCode`           | `domain/exception/`                 |
-| Inbound use case (interface)  | `<Xxx>UseCase`                | `application/port/in/`              |
-| Outbound port (interface)     | `<Xxx>RepositoryPort`, `<Xxx>NotifierPort` | `application/port/out/` |
-| Use case implementation       | `<Xxx>Service` (`@Service`)   | `application/service/`              |
-| Write-side input              | `<Xxx>Command`                | `application/command/`              |
-| Read-side input               | `<Xxx>Query` (extends `PagingQuery`) | `application/query/`         |
-| REST controller               | `<Xxx>Controller`             | `adapter/in/web/`                   |
-| HTTP request DTO              | `<Xxx>Request` (extends `Request`) | `adapter/in/web/dto/request/`  |
-| HTTP response DTO             | `<Xxx>Response` (extends `BaseResponse` when auditable) | `adapter/in/web/dto/response/` |
-| Web mapper                    | `<Xxx>WebMapper`              | `adapter/in/web/mapper/`            |
-| JPA entity                    | `<Xxx>Entity` (extends `AuditableEntity`) | `adapter/out/persistence/entity/` |
-| Spring Data repository        | `Jpa<Xxx>Repository`          | `adapter/out/persistence/entity/`   |
-| Persistence adapter           | `<Xxx>PersistenceAdapter`     | `adapter/out/persistence/`          |
-| Persistence mapper            | `<Xxx>PersistenceMapper` (implements `EntityMapper<D,E>`) | `adapter/out/persistence/mapper/` |
-| Spring configuration          | `<Xxx>Configuration`          | `configuration/`                    |
-| Scheduled job                 | `<Xxx>Scheduler` / e.g. `SystemGC` | `configuration/` or feature pkg |
-| Test class                    | `<ClassName>Test` (unit) / `<ClassName>IT` (integration) | `src/test/java` mirror |
+| Concept                      | Suffix / pattern                                          | Location                          |
+|------------------------------|-----------------------------------------------------------|-----------------------------------|
+| Domain aggregate/entity      | `User`, `AuditLog`                                        | `domain/model/`                   |
+| Domain enum                  | `UserStatus`, `OperationType`                             | `domain/model/`                   |
+| Module error catalog         | `<Module>ErrorCode`                                       | `domain/exception/`               |
+| Inbound use case (interface) | `<Xxx>UseCase`                                            | `application/port/in/`            |
+| Outbound port (interface)    | `<Xxx>RepositoryPort`, `<Xxx>NotifierPort`                | `application/port/out/`           |
+| Use case implementation      | `<Xxx>Service` (`@Service`)                               | `application/service/`            |
+| Write-side input             | `<Xxx>Command`                                            | `application/command/`            |
+| Read-side input              | `<Xxx>Query` (extends `PagingQuery`)                      | `application/query/`              |
+| REST controller              | `<Xxx>Controller`                                         | `adapter/in/web/`                 |
+| HTTP request DTO             | `<Xxx>Request` (extends `Request`)                        | `adapter/in/web/dto/request/`     |
+| HTTP response DTO            | `<Xxx>Response` (extends `BaseResponse` when auditable)   | `adapter/in/web/dto/response/`    |
+| Web mapper                   | `<Xxx>WebMapper`                                          | `adapter/in/web/mapper/`          |
+| JPA entity                   | `<Xxx>Entity` (extends `AuditableEntity`)                 | `adapter/out/persistence/entity/` |
+| Spring Data repository       | `Jpa<Xxx>Repository`                                      | `adapter/out/persistence/entity/` |
+| Persistence adapter          | `<Xxx>PersistenceAdapter`                                 | `adapter/out/persistence/`        |
+| Persistence mapper           | `<Xxx>PersistenceMapper` (implements `EntityMapper<D,E>`) | `adapter/out/persistence/mapper/` |
+| Spring configuration         | `<Xxx>Configuration`                                      | `configuration/`                  |
+| Scheduled job                | `<Xxx>Scheduler` / e.g. `SystemGC`                        | `configuration/` or feature pkg   |
+| Test class                   | `<ClassName>Test` (unit) / `<ClassName>IT` (integration)  | `src/test/java` mirror            |
 
 Method names are `camelCase` verbs; boolean methods start with `is`/`has`/
 `can`. Enum values are `SCREAMING_SNAKE_CASE`. Constants are `static final`
@@ -190,16 +190,55 @@ Rules:
 
 The common lib already provides the full pipeline. Do not reinvent it.
 
-### 6.1 Define a module error catalog
+### 6.1 Approved HTTP status codes
+
+Every `<Module>ErrorCode` entry (and every controller response) must use
+**only** the codes below. Do not reach for `405`, `410`, `422`, or any other
+code outside this table — map the situation onto the closest approved one
+instead. This is a hard project-wide constraint, not a per-module choice.
+
+**Success**
+
+| HTTP code      | When to use                                   |
+|----------------|-----------------------------------------------|
+| 200 OK         | Request succeeded and returns a response body |
+| 201 Created    | A new resource was created                    |
+| 202 Accepted   | Request accepted, processed asynchronously    |
+| 204 No Content | Succeeded, no response body needed            |
+
+**Client error**
+
+| HTTP code                  | When to use                                                                                 |
+|----------------------------|---------------------------------------------------------------------------------------------|
+| 400 Bad Request            | Malformed request or validation failure (covers what used to be reached for as `422`/`410`) |
+| 401 Unauthorized           | Not authenticated, or the token is invalid                                                  |
+| 403 Forbidden              | Authenticated but insufficient role/permission                                              |
+| 404 Not Found              | Resource does not exist, or the caller must not be told it exists                           |
+| 409 Conflict               | Request is valid but conflicts with current state/data                                      |
+| 413 Content Too Large      | File exceeds the size limit                                                                 |
+| 415 Unsupported Media Type | Wrong file/content type                                                                     |
+
+**Server error**
+
+| HTTP code                 | When to use                                                                                                                                                                                             |
+|---------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 500 Internal Server Error | Unexpected failure in code, or a required system invariant broke (e.g. a reference row that must always exist — like a seeded role — was not found; that is a data/ops problem, not the caller's fault) |
+| 503 Service Unavailable   | Postgres, Redis, MinIO, or another dependency is temporarily unavailable                                                                                                                                |
+
+**One standing exception:** `429 Too Many Requests` is also approved,
+reserved exclusively for rate limiting (see `AuthErrorCode.AUTH_RATE_LIMITED`).
+No other code outside this table may be introduced without updating this rule
+first.
+
+### 6.2 Define a module error catalog
 
 Every module owns one enum implementing
 `com.vandunxg.common.models.error.ResponseError`. This enum lives in
-`<module>/domain/exception/`.
+`<module>/domain/exception/`. All status values used must come from §6.1.
 
 ```java
 package com.vandunxg.file_processing.auth.domain.exception;
 
-import org.springframework.http.HttpStatus;
 import com.vandunxg.common.models.error.ResponseError;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -208,27 +247,42 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum AuthErrorCode implements ResponseError {
 
-  INVALID_CREDENTIALS(40101, "auth.error.invalid_credentials", HttpStatus.UNAUTHORIZED),
-  ACCOUNT_LOCKED     (40301, "auth.error.account_locked",     HttpStatus.FORBIDDEN),
-  USER_NOT_FOUND     (40401, "auth.error.user_not_found",     HttpStatus.NOT_FOUND),
-  REFRESH_TOKEN_REUSED(40102,"auth.error.refresh_token_reused",HttpStatus.UNAUTHORIZED);
+  INVALID_CREDENTIALS(40101, "Invalid username or password", 401),
+  ACCOUNT_LOCKED(40301, "Account is locked", 403),
+  USER_NOT_FOUND(40401, "User not found", 404),
+  REFRESH_TOKEN_REUSED(40102, "Refresh token was reused", 401);
 
-  private final Integer code;      // business code returned to client
-  private final String messageKey; // i18n key, resolved by LocaleStringService
-  private final HttpStatus http;
+  private final Integer code;   // business code returned to client
+  private final String message; // fallback text if no i18n entry matches (see §6.5)
+  private final int status;     // must be one of the codes in §6.1
 
-  @Override public String getName()    { return name(); }
-  @Override public String getMessage() { return messageKey; }
-  @Override public int getStatus()     { return http.value(); }
-  @Override public Integer getCode()   { return code; }
+  @Override
+  public String getName() {
+    return name();
+  }
+
+  @Override
+  public String getMessage() {
+    return message;
+  }
+
+  @Override
+  public int getStatus() {
+    return status;
+  }
+
+  @Override
+  public Integer getCode() {
+    return code;
+  }
 }
 ```
 
-Numeric code convention: `{httpStatus}{2-digit module code}` (auth = `01`,
-file-import = `02`, customer = `03`, …). Reserve `xx000` for "unspecified in
-this class".
+Numeric code convention: `{httpStatus}{2-digit sequence within that status,
+starting at 01}` — bump the sequence only when two codes in the same module
+share the same HTTP status. Reserve `xx000` for "unspecified in this class".
 
-### 6.2 Log the context *before* you throw
+### 6.3 Log the context *before* you throw
 
 Every `throw` that ends a request must be preceded by a log line that captures
 the observable context, so the trace is complete without needing to re-run the
@@ -280,7 +334,7 @@ if (updated == 0) {
 log.info("[claimJob] claimed jobId={} workerId={}", jobId, workerId);
 ```
 
-### 6.3 Domain exceptions belong to the domain
+### 6.4 Domain exceptions belong to the domain
 
 The `domain/` layer must not depend on `com.vandunxg.common.models.exception`
 symbols by their generic name. Each module owns a **domain-scoped exception
@@ -313,11 +367,11 @@ public class AuthDomainException extends ResponseException {
 
 Usage split:
 
-| Layer         | Throw this                                                                                             |
-|---------------|--------------------------------------------------------------------------------------------------------|
-| `domain/`     | `<Module>DomainException(<Module>ErrorCode.XXX, …)` — pure domain vocabulary.                          |
-| `application/`| Same domain exception when the failure is a domain rule. `ResponseException` from common lib when it is a cross-cutting application concern that is not owned by any single domain (e.g. `BadRequestError.INVALID_INPUT`). |
-| `adapter/`    | Never throw a `ResponseException` yourself; either let the domain throw, or wrap upstream failures inside the adapter and re-throw as the module's domain exception. |
+| Layer          | Throw this                                                                                                                                                                                                                 |
+|----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `domain/`      | `<Module>DomainException(<Module>ErrorCode.XXX, …)` — pure domain vocabulary.                                                                                                                                              |
+| `application/` | Same domain exception when the failure is a domain rule. `ResponseException` from common lib when it is a cross-cutting application concern that is not owned by any single domain (e.g. `BadRequestError.INVALID_INPUT`). |
+| `adapter/`     | Never throw a `ResponseException` yourself; either let the domain throw, or wrap upstream failures inside the adapter and re-throw as the module's domain exception.                                                       |
 
 Because `AuthDomainException extends ResponseException`, the existing
 `ExceptionHandleAdvice` catches it via the parent type — **no new advice
@@ -329,26 +383,38 @@ If a module has two disjoint error catalogues (e.g. `file-import` splits into
 domain exception (`ImportFileDomainException`, `ProcessingJobDomainException`)
 — both still extend `ResponseException`.
 
-### 6.4 i18n messages
+### 6.5 i18n messages
 
-Every `messageKey` must exist in **both** `messages.properties` (English) and
-`messages_vi.properties` (Vietnamese):
+**The lookup key is the enum constant's `name()`, not the `message` field.**
+`ExceptionHandleAdvice` resolves the localized string by calling
+`localeStringService.getMessage(error.getName(), error.getMessage(), params)`
+— it looks up a property keyed by `getName()` (e.g. `INVALID_CREDENTIALS`)
+and only falls back to the literal text in `getMessage()` if that key is
+missing for the current locale. Getting this backwards (keying the
+properties file by a dotted string like `auth.error.invalid_credentials`
+instead of the enum name) means every lookup silently misses and the raw
+fallback text leaks into every response — this exact bug shipped once,
+don't reintroduce it.
+
+Every error code's **name** must exist as a key in **both**
+`messages.properties` (English) and `messages_vi.properties` (Vietnamese):
 
 ```properties
 # src/main/resources/i18n/messages.properties
-auth.error.invalid_credentials=Invalid username or password
-auth.error.account_locked=Account {0} is locked
+INVALID_CREDENTIALS=Invalid username or password
+ACCOUNT_LOCKED=Account is locked
 ```
 
 ```properties
-# src/main/resources/i18n/messages_vi.properties
-auth.error.invalid_credentials=Sai tên đăng nhập hoặc mật khẩu
-auth.error.account_locked=Tài khoản {0} đang bị khoá
+# src/main/resources/i18n/message_vi.properties
+INVALID_CREDENTIALS=Sai tên đăng nhập hoặc mật khẩu
+ACCOUNT_LOCKED=Tài khoản đang bị khoá
 ```
 
-### 6.5 Rules
+### 6.6 Rules
 
 ✅ Do:
+
 - Define one `<Module>ErrorCode implements ResponseError` per module.
 - Define one `<Module>DomainException extends ResponseException` per module.
 - **Log context at `warn`/`error` immediately before the `throw`** — one log
@@ -360,6 +426,7 @@ auth.error.account_locked=Tài khoản {0} đang bị khoá
   response.
 
 ❌ Don't:
+
 - Throw a bare `ResponseException` from `domain/` — use `<Module>DomainException`.
 - Throw `IllegalArgumentException`, `RuntimeException`, or `NullPointerException`
   to signal a business error.
@@ -369,7 +436,10 @@ auth.error.account_locked=Tài khoản {0} đang bị khoá
 - Write your own `@RestControllerAdvice` unless you first extend
   `ExceptionHandleAdvice`.
 - Catch `Exception e` in a service to `return null` or a sentinel value.
-- Hard-code an English message in Java — always use an i18n key.
+- Rely only on the enum's `message` field for localization — it is the
+  fallback text, not a substitute for adding the `name()` key to both
+  `messages.properties` files (§6.5).
+- Use an HTTP status outside the §6.1 table.
 - Include a token, password, or full customer row in error params or log.
 
 ---
@@ -484,6 +554,7 @@ public interface AuthWebMapper {
 ### 7.3 Rules
 
 ✅ Do:
+
 - One mapper interface per adapter side: `<Xxx>PersistenceMapper` in
   `adapter/out/persistence/mapper/`, `<Xxx>WebMapper` in
   `adapter/in/web/mapper/`.
@@ -495,6 +566,7 @@ public interface AuthWebMapper {
   `lombok-mapstruct-binding` processor path.
 
 ❌ Don't:
+
 - `new ModelMapper()`, `ModelMapper` beans, or ModelMapper `TypeMap`
   configuration — remove existing usage as you touch files.
 - `BeanUtils.copyProperties`, `Apache BeanUtils`, or hand-rolled reflection.
@@ -567,6 +639,7 @@ logged in full because it is opaque.
 
 ✅ Do: `log.error("[claimJob] failed to claim jobId={} attempt={}", jobId, attempt, e);`
 ❌ Don't:
+
 - `System.out.println(...)`
 - `e.printStackTrace()`
 - `log.info("something happened: " + var)` (string concat instead of `{}`)
@@ -609,28 +682,28 @@ an addition to the common lib (bump version) instead of duplicating locally.
 
 Non-exhaustive list of mandatory reuse:
 
-| Need                                | Use this                                                             |
-|-------------------------------------|----------------------------------------------------------------------|
-| Auditable domain aggregate          | extend `com.vandunxg.common.models.domain.AuditableDomain`           |
-| Auditable JPA entity                | extend `com.vandunxg.common.models.entities.AuditableEntity`         |
-| HTTP request base                   | extend `com.vandunxg.common.models.dto.request.Request`              |
-| Paged HTTP request                  | extend `com.vandunxg.common.models.dto.request.PagingRequest`        |
-| HTTP response wrapper               | return `com.vandunxg.common.models.dto.response.Response<T>` / `PagingResponse<T>` |
-| Auditable response body             | extend `com.vandunxg.common.models.dto.response.BaseResponse`        |
-| Page result                         | `com.vandunxg.common.models.dto.PageDTO<T>`                          |
-| Domain↔entity mapper contract       | implement `com.vandunxg.common.models.mapper.EntityMapper<D, E>`     |
-| Search/paging query base            | extend `com.vandunxg.common.persistence.query.PagingQuery`           |
-| Custom JPA base repository          | extend `com.vandunxg.common.persistence.repository.custom.BaseEntityRepositoryCustom` |
-| Business error                      | throw `com.vandunxg.common.models.exception.ResponseException` with a `ResponseError` enum |
-| Current user                        | `com.vandunxg.common.web.support.SecurityUtils.getCurrentUserLoginId()` |
-| i18n lookup                         | `com.vandunxg.common.web.i18n.LocaleStringService.getMessage(...)`   |
-| UUID generation                     | `com.vandunxg.common.utils.IdUtils.nextId()`                         |
-| SHA-256 checksum                    | `com.vandunxg.common.utils.HashUtils.sha256(...)`                    |
-| Date parsing / formatting           | `com.vandunxg.common.utils.DateUtils`                                |
-| String helpers, email/phone format  | `com.vandunxg.common.utils.StrUtils`                                 |
-| Jackson mapper                      | `com.vandunxg.common.utils.MapperFactoryUtils.jacksonMapper()`       |
-| Cache                               | inject `com.vandunxg.common.cache.service.CacheService` or use `@CacheAction` / `@CacheUpdate` |
-| AMQP publisher                      | `com.vandunxg.common.amqp.publisher.AmqpEventPublisher`              |
+| Need                               | Use this                                                                                       |
+|------------------------------------|------------------------------------------------------------------------------------------------|
+| Auditable domain aggregate         | extend `com.vandunxg.common.models.domain.AuditableDomain`                                     |
+| Auditable JPA entity               | extend `com.vandunxg.common.models.entities.AuditableEntity`                                   |
+| HTTP request base                  | extend `com.vandunxg.common.models.dto.request.Request`                                        |
+| Paged HTTP request                 | extend `com.vandunxg.common.models.dto.request.PagingRequest`                                  |
+| HTTP response wrapper              | return `com.vandunxg.common.models.dto.response.Response<T>` / `PagingResponse<T>`             |
+| Auditable response body            | extend `com.vandunxg.common.models.dto.response.BaseResponse`                                  |
+| Page result                        | `com.vandunxg.common.models.dto.PageDTO<T>`                                                    |
+| Domain↔entity mapper contract      | implement `com.vandunxg.common.models.mapper.EntityMapper<D, E>`                               |
+| Search/paging query base           | extend `com.vandunxg.common.persistence.query.PagingQuery`                                     |
+| Custom JPA base repository         | extend `com.vandunxg.common.persistence.repository.custom.BaseEntityRepositoryCustom`          |
+| Business error                     | throw `com.vandunxg.common.models.exception.ResponseException` with a `ResponseError` enum     |
+| Current user                       | `com.vandunxg.common.web.support.SecurityUtils.getCurrentUserLoginId()`                        |
+| i18n lookup                        | `com.vandunxg.common.web.i18n.LocaleStringService.getMessage(...)`                             |
+| UUID generation                    | `com.vandunxg.common.utils.IdUtils.nextId()`                                                   |
+| SHA-256 checksum                   | `com.vandunxg.common.utils.HashUtils.sha256(...)`                                              |
+| Date parsing / formatting          | `com.vandunxg.common.utils.DateUtils`                                                          |
+| String helpers, email/phone format | `com.vandunxg.common.utils.StrUtils`                                                           |
+| Jackson mapper                     | `com.vandunxg.common.utils.MapperFactoryUtils.jacksonMapper()`                                 |
+| Cache                              | inject `com.vandunxg.common.cache.service.CacheService` or use `@CacheAction` / `@CacheUpdate` |
+| AMQP publisher                     | `com.vandunxg.common.amqp.publisher.AmqpEventPublisher`                                        |
 
 See [`LIBRARY.md`](./LIBRARY.md) for the full catalog with method signatures.
 
@@ -739,6 +812,7 @@ CREATE INDEX role_deleted_at_idx  ON role (deleted_at) WHERE deleted_at IS NOT N
 ✅ Do: `deleted_at TIMESTAMPTZ`, `deletedAt: Instant?`, partial index
 `WHERE deleted_at IS NULL`.
 ❌ Don't:
+
 - `deleted BOOLEAN`.
 - Cột tên `deleted` mà lại kiểu timestamp.
 - `is_deleted` (bỏ tiền tố `is_` vì đây là timestamp không phải boolean).
@@ -779,8 +853,9 @@ Rules:
 
 - No business logic in controllers. Validation annotations only.
 - Base path uses the config values `app.api.prefix` and `app.api.version`.
-- Every user-facing message resolves through `i18n/messages*.properties`. Keys
-  are `snake.dotted` and grouped by module (`auth.error.*`, `file.info.*`).
+- Every user-facing message resolves through `i18n/messages*.properties`.
+  Keys are the error enum's constant name (e.g. `INVALID_CREDENTIALS`) — see
+  §6.5, not a dotted string.
 - Response body is always a `Response<T>` (or `PagingResponse<T>`) — never a
   raw domain or entity.
 
@@ -861,12 +936,14 @@ record — same annotation rules apply.
 ### 14.4 Rules
 
 ✅ Do:
+
 - Put `@OpenAPIDefinition` / `@SecurityScheme` on one Spring-managed bean.
 - Use `@Schema` for description/example only; enforce constraints with
   Jakarta Validation.
 - Return `Response<XxxResponse>` (a DTO), so the schema is stable.
 
 ❌ Don't:
+
 - Sprinkle `@SecurityScheme` on multiple controllers.
 - Use `@Schema(required = true)` **instead of** `@NotNull` / `@NotBlank` —
   Springdoc infers `required` from the validation annotations.
@@ -899,18 +976,18 @@ judgment wins.
 
 Follow Conventional Commits: `type(scope): subject`.
 
-| Type       | Use for                                            |
-|------------|----------------------------------------------------|
-| `feat`     | New user-visible capability                        |
-| `fix`      | Bug fix                                            |
-| `refactor` | Code change with no behaviour change               |
-| `perf`     | Performance improvement                            |
+| Type       | Use for                                                  |
+|------------|----------------------------------------------------------|
+| `feat`     | New user-visible capability                              |
+| `fix`      | Bug fix                                                  |
+| `refactor` | Code change with no behaviour change                     |
+| `perf`     | Performance improvement                                  |
 | `docs`     | Docs only (this file, `AGENTS.md`, `LIBRARY.md`, README) |
-| `test`     | Adding or fixing tests                             |
-| `chore`    | Build config, dependency bumps, tooling            |
-| `style`    | Formatting only (typically `spotless apply`)       |
-| `ci`       | CI configuration                                   |
-| `build`    | Maven, Docker, packaging                           |
+| `test`     | Adding or fixing tests                                   |
+| `chore`    | Build config, dependency bumps, tooling                  |
+| `style`    | Formatting only (typically `spotless apply`)             |
+| `ci`       | CI configuration                                         |
+| `build`    | Maven, Docker, packaging                                 |
 
 - Subject is imperative, lowercase, no trailing period. Under 72 chars.
 - Scope is optional but useful: `feat(auth): add refresh token rotation`.
@@ -965,20 +1042,21 @@ exception noted in the PR description.
 - [ ] `codegraph_explore` / `LIBRARY.md` searched — no duplication.
 - [ ] Package layout matches §3 for any new class.
 - [ ] Domain has no Spring/JPA imports.
-- [ ] New error → `<Module>ErrorCode`, thrown as `<Module>DomainException`
-      (from domain) or `ResponseException` (from application cross-cutting),
-      i18n key present in both `messages.properties` and `messages_vi.properties`.
+- [ ] New error → `<Module>ErrorCode` using only an §6.1-approved HTTP status,
+  thrown as `<Module>DomainException` (from domain) or `ResponseException`
+  (from application cross-cutting), enum name present as a key in both
+  `messages.properties` and `messages_vi.properties`.
 - [ ] A `log.warn` / `log.error` line is present **immediately before** every
-      new `throw` that ends a request, with the identifiers needed to trace it.
+  new `throw` that ends a request, with the identifiers needed to trace it.
 - [ ] Fragile code (external I/O, retry, race points) has breadcrumb logs
-      before and after the risky call.
+  before and after the risky call.
 - [ ] `@Slf4j(topic = "…")` on the class; logs start with `[methodName]` and
-      use `{}` placeholders; no PII / tokens.
+  use `{}` placeholders; no PII / tokens.
 - [ ] Mapper is a MapStruct `@Mapper(componentModel = "spring")` interface;
-      no `ModelMapper`, `BeanUtils`, or reflection copying.
+  no `ModelMapper`, `BeanUtils`, or reflection copying.
 - [ ] DTO has Jakarta Validation + `@Schema`. No JPA entity in the response.
 - [ ] New endpoint: security either default (bearer) or explicit
-      `@SecurityRequirements` for public.
+  `@SecurityRequirements` for public.
 - [ ] Schema change → new Flyway migration `V{yyyyMMddHHmm}__*.sql`.
 - [ ] New behaviour has a test.
 - [ ] `mvn spotless:apply && mvn verify` is green.

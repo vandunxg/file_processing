@@ -49,10 +49,11 @@ public class SecurityConfiguration {
     "/js/*.html",
     "/i18n/**",
     "/content/**",
-    "/swagger-ui/index.html",
-    "/v3/api-docs/**",
-    "/v3/api-docs/public",
-    "/v3/api-docs/swagger-config"
+    "/swagger-ui",
+    "/swagger-ui/**",
+    "/api-docs",
+    "/api-docs/**",
+    "/webjars/**"
   };
 
   private final RegexPermissionEvaluator customPermissionEvaluator;

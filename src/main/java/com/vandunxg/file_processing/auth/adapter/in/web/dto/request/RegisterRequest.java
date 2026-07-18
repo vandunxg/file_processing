@@ -41,7 +41,7 @@ public class RegisterRequest extends Request {
 
   @Schema(
       description =
-          "Account password; length/character policy is enforced server-side and returns 422 on"
+          "Account password; length/character policy is enforced server-side and returns 400 on"
               + " violation",
       example = "StrongPassw0rd!",
       format = "password")

@@ -17,11 +17,11 @@ Nếu thấy rule sai, mở change request.
 Trước khi viết, sửa, hoặc lên kế hoạch code, làm theo đúng thứ tự sau.
 
 1. **CodeGraph** (nhanh, dùng index). Repo này đã index tại `.codegraph/`.
-   - MCP tools: gọi `codegraph_explore` trước — 1 call trả source verbatim của
-     các symbol liên quan + đường call giữa chúng. Fallback qua `codegraph_node`
-     để đọc cả file hoặc 1 symbol kèm caller.
-   - Shell fallback: `codegraph explore "<câu hỏi hoặc symbol>"` và
-     `codegraph node <symbol-hoặc-file>`.
+  - MCP tools: gọi `codegraph_explore` trước — 1 call trả source verbatim của
+    các symbol liên quan + đường call giữa chúng. Fallback qua `codegraph_node`
+    để đọc cả file hoặc 1 symbol kèm caller.
+  - Shell fallback: `codegraph explore "<câu hỏi hoặc symbol>"` và
+    `codegraph node <symbol-hoặc-file>`.
 2. **`LIBRARY.md`** — scan xem base class / util cần dùng đã có trong common
    lib chưa. Có rồi thì reuse.
 3. **`AGENTS.md`** — đọc section business tương ứng trước khi đổi hành vi.
@@ -36,22 +36,22 @@ vào code auth.
 
 ## 2. Tech baseline (không đổi)
 
-| Layer          | Công nghệ                                                       |
-|----------------|-----------------------------------------------------------------|
-| Ngôn ngữ       | Java 21                                                          |
-| Framework      | Spring Boot 4.1.x (đã pin trong `pom.xml`)                       |
-| Build          | Maven (wrapper `./mvnw`)                                         |
-| Persistence    | PostgreSQL + Spring Data JPA + Hibernate                         |
-| Migration      | Flyway (`src/main/resources/db/migration`)                       |
-| Security       | Spring Security + JWT (access + rotating refresh)                |
-| Cache          | `com.vandunxg.common:common-cache` (Redis)                       |
-| Messaging      | `com.vandunxg.common:common-amqp` (chỉ khi spec yêu cầu)         |
-| Mapping        | MapStruct (compile-time). ModelMapper **không** dùng cho code mới. |
-| Logging        | SLF4J 2.0.17 qua Lombok `@Slf4j`                                 |
-| Format         | Spotless + Google Java Format 1.27.0                             |
-| i18n           | Spring `MessageSource` tại `classpath:i18n/messages`             |
-| Test           | JUnit 5 + Mockito + AssertJ + Testcontainers                     |
-| API docs       | Springdoc OpenAPI (`springdoc-openapi-starter-webmvc-ui`)        |
+| Layer       | Công nghệ                                                          |
+|-------------|--------------------------------------------------------------------|
+| Ngôn ngữ    | Java 21                                                            |
+| Framework   | Spring Boot 4.1.x (đã pin trong `pom.xml`)                         |
+| Build       | Maven (wrapper `./mvnw`)                                           |
+| Persistence | PostgreSQL + Spring Data JPA + Hibernate                           |
+| Migration   | Flyway (`src/main/resources/db/migration`)                         |
+| Security    | Spring Security + JWT (access + rotating refresh)                  |
+| Cache       | `com.vandunxg.common:common-cache` (Redis)                         |
+| Messaging   | `com.vandunxg.common:common-amqp` (chỉ khi spec yêu cầu)           |
+| Mapping     | MapStruct (compile-time). ModelMapper **không** dùng cho code mới. |
+| Logging     | SLF4J 2.0.17 qua Lombok `@Slf4j`                                   |
+| Format      | Spotless + Google Java Format 1.27.0                               |
+| i18n        | Spring `MessageSource` tại `classpath:i18n/messages`               |
+| Test        | JUnit 5 + Mockito + AssertJ + Testcontainers                       |
+| API docs    | Springdoc OpenAPI (`springdoc-openapi-starter-webmvc-ui`)          |
 
 **Không tự ý thêm** framework, messaging, hay ORM mới nếu chưa có change
 request. Cấm Kafka, CQRS framework, Event Sourcing, native image, viết lại
@@ -111,27 +111,27 @@ Rule dependency (hexagonal):
 
 ## 4. Naming convention
 
-| Khái niệm                       | Suffix / pattern                             | Vị trí                                |
-|---------------------------------|----------------------------------------------|---------------------------------------|
-| Domain aggregate / entity       | `User`, `AuditLog`                           | `domain/model/`                       |
-| Enum domain                     | `UserStatus`, `OperationType`                | `domain/model/`                       |
-| Bảng mã lỗi của module          | `<Module>ErrorCode`                          | `domain/exception/`                   |
-| Use case inbound (interface)    | `<Xxx>UseCase`                               | `application/port/in/`                |
-| Port outbound (interface)       | `<Xxx>RepositoryPort`, `<Xxx>NotifierPort`   | `application/port/out/`               |
-| Impl use case                   | `<Xxx>Service` (`@Service`)                  | `application/service/`                |
-| Input write-side                | `<Xxx>Command`                               | `application/command/`                |
-| Input read-side                 | `<Xxx>Query` (extends `PagingQuery`)         | `application/query/`                  |
-| REST controller                 | `<Xxx>Controller`                            | `adapter/in/web/`                     |
-| HTTP request DTO                | `<Xxx>Request` (extends `Request`)           | `adapter/in/web/dto/request/`         |
-| HTTP response DTO               | `<Xxx>Response` (extends `BaseResponse` nếu có audit) | `adapter/in/web/dto/response/` |
-| Web mapper                      | `<Xxx>WebMapper`                             | `adapter/in/web/mapper/`              |
-| JPA entity                      | `<Xxx>Entity` (extends `AuditableEntity`)    | `adapter/out/persistence/entity/`     |
-| Spring Data repository          | `Jpa<Xxx>Repository`                         | `adapter/out/persistence/entity/`     |
-| Persistence adapter             | `<Xxx>PersistenceAdapter`                    | `adapter/out/persistence/`            |
-| Persistence mapper              | `<Xxx>PersistenceMapper` (implements `EntityMapper<D,E>`) | `adapter/out/persistence/mapper/` |
-| Spring configuration            | `<Xxx>Configuration`                         | `configuration/`                      |
-| Scheduled job                   | `<Xxx>Scheduler` / vd `SystemGC`             | `configuration/` hoặc feature package |
-| Test class                      | `<ClassName>Test` (unit) / `<ClassName>IT` (integration) | `src/test/java` (mirror package) |
+| Khái niệm                    | Suffix / pattern                                          | Vị trí                                |
+|------------------------------|-----------------------------------------------------------|---------------------------------------|
+| Domain aggregate / entity    | `User`, `AuditLog`                                        | `domain/model/`                       |
+| Enum domain                  | `UserStatus`, `OperationType`                             | `domain/model/`                       |
+| Bảng mã lỗi của module       | `<Module>ErrorCode`                                       | `domain/exception/`                   |
+| Use case inbound (interface) | `<Xxx>UseCase`                                            | `application/port/in/`                |
+| Port outbound (interface)    | `<Xxx>RepositoryPort`, `<Xxx>NotifierPort`                | `application/port/out/`               |
+| Impl use case                | `<Xxx>Service` (`@Service`)                               | `application/service/`                |
+| Input write-side             | `<Xxx>Command`                                            | `application/command/`                |
+| Input read-side              | `<Xxx>Query` (extends `PagingQuery`)                      | `application/query/`                  |
+| REST controller              | `<Xxx>Controller`                                         | `adapter/in/web/`                     |
+| HTTP request DTO             | `<Xxx>Request` (extends `Request`)                        | `adapter/in/web/dto/request/`         |
+| HTTP response DTO            | `<Xxx>Response` (extends `BaseResponse` nếu có audit)     | `adapter/in/web/dto/response/`        |
+| Web mapper                   | `<Xxx>WebMapper`                                          | `adapter/in/web/mapper/`              |
+| JPA entity                   | `<Xxx>Entity` (extends `AuditableEntity`)                 | `adapter/out/persistence/entity/`     |
+| Spring Data repository       | `Jpa<Xxx>Repository`                                      | `adapter/out/persistence/entity/`     |
+| Persistence adapter          | `<Xxx>PersistenceAdapter`                                 | `adapter/out/persistence/`            |
+| Persistence mapper           | `<Xxx>PersistenceMapper` (implements `EntityMapper<D,E>`) | `adapter/out/persistence/mapper/`     |
+| Spring configuration         | `<Xxx>Configuration`                                      | `configuration/`                      |
+| Scheduled job                | `<Xxx>Scheduler` / vd `SystemGC`                          | `configuration/` hoặc feature package |
+| Test class                   | `<ClassName>Test` (unit) / `<ClassName>IT` (integration)  | `src/test/java` (mirror package)      |
 
 Method name là `camelCase` (verb). Method trả boolean bắt đầu bằng `is` /
 `has` / `can`. Enum value viết `SCREAMING_SNAKE_CASE`. Constant khai
@@ -188,16 +188,54 @@ Quy tắc:
 
 Common lib đã cung cấp full pipeline. **Không viết lại.**
 
-### 6.1 Định nghĩa bảng mã lỗi của module
+### 6.1 Bộ HTTP status code được duyệt
+
+Mọi entry trong `<Module>ErrorCode` (và mọi response ở controller) chỉ được
+dùng **đúng** các code dưới đây. Không dùng `405`, `410`, `422`, hay bất kỳ
+code nào khác — map tình huống về code được duyệt gần nhất thay vào đó. Đây
+là ràng buộc chung toàn project, không phải lựa chọn riêng của từng module.
+
+**Nhóm thành công**
+
+| HTTP code      | Khi sử dụng                              |
+|----------------|------------------------------------------|
+| 200 OK         | Request thành công và có response body   |
+| 201 Created    | Tạo resource mới hoàn tất                |
+| 202 Accepted   | Đã nhận request nhưng xử lý bất đồng bộ  |
+| 204 No Content | Thành công nhưng không cần response body |
+
+**Nhóm lỗi client**
+
+| HTTP code                  | Khi sử dụng                                                                  |
+|----------------------------|------------------------------------------------------------------------------|
+| 400 Bad Request            | Request sai format hoặc validation thất bại (thay cho `422`/`410` trước đây) |
+| 401 Unauthorized           | Chưa đăng nhập hoặc token không hợp lệ                                       |
+| 403 Forbidden              | Đã đăng nhập nhưng không đủ role                                             |
+| 404 Not Found              | Resource không tồn tại hoặc user không được biết nó tồn tại                  |
+| 409 Conflict               | Request hợp lệ nhưng xung đột trạng thái/dữ liệu                             |
+| 413 Content Too Large      | File vượt giới hạn                                                           |
+| 415 Unsupported Media Type | Sai loại file/content type                                                   |
+
+**Nhóm lỗi server**
+
+| HTTP code                 | Khi sử dụng                                                                                                                                                                  |
+|---------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 500 Internal Server Error | Lỗi không dự kiến trong code, hoặc một invariant bắt buộc của hệ thống bị vỡ (vd: role seed sẵn mà không tìm thấy trong DB) — đây là lỗi data/ops, không phải lỗi của client |
+| 503 Service Unavailable   | PostgreSQL, Redis, MinIO hoặc dependency tạm thời unavailable                                                                                                                |
+
+**Ngoại lệ duy nhất:** `429 Too Many Requests` cũng được duyệt, chỉ dành
+riêng cho rate limiting (xem `AuthErrorCode.AUTH_RATE_LIMITED`). Không được
+thêm code nào khác ngoài bảng này mà không cập nhật rule này trước.
+
+### 6.2 Định nghĩa bảng mã lỗi của module
 
 Mỗi module có đúng 1 enum implements
 `com.vandunxg.common.models.error.ResponseError`. Enum đặt ở
-`<module>/domain/exception/`.
+`<module>/domain/exception/`. Mọi status dùng phải nằm trong bảng §6.1.
 
 ```java
 package com.vandunxg.file_processing.auth.domain.exception;
 
-import org.springframework.http.HttpStatus;
 import com.vandunxg.common.models.error.ResponseError;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -206,26 +244,42 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum AuthErrorCode implements ResponseError {
 
-  INVALID_CREDENTIALS(40101, "auth.error.invalid_credentials", HttpStatus.UNAUTHORIZED),
-  ACCOUNT_LOCKED     (40301, "auth.error.account_locked",     HttpStatus.FORBIDDEN),
-  USER_NOT_FOUND     (40401, "auth.error.user_not_found",     HttpStatus.NOT_FOUND),
-  REFRESH_TOKEN_REUSED(40102,"auth.error.refresh_token_reused",HttpStatus.UNAUTHORIZED);
+  INVALID_CREDENTIALS(40101, "Invalid username or password", 401),
+  ACCOUNT_LOCKED(40301, "Account is locked", 403),
+  USER_NOT_FOUND(40401, "User not found", 404),
+  REFRESH_TOKEN_REUSED(40102, "Refresh token was reused", 401);
 
-  private final Integer code;      // business code trả client
-  private final String messageKey; // i18n key, resolve qua LocaleStringService
-  private final HttpStatus http;
+  private final Integer code;   // business code trả client
+  private final String message; // text fallback nếu không có entry i18n khớp (xem §6.5)
+  private final int status;     // phải là 1 trong các code ở §6.1
 
-  @Override public String getName()    { return name(); }
-  @Override public String getMessage() { return messageKey; }
-  @Override public int getStatus()     { return http.value(); }
-  @Override public Integer getCode()   { return code; }
+  @Override
+  public String getName() {
+    return name();
+  }
+
+  @Override
+  public String getMessage() {
+    return message;
+  }
+
+  @Override
+  public int getStatus() {
+    return status;
+  }
+
+  @Override
+  public Integer getCode() {
+    return code;
+  }
 }
 ```
 
-Quy tắc mã code: `{httpStatus}{2 chữ số mã module}` (auth = `01`, file-import
-= `02`, customer = `03`, …). Dành `xx000` cho lỗi "chưa phân loại".
+Quy tắc mã code: `{httpStatus}{2 chữ số thứ tự trong nhóm status đó, bắt đầu
+từ 01}` — chỉ tăng số thứ tự khi 2 mã lỗi trong cùng module trùng HTTP status.
+Dành `xx000` cho lỗi "chưa phân loại".
 
-### 6.2 Log context **trước khi** throw
+### 6.3 Log context **trước khi** throw
 
 Mọi `throw` mà kết thúc 1 request đều phải có 1 dòng log ngay trước đó, ghi
 lại đầy đủ context nghiệp vụ. Không có dòng log này thì lúc trace sau này
@@ -276,7 +330,7 @@ if (updated == 0) {
 log.info("[claimJob] claimed jobId={} workerId={}", jobId, workerId);
 ```
 
-### 6.3 Domain exception thuộc về domain
+### 6.4 Domain exception thuộc về domain
 
 Layer `domain/` không được depend vào symbol của
 `com.vandunxg.common.models.exception` với tên gốc. Mỗi module có 1 **exception
@@ -310,11 +364,11 @@ public class AuthDomainException extends ResponseException {
 
 Phân bổ throw theo layer:
 
-| Layer          | Throw cái gì                                                                                            |
-|----------------|---------------------------------------------------------------------------------------------------------|
-| `domain/`      | `<Module>DomainException(<Module>ErrorCode.XXX, …)` — dùng đúng từ vựng domain.                          |
+| Layer          | Throw cái gì                                                                                                                                                                 |
+|----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `domain/`      | `<Module>DomainException(<Module>ErrorCode.XXX, …)` — dùng đúng từ vựng domain.                                                                                              |
 | `application/` | Cũng dùng domain exception khi lỗi thuộc domain rule. Dùng `ResponseException` common lib khi lỗi cross-cutting không thuộc domain nào (vd `BadRequestError.INVALID_INPUT`). |
-| `adapter/`     | Không tự throw `ResponseException`; hoặc để domain throw, hoặc wrap lỗi upstream rồi throw lại bằng domain exception của module. |
+| `adapter/`     | Không tự throw `ResponseException`; hoặc để domain throw, hoặc wrap lỗi upstream rồi throw lại bằng domain exception của module.                                             |
 
 Vì `AuthDomainException extends ResponseException`, `ExceptionHandleAdvice`
 đang có sẵn tự bắt qua parent type — **không cần viết advice mới** và format
@@ -325,26 +379,37 @@ Nếu 1 module có 2 catalog lỗi tách biệt (vd `file-import` chia thành
 exception thứ 2 (`ImportFileDomainException`, `ProcessingJobDomainException`)
 — cả 2 vẫn extend `ResponseException`.
 
-### 6.4 Message i18n
+### 6.5 Message i18n
 
-Mọi `messageKey` phải tồn tại ở **cả** `messages.properties` (English) và
-`messages_vi.properties` (Việt):
+**Key để lookup là `name()` của enum, không phải field `message`.**
+`ExceptionHandleAdvice` resolve chuỗi đã localize bằng cách gọi
+`localeStringService.getMessage(error.getName(), error.getMessage(), params)`
+— nó tìm property key theo `getName()` (vd `INVALID_CREDENTIALS`), chỉ dùng
+text trong `getMessage()` làm fallback khi locale hiện tại không có key đó.
+Làm ngược lại (key trong file properties là chuỗi dotted như
+`auth.error.invalid_credentials` thay vì tên enum) khiến mọi lookup miss âm
+thầm và text fallback bị lộ ra ở mọi response — bug này đã xảy ra thật rồi,
+đừng lặp lại.
+
+Tên của mỗi mã lỗi phải tồn tại như 1 key ở **cả** `messages.properties`
+(English) và `messages_vi.properties` (Việt):
 
 ```properties
 # src/main/resources/i18n/messages.properties
-auth.error.invalid_credentials=Invalid username or password
-auth.error.account_locked=Account {0} is locked
+INVALID_CREDENTIALS=Invalid username or password
+ACCOUNT_LOCKED=Account is locked
 ```
 
 ```properties
-# src/main/resources/i18n/messages_vi.properties
-auth.error.invalid_credentials=Sai tên đăng nhập hoặc mật khẩu
-auth.error.account_locked=Tài khoản {0} đang bị khoá
+# src/main/resources/i18n/message_vi.properties
+INVALID_CREDENTIALS=Sai tên đăng nhập hoặc mật khẩu
+ACCOUNT_LOCKED=Tài khoản đang bị khoá
 ```
 
-### 6.5 Quy tắc
+### 6.6 Quy tắc
 
 ✅ Nên:
+
 - Định nghĩa 1 `<Module>ErrorCode implements ResponseError` cho mỗi module.
 - Định nghĩa 1 `<Module>DomainException extends ResponseException` cho mỗi
   module.
@@ -357,6 +422,7 @@ auth.error.account_locked=Tài khoản {0} đang bị khoá
 - Để `ExceptionHandleAdvice` (auto-config bởi `common-web`) format response.
 
 ❌ Không nên:
+
 - Throw thẳng `ResponseException` từ `domain/` — dùng `<Module>DomainException`.
 - Throw `IllegalArgumentException`, `RuntimeException`, `NullPointerException`
   để báo lỗi nghiệp vụ.
@@ -364,7 +430,10 @@ auth.error.account_locked=Tài khoản {0} đang bị khoá
 - Log lại cùng lỗi ở mỗi layer khi re-throw — 1 log ở điểm quyết định là đủ.
 - Viết `@RestControllerAdvice` riêng nếu chưa extend `ExceptionHandleAdvice`.
 - Catch `Exception e` trong service để `return null` hoặc giá trị sentinel.
-- Hard-code message tiếng Anh trong Java — luôn dùng i18n key.
+- Chỉ dựa vào field `message` của enum để localize — đó là text fallback,
+  không thay thế được việc thêm key `name()` vào cả 2 file
+  `messages.properties` (§6.5).
+- Dùng HTTP status nằm ngoài bảng §6.1.
 - Truyền token / password / row khách hàng vào error params hoặc log.
 
 ---
@@ -478,6 +547,7 @@ public interface AuthWebMapper {
 ### 7.3 Quy tắc
 
 ✅ Nên:
+
 - 1 mapper interface / phía adapter: `<Xxx>PersistenceMapper` trong
   `adapter/out/persistence/mapper/`, `<Xxx>WebMapper` trong
   `adapter/in/web/mapper/`.
@@ -489,6 +559,7 @@ public interface AuthWebMapper {
   `lombok-mapstruct-binding`.
 
 ❌ Không nên:
+
 - `new ModelMapper()`, bean `ModelMapper`, hay config `TypeMap` — xoá dần khi
   đụng tới file.
 - `BeanUtils.copyProperties`, `Apache BeanUtils`, hay tự viết reflection.
@@ -533,7 +604,7 @@ public void runSystemGC() {
 public LoginResponse login(LoginCommand cmd) {
   log.info("[login] attempt username={}", cmd.getUsername());
   var user = userRepository.findByUsername(cmd.getUsername())
-      .orElseThrow(() -> new ResponseException(AuthErrorCode.INVALID_CREDENTIALS));
+    .orElseThrow(() -> new ResponseException(AuthErrorCode.INVALID_CREDENTIALS));
   ...
   log.info("[login] success userId={} ip={}", user.getId(), cmd.getIpAddress());
   return response;
@@ -542,13 +613,13 @@ public LoginResponse login(LoginCommand cmd) {
 
 ### 8.3 Level
 
-| Level   | Dùng khi                                                                              |
-|---------|---------------------------------------------------------------------------------------|
-| `error` | Lỗi hệ thống bất thường cần vận hành xử lý; kèm cause.                                |
-| `warn`  | Bất thường có thể recover, retry, cancel hợp tác.                                     |
-| `info`  | Sự kiện nghiệp vụ nhìn thấy được (login success, job started).                        |
-| `debug` | Flow chi tiết dùng khi debug. Mặc định tắt ở prod.                                    |
-| `trace` | Chỉ dùng local; tuyệt đối không sinh volume log ở prod.                               |
+| Level   | Dùng khi                                                       |
+|---------|----------------------------------------------------------------|
+| `error` | Lỗi hệ thống bất thường cần vận hành xử lý; kèm cause.         |
+| `warn`  | Bất thường có thể recover, retry, cancel hợp tác.              |
+| `info`  | Sự kiện nghiệp vụ nhìn thấy được (login success, job started). |
+| `debug` | Flow chi tiết dùng khi debug. Mặc định tắt ở prod.             |
+| `trace` | Chỉ dùng local; tuyệt đối không sinh volume log ở prod.        |
 
 ### 8.4 Dữ liệu nhạy cảm
 
@@ -561,6 +632,7 @@ row khách hàng, email đầy đủ, phone đầy đủ, body của request upl
 
 ✅ Nên: `log.error("[claimJob] failed to claim jobId={} attempt={}", jobId, attempt, e);`
 ❌ Không nên:
+
 - `System.out.println(...)`
 - `e.printStackTrace()`
 - `log.info("something happened: " + var)` (nối chuỗi thay `{}`)
@@ -603,28 +675,28 @@ common lib chứ đừng duplicate ở module.
 
 Danh sách bắt buộc reuse (chưa đầy đủ):
 
-| Nhu cầu                          | Dùng cái này                                                                          |
-|----------------------------------|---------------------------------------------------------------------------------------|
-| Auditable domain aggregate        | extend `com.vandunxg.common.models.domain.AuditableDomain`                            |
-| Auditable JPA entity              | extend `com.vandunxg.common.models.entities.AuditableEntity`                          |
-| Base HTTP request                 | extend `com.vandunxg.common.models.dto.request.Request`                               |
-| Paged HTTP request                | extend `com.vandunxg.common.models.dto.request.PagingRequest`                         |
-| Response wrapper                  | trả `com.vandunxg.common.models.dto.response.Response<T>` / `PagingResponse<T>`       |
-| Response body có audit            | extend `com.vandunxg.common.models.dto.response.BaseResponse`                         |
-| Page result                       | `com.vandunxg.common.models.dto.PageDTO<T>`                                           |
-| Domain↔entity mapper contract     | implement `com.vandunxg.common.models.mapper.EntityMapper<D, E>`                      |
-| Search/paging query base          | extend `com.vandunxg.common.persistence.query.PagingQuery`                            |
-| Base custom JPA repository        | extend `com.vandunxg.common.persistence.repository.custom.BaseEntityRepositoryCustom` |
-| Lỗi nghiệp vụ                     | throw `com.vandunxg.common.models.exception.ResponseException` + enum `ResponseError` |
-| User hiện tại                     | `com.vandunxg.common.web.support.SecurityUtils.getCurrentUserLoginId()`               |
-| i18n lookup                       | `com.vandunxg.common.web.i18n.LocaleStringService.getMessage(...)`                    |
-| Sinh UUID                         | `com.vandunxg.common.utils.IdUtils.nextId()`                                          |
-| Hash SHA-256                      | `com.vandunxg.common.utils.HashUtils.sha256(...)`                                     |
-| Format/parse date                 | `com.vandunxg.common.utils.DateUtils`                                                 |
-| String / email / phone helper     | `com.vandunxg.common.utils.StrUtils`                                                  |
-| Jackson mapper                    | `com.vandunxg.common.utils.MapperFactoryUtils.jacksonMapper()`                        |
-| Cache                             | inject `com.vandunxg.common.cache.service.CacheService` hoặc dùng `@CacheAction` / `@CacheUpdate` |
-| AMQP publisher                    | `com.vandunxg.common.amqp.publisher.AmqpEventPublisher`                               |
+| Nhu cầu                       | Dùng cái này                                                                                      |
+|-------------------------------|---------------------------------------------------------------------------------------------------|
+| Auditable domain aggregate    | extend `com.vandunxg.common.models.domain.AuditableDomain`                                        |
+| Auditable JPA entity          | extend `com.vandunxg.common.models.entities.AuditableEntity`                                      |
+| Base HTTP request             | extend `com.vandunxg.common.models.dto.request.Request`                                           |
+| Paged HTTP request            | extend `com.vandunxg.common.models.dto.request.PagingRequest`                                     |
+| Response wrapper              | trả `com.vandunxg.common.models.dto.response.Response<T>` / `PagingResponse<T>`                   |
+| Response body có audit        | extend `com.vandunxg.common.models.dto.response.BaseResponse`                                     |
+| Page result                   | `com.vandunxg.common.models.dto.PageDTO<T>`                                                       |
+| Domain↔entity mapper contract | implement `com.vandunxg.common.models.mapper.EntityMapper<D, E>`                                  |
+| Search/paging query base      | extend `com.vandunxg.common.persistence.query.PagingQuery`                                        |
+| Base custom JPA repository    | extend `com.vandunxg.common.persistence.repository.custom.BaseEntityRepositoryCustom`             |
+| Lỗi nghiệp vụ                 | throw `com.vandunxg.common.models.exception.ResponseException` + enum `ResponseError`             |
+| User hiện tại                 | `com.vandunxg.common.web.support.SecurityUtils.getCurrentUserLoginId()`                           |
+| i18n lookup                   | `com.vandunxg.common.web.i18n.LocaleStringService.getMessage(...)`                                |
+| Sinh UUID                     | `com.vandunxg.common.utils.IdUtils.nextId()`                                                      |
+| Hash SHA-256                  | `com.vandunxg.common.utils.HashUtils.sha256(...)`                                                 |
+| Format/parse date             | `com.vandunxg.common.utils.DateUtils`                                                             |
+| String / email / phone helper | `com.vandunxg.common.utils.StrUtils`                                                              |
+| Jackson mapper                | `com.vandunxg.common.utils.MapperFactoryUtils.jacksonMapper()`                                    |
+| Cache                         | inject `com.vandunxg.common.cache.service.CacheService` hoặc dùng `@CacheAction` / `@CacheUpdate` |
+| AMQP publisher                | `com.vandunxg.common.amqp.publisher.AmqpEventPublisher`                                           |
 
 Xem [`LIBRARY.md`](./LIBRARY.md) để có danh mục đầy đủ kèm signature.
 
@@ -705,7 +777,8 @@ Rule:
 - Không đặt business logic trong controller. Chỉ annotation validation.
 - Base path lấy từ config `app.api.prefix` + `app.api.version`.
 - Message người dùng thấy đều resolve qua `i18n/messages*.properties`. Key
-  dạng `snake.dotted`, group theo module (`auth.error.*`, `file.info.*`).
+  là tên hằng số của error enum (vd `INVALID_CREDENTIALS`) — xem §6.5,
+  không phải chuỗi dotted.
 - Response body luôn là `Response<T>` (hoặc `PagingResponse<T>`) — không trả
   raw domain / entity.
 
@@ -787,6 +860,7 @@ cùng bộ annotation.
 ### 14.4 Quy tắc
 
 ✅ Nên:
+
 - Đặt `@OpenAPIDefinition` / `@SecurityScheme` trên **1 Spring-managed bean**
   duy nhất.
 - Dùng `@Schema` chỉ để mô tả + example; ràng buộc thực tế dùng Jakarta
@@ -794,6 +868,7 @@ cùng bộ annotation.
 - Trả `Response<XxxResponse>` (DTO) để schema ổn định.
 
 ❌ Không nên:
+
 - Rải `@SecurityScheme` trên nhiều controller.
 - Dùng `@Schema(required = true)` **thay thế** `@NotNull` / `@NotBlank` —
   Springdoc tự suy `required` từ validation annotation.
@@ -826,18 +901,18 @@ nhánh phân quyền. Con số là guidance, không phải hard gate — reviewe
 
 Theo Conventional Commits: `type(scope): subject`.
 
-| Type       | Dùng cho                                            |
-|------------|-----------------------------------------------------|
-| `feat`     | Chức năng mới nhìn thấy được từ ngoài               |
-| `fix`      | Sửa bug                                             |
-| `refactor` | Đổi code mà không đổi behaviour                     |
-| `perf`     | Tối ưu hiệu năng                                    |
+| Type       | Dùng cho                                                   |
+|------------|------------------------------------------------------------|
+| `feat`     | Chức năng mới nhìn thấy được từ ngoài                      |
+| `fix`      | Sửa bug                                                    |
+| `refactor` | Đổi code mà không đổi behaviour                            |
+| `perf`     | Tối ưu hiệu năng                                           |
 | `docs`     | Chỉ tài liệu (file này, `AGENTS.md`, `LIBRARY.md`, README) |
-| `test`     | Thêm hoặc sửa test                                  |
-| `chore`    | Build config, bump dependency, tooling              |
-| `style`    | Chỉ format (thường là `spotless apply`)             |
-| `ci`       | Cấu hình CI                                         |
-| `build`    | Maven, Docker, packaging                            |
+| `test`     | Thêm hoặc sửa test                                         |
+| `chore`    | Build config, bump dependency, tooling                     |
+| `style`    | Chỉ format (thường là `spotless apply`)                    |
+| `ci`       | Cấu hình CI                                                |
+| `build`    | Maven, Docker, packaging                                   |
 
 - Subject dạng imperative, viết thường, không dấu chấm cuối. < 72 ký tự.
 - Scope không bắt buộc nhưng có ích: `feat(auth): add refresh token rotation`.
@@ -892,21 +967,22 @@ description ghi rõ lý do được duyệt.
 - [ ] Đã tra `codegraph_explore` / `LIBRARY.md` — không duplicate.
 - [ ] Package layout đúng §3 cho mọi class mới.
 - [ ] Domain không có Spring/JPA import.
-- [ ] Lỗi mới → `<Module>ErrorCode`, throw qua `<Module>DomainException`
-      (từ domain) hoặc `ResponseException` (từ application cross-cutting),
-      key i18n đã có ở cả `messages.properties` và `messages_vi.properties`.
+- [ ] Lỗi mới → `<Module>ErrorCode` chỉ dùng HTTP status được duyệt ở §6.1,
+  throw qua `<Module>DomainException` (từ domain) hoặc `ResponseException`
+  (từ application cross-cutting), tên enum đã có làm key ở cả
+  `messages.properties` và `messages_vi.properties`.
 - [ ] Có 1 dòng `log.warn` / `log.error` **ngay trước** mỗi `throw` mới mà
-      kết thúc request, đủ ID để trace.
+  kết thúc request, đủ ID để trace.
 - [ ] Code dễ bug (I/O ngoài, retry, race point) có breadcrumb log trước
-      và sau call rủi ro.
+  và sau call rủi ro.
 - [ ] `@Slf4j(topic = "…")` trên class; message log bắt đầu bằng `[methodName]`
-      và dùng `{}` placeholder; không lộ PII / token.
+  và dùng `{}` placeholder; không lộ PII / token.
 - [ ] Mapper là interface MapStruct `@Mapper(componentModel = "spring")`;
-      không `ModelMapper`, `BeanUtils`, hay reflection.
+  không `ModelMapper`, `BeanUtils`, hay reflection.
 - [ ] DTO có Jakarta Validation + `@Schema`. Không trả JPA entity làm
-      response.
+  response.
 - [ ] Endpoint mới: security default (bearer) hoặc opt-out bằng
-      `@SecurityRequirements` cho endpoint public.
+  `@SecurityRequirements` cho endpoint public.
 - [ ] Schema đổi → Flyway migration mới `V{yyyyMMddHHmm}__*.sql`.
 - [ ] Behaviour mới có test.
 - [ ] `mvn spotless:apply && mvn verify` xanh.

@@ -223,8 +223,8 @@ class RegisterDomainTest {
         .doesNotHaveDuplicates();
     assertThat(AuthErrorCode.USER_ALREADY_VERIFIED.getCode()).isEqualTo(40907);
     for (AuthErrorCode error : AuthErrorCode.values()) {
-      assertThat(english.containsKey(error.getMessage())).isTrue();
-      assertThat(vietnamese.containsKey(error.getMessage())).isTrue();
+      assertThat(english.containsKey(error.getName())).isTrue();
+      assertThat(vietnamese.containsKey(error.getName())).isTrue();
     }
   }
 
