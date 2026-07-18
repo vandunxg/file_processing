@@ -70,6 +70,13 @@ spring:
       max-file-size: ${MAX_FILE_SIZE:500MB}
       max-request-size: ${MAX_REQUEST_SIZE:500MB}
 
+  rabbitmq:
+    enabled: true
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:rabbitmq_user}
+    password: ${RABBITMQ_PASSWORD:rabbitmq_password}
+
 springdoc:
   api-docs:
     enabled: true
@@ -227,6 +234,15 @@ app:
       email-verification:
         token-key-prefix: ${AUTH_EMAIL_VERIFY_TOKEN_PREFIX:auth:email-verify:token:}
         user-key-prefix: ${AUTH_EMAIL_VERIFY_USER_PREFIX:auth:email-verify:user:}
+
+    amqp:
+      exchange: ${AUTH_AMQP_EXCHANGE:auth.events}
+      routing-key:
+        audit-log: ${AUTH_AMQP_ROUTING_AUDIT_LOG:auth.audit-log.recorded}
+        verification-email: ${AUTH_AMQP_ROUTING_VERIFY_EMAIL:auth.email.verification-requested}
+      queue:
+        audit-log: ${AUTH_AMQP_QUEUE_AUDIT_LOG:auth.audit-log.queue}
+        verification-email: ${AUTH_AMQP_QUEUE_VERIFY_EMAIL:auth.email-verification.queue}
 
   api:
     version: ${APP_API_VERSION:v1}

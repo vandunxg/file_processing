@@ -11,6 +11,8 @@ spring:
       host: localhost
       port: 6379
       timeout: 500ms
+  rabbitmq:
+    enabled: true
 logging:
   level:
     org.hibernate.SQL: INFO
@@ -56,3 +58,12 @@ app:
       email-verification:
         token-key-prefix: "test:auth:email-verify:token:"
         user-key-prefix: "test:auth:email-verify:user:"
+
+    amqp:
+      exchange: "test.auth.events"
+      routing-key:
+        audit-log: "test.auth.audit-log.recorded"
+        verification-email: "test.auth.email.verification-requested"
+      queue:
+        audit-log: "test.auth.audit-log.queue"
+        verification-email: "test.auth.email-verification.queue"

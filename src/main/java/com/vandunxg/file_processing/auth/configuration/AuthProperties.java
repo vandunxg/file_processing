@@ -6,7 +6,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "app.auth")
 public record AuthProperties(
-    Password password, Register register, EmailVerification emailVerification, Redis redis) {
+    Password password,
+    Register register,
+    EmailVerification emailVerification,
+    Redis redis,
+    Amqp amqp) {
 
   public record Password(String encoder, int bcryptCost, int minLength, int maxLength) {}
 
@@ -20,5 +24,12 @@ public record AuthProperties(
     public record Throttle(String keyPrefix, Duration window) {}
 
     public record EmailVerificationKeys(String tokenKeyPrefix, String userKeyPrefix) {}
+  }
+
+  public record Amqp(String exchange, RoutingKey routingKey, Queue queue) {
+
+    public record RoutingKey(String auditLog, String verificationEmail) {}
+
+    public record Queue(String auditLog, String verificationEmail) {}
   }
 }
