@@ -54,7 +54,7 @@ class RedisRegisterThrottleAdapterIT {
             stringRedisTemplate,
             script,
             new AuthProperties(
-                null, null, null, new AuthProperties.Redis(throttleProperties, null)));
+                null, null, null, new AuthProperties.Redis(throttleProperties, null), null));
 
     String key = "ip-" + System.nanoTime();
 
@@ -73,7 +73,7 @@ class RedisRegisterThrottleAdapterIT {
             stringRedisTemplate,
             script,
             new AuthProperties(
-                null, null, null, new AuthProperties.Redis(throttleProperties, null)));
+                null, null, null, new AuthProperties.Redis(throttleProperties, null), null));
 
     String keyA = "ip-a-" + System.nanoTime();
     String keyB = "ip-b-" + System.nanoTime();
@@ -92,7 +92,7 @@ class RedisRegisterThrottleAdapterIT {
             stringRedisTemplate,
             script,
             new AuthProperties(
-                null, null, null, new AuthProperties.Redis(throttleProperties, null)));
+                null, null, null, new AuthProperties.Redis(throttleProperties, null), null));
 
     String key = "ip-decay-" + System.nanoTime();
 

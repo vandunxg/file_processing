@@ -57,7 +57,8 @@ class RedisEmailVerificationTokenAdapterIT {
             new AuthProperties.Redis(
                 null,
                 new AuthProperties.Redis.EmailVerificationKeys(
-                    "it:email-verify:token:", "it:email-verify:user:")));
+                    "it:email-verify:token:", "it:email-verify:user:")),
+            null);
     adapter =
         new RedisEmailVerificationTokenAdapter(
             stringRedisTemplate, issueScript, invalidateScript, authProperties);

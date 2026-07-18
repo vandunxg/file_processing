@@ -69,7 +69,8 @@ class ResendVerificationEmailServiceTest {
             new AuthProperties.Redis(
                 new AuthProperties.Redis.Throttle("test:throttle:", Duration.ofHours(1)),
                 new AuthProperties.Redis.EmailVerificationKeys(
-                    "test:email-verify:token:", "test:email-verify:user:")));
+                    "test:email-verify:token:", "test:email-verify:user:")),
+            null);
     Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
     resendVerificationEmailService =
         new ResendVerificationEmailService(
