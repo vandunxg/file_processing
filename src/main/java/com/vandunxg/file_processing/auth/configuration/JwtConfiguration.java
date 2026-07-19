@@ -1,5 +1,6 @@
 package com.vandunxg.file_processing.auth.configuration;
 
+import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -26,14 +27,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.jwt.JwtClaimNames;
-import org.springframework.security.oauth2.jwt.JwtClaimValidator;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.JwtValidators;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.jwt.*;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 
@@ -137,19 +131,11 @@ public class JwtConfiguration {
             () -> new IllegalStateException("No public key registered for active kid " + kid));
   }
 
-  private static RSAPrivateKey readPrivateKey(String pemBase64) {
+  private static RSAPublicKey readPublicKey(String value) {
     try {
-      byte[] der = decodePem(pemBase64);
-      return (RSAPrivateKey)
-          KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(der));
-    } catch (Exception e) {
-      throw new IllegalStateException("Failed to parse RSA private key", e);
-    }
-  }
+      byte[] der =
+          decodeBase64EncodedPem(value, "-----BEGIN PUBLIC KEY-----", "-----END PUBLIC KEY-----");
 
-  private static RSAPublicKey readPublicKey(String pemBase64) {
-    try {
-      byte[] der = decodePem(pemBase64);
       return (RSAPublicKey)
           KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(der));
     } catch (Exception e) {
@@ -157,8 +143,40 @@ public class JwtConfiguration {
     }
   }
 
-  private static byte[] decodePem(String pemBase64) {
-    String cleaned = pemBase64.replaceAll("-----(BEGIN|END)[^-]+-----", "").replaceAll("\\s+", "");
-    return Base64.getDecoder().decode(cleaned);
+  private static RSAPrivateKey readPrivateKey(String value) {
+    try {
+      byte[] der =
+          decodeBase64EncodedPem(value, "-----BEGIN PRIVATE KEY-----", "-----END PRIVATE KEY-----");
+
+      return (RSAPrivateKey)
+          KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(der));
+    } catch (Exception e) {
+      throw new IllegalStateException("Failed to parse RSA private key", e);
+    }
+  }
+
+  private static byte[] decodeBase64EncodedPem(
+      String envValue, String beginMarker, String endMarker) {
+    if (envValue == null || envValue.isBlank()) {
+      throw new IllegalArgumentException("Key environment value must not be blank");
+    }
+
+    String pem =
+        new String(Base64.getMimeDecoder().decode(envValue.trim()), StandardCharsets.UTF_8).trim();
+
+    if (!pem.contains(beginMarker) || !pem.contains(endMarker)) {
+      throw new IllegalArgumentException(
+          "Decoded value is not expected PEM format: " + beginMarker);
+    }
+
+    String derBase64 =
+        pem.replace(beginMarker, "")
+            .replace(endMarker, "")
+            .replace("\r", "")
+            .replace("\n", "")
+            .replace(" ", "")
+            .trim();
+
+    return Base64.getMimeDecoder().decode(derBase64);
   }
 }
