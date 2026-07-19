@@ -16,9 +16,8 @@ import org.mapstruct.ReportingPolicy;
     unmappedSourcePolicy = ReportingPolicy.WARN)
 public interface UserPersistenceMapper extends EntityMapper<User, UserEntity> {
 
-  // roles are loaded/attached separately; there is no role join in findById /
-  // findByNormalizedIdentifier in this delivery, and RegisterService/VerifyEmailService never
-  // need User.roles populated after load (only at creation time, where it's already in memory).
+  // roles have no JPA relation on UserEntity; UserPersistenceAdapter attaches them after mapping
+  // via User.enrichRoles(...), joined separately against the user_role table.
   @Override
   @Mapping(target = "roles", ignore = true)
   User toDomain(UserEntity entity);

@@ -23,6 +23,8 @@ public class GetCurrentUserService implements GetCurrentUserUseCase {
   @Override
   @Transactional(readOnly = true)
   public MeResult me(GetCurrentUserQuery query) {
+    log.info("[me] userId={}", query.getUserId());
+
     User user =
         userRepositoryPort
             .findById(query.getUserId())
@@ -36,10 +38,7 @@ public class GetCurrentUserService implements GetCurrentUserUseCase {
         .username(user.getUsername())
         .email(user.getEmail())
         .displayName(user.getDisplayName())
-        .roles(
-            user.getRoles() == null
-                ? java.util.List.of()
-                : user.getRoles().stream().map(Role::getCode).toList())
+        .roles(user.getRoles().stream().map(Role::getCode).toList())
         .status(user.getStatus())
         .build();
   }

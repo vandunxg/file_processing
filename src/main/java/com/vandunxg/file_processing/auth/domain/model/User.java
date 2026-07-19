@@ -11,12 +11,7 @@ import com.vandunxg.common.models.domain.AuditableDomain;
 import com.vandunxg.common.utils.IdUtils;
 import com.vandunxg.file_processing.auth.domain.exception.AuthDomainException;
 import com.vandunxg.file_processing.auth.domain.exception.AuthErrorCode;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import lombok.experimental.SuperBuilder;
 
 @Getter
@@ -35,7 +30,7 @@ public class User extends AuditableDomain {
   private String displayName;
   private String passwordHash;
   private UserStatus status;
-  private Set<Role> roles;
+  @Builder.Default private Set<Role> roles = Set.of();
   private boolean mustChangePassword;
   private int failedLoginCount;
   private Instant lockedUntil;
@@ -115,7 +110,7 @@ public class User extends AuditableDomain {
       throw new IllegalArgumentException("Invalid failed-login parameters");
     }
     if (lockedUntil != null && !now.isBefore(lockedUntil)) {
-      // Prior lock window elapsed — start a new counter cycle.
+      // Prior to lock window elapsed — start a new counter cycle.
       this.failedLoginCount = 0;
       this.lockedUntil = null;
     }
@@ -136,5 +131,10 @@ public class User extends AuditableDomain {
     }
     this.credentialVersion += 1;
     this.passwordChangedAt = now;
+  }
+
+  /** Reconstitutes roles after a persistence load; only the repository adapter should call this. */
+  public void enrichRoles(Set<Role> roles) {
+    this.roles = roles == null ? Set.of() : Set.copyOf(roles);
   }
 }

@@ -10,24 +10,12 @@ import com.vandunxg.common.utils.HashUtils;
 import com.vandunxg.common.utils.IdUtils;
 import com.vandunxg.file_processing.auth.application.command.LoginCommand;
 import com.vandunxg.file_processing.auth.application.port.in.LoginUseCase;
-import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
-import com.vandunxg.file_processing.auth.application.port.out.AuthThrottlePort;
-import com.vandunxg.file_processing.auth.application.port.out.CredentialVersionCachePort;
-import com.vandunxg.file_processing.auth.application.port.out.JwtIssuerPort;
-import com.vandunxg.file_processing.auth.application.port.out.PasswordHasherPort;
-import com.vandunxg.file_processing.auth.application.port.out.RefreshTokenGeneratorPort;
-import com.vandunxg.file_processing.auth.application.port.out.SessionRepositoryPort;
-import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
+import com.vandunxg.file_processing.auth.application.port.out.*;
 import com.vandunxg.file_processing.auth.application.result.LoginResult;
 import com.vandunxg.file_processing.auth.configuration.AuthProperties;
 import com.vandunxg.file_processing.auth.domain.exception.AuthDomainException;
 import com.vandunxg.file_processing.auth.domain.exception.AuthErrorCode;
-import com.vandunxg.file_processing.auth.domain.model.AuditLog;
-import com.vandunxg.file_processing.auth.domain.model.AuditLogDomain;
-import com.vandunxg.file_processing.auth.domain.model.OperationType;
-import com.vandunxg.file_processing.auth.domain.model.Role;
-import com.vandunxg.file_processing.auth.domain.model.Session;
-import com.vandunxg.file_processing.auth.domain.model.User;
+import com.vandunxg.file_processing.auth.domain.model.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -74,12 +62,17 @@ public class LoginService implements LoginUseCase {
       throw new AuthDomainException(AuthErrorCode.AUTH_RATE_LIMITED);
     }
 
-    User user = userRepositoryPort.findByNormalizedIdentifier(normalizedUsername).orElse(null);
+    User user =
+        userRepositoryPort
+            .findByNormalizedIdentifier(normalizedUsername)
+            .orElseThrow(
+                () -> {
+                  log.warn("[login] user not found username={}", normalizedUsername);
+                  return new AuthDomainException(AuthErrorCode.INVALID_CREDENTIALS);
+                });
+
     Instant now = Instant.now(clock);
-    if (user == null) {
-      log.warn("[login] user not found username={}", normalizedUsername);
-      throw new AuthDomainException(AuthErrorCode.INVALID_CREDENTIALS);
-    }
+
     if (user.isLocked(now)) {
       log.warn("[login] account locked userId={}", user.getId());
       throw new AuthDomainException(AuthErrorCode.ACCOUNT_LOCKED);
@@ -113,10 +106,7 @@ public class LoginService implements LoginUseCase {
     sessionRepositoryPort.save(session);
     credentialVersionCachePort.put(saved.getId(), saved.getCredentialVersion());
 
-    List<String> roleCodes =
-        saved.getRoles() == null
-            ? List.of()
-            : saved.getRoles().stream().map(Role::getCode).toList();
+    List<String> roleCodes = saved.getRoles().stream().map(Role::getCode).toList();
     JwtIssuerPort.IssuedAccessToken accessToken =
         jwtIssuerPort.issue(
             saved.getId(), session.getId(), saved.getCredentialVersion(), roleCodes, now);

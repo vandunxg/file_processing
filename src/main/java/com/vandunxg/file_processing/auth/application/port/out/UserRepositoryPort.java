@@ -11,9 +11,13 @@ public interface UserRepositoryPort {
 
   boolean existsByNormalizedEmail(String normalizedEmail);
 
+  /** Returns the fully hydrated aggregate, including roles. */
   Optional<User> findById(UUID id);
 
-  /** '@' present -> email lookup, else username. */
+  /**
+   * Returns the fully hydrated aggregate, including roles. '@' present -> email lookup, else
+   * username.
+   */
   Optional<User> findByNormalizedIdentifier(String normalizedIdentifier);
 
   /** MUST flush immediately (saveAndFlush) so unique-constraint races surface here. */
