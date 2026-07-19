@@ -50,7 +50,7 @@ public class CredentialVersionJwtValidator implements OAuth2TokenValidator<Jwt> 
           new OAuth2Error("invalid_token", "User not found", null));
     }
     if (currentCv != cvClaim) {
-      log.debug("[validate] cv mismatch userId={} claim={} current={}", userId, cvClaim, currentCv);
+      log.warn("[validate] cv mismatch userId={} claim={} current={}", userId, cvClaim, currentCv);
       return OAuth2TokenValidatorResult.failure(
           new OAuth2Error("invalid_token", "Credential version stale", null));
     }

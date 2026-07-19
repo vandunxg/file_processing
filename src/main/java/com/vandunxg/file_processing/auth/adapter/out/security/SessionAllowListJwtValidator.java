@@ -44,7 +44,7 @@ public class SessionAllowListJwtValidator implements OAuth2TokenValidator<Jwt> {
         .map(s -> OAuth2TokenValidatorResult.success())
         .orElseGet(
             () -> {
-              log.debug("[validate] session not active sid={}", sid);
+              log.warn("[validate] session not active sid={}", sid);
               return OAuth2TokenValidatorResult.failure(
                   new OAuth2Error("invalid_token", "Session revoked or expired", null));
             });
