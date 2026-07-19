@@ -31,6 +31,7 @@ public class LoginService implements LoginUseCase {
   private static final Duration IP_WINDOW = Duration.ofHours(1);
   private static final String IP_THROTTLE_PREFIX = "login:ip:";
   private static final String USER_THROTTLE_PREFIX = "login:user:";
+  private static final String TOKEN_TYPE = "Bearer";
 
   private final AuthThrottlePort throttlePort;
   private final UserRepositoryPort userRepositoryPort;
@@ -127,7 +128,7 @@ public class LoginService implements LoginUseCase {
     log.info("[login] login succeeded userId={} sid={}", saved.getId(), session.getId());
 
     return LoginResult.builder()
-        .tokenType("Bearer")
+        .tokenType(TOKEN_TYPE)
         .accessToken(accessToken.token())
         .expiresIn(Duration.between(accessToken.issuedAt(), accessToken.expiresAt()).toSeconds())
         .accessTokenExpiresAt(accessToken.expiresAt())
