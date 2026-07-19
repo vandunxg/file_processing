@@ -1,15 +1,12 @@
 package com.vandunxg.file_processing.auth.adapter.in.web;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 import com.vandunxg.common.models.dto.response.Response;
 import com.vandunxg.common.web.support.IpUtils;
-import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.LoginRequest;
-import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.RefreshTokenRequest;
-import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.RegisterRequest;
-import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.ResendVerificationRequest;
-import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.VerifyEmailRequest;
+import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.*;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.LoginResponse;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.MeResponse;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.RegisterResponse;
@@ -18,16 +15,7 @@ import com.vandunxg.file_processing.auth.adapter.in.web.mapper.AuthWebMapper;
 import com.vandunxg.file_processing.auth.application.command.LogoutCommand;
 import com.vandunxg.file_processing.auth.application.command.RevokeAllSessionsCommand;
 import com.vandunxg.file_processing.auth.application.command.RevokeSessionCommand;
-import com.vandunxg.file_processing.auth.application.port.in.GetCurrentUserUseCase;
-import com.vandunxg.file_processing.auth.application.port.in.ListSessionsUseCase;
-import com.vandunxg.file_processing.auth.application.port.in.LoginUseCase;
-import com.vandunxg.file_processing.auth.application.port.in.LogoutUseCase;
-import com.vandunxg.file_processing.auth.application.port.in.RefreshTokenUseCase;
-import com.vandunxg.file_processing.auth.application.port.in.RegisterUseCase;
-import com.vandunxg.file_processing.auth.application.port.in.ResendVerificationEmailUseCase;
-import com.vandunxg.file_processing.auth.application.port.in.RevokeAllSessionsUseCase;
-import com.vandunxg.file_processing.auth.application.port.in.RevokeSessionUseCase;
-import com.vandunxg.file_processing.auth.application.port.in.VerifyEmailUseCase;
+import com.vandunxg.file_processing.auth.application.port.in.*;
 import com.vandunxg.file_processing.auth.application.query.GetCurrentUserQuery;
 import com.vandunxg.file_processing.auth.application.query.ListSessionsQuery;
 import com.vandunxg.file_processing.auth.domain.model.RevocationReason;
@@ -40,14 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("${app.api.prefix}/${app.api.version}/auth")
@@ -166,7 +147,7 @@ public class AuthController {
   @DeleteMapping("/sessions/{sid}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void revokeSession(
-      @PathVariable("sid") UUID sid, @AuthenticationPrincipal Jwt jwt, HttpServletRequest http) {
+      @PathVariable UUID sid, @AuthenticationPrincipal Jwt jwt, HttpServletRequest http) {
     UUID callerUserId = subjectAsUuid(jwt);
     UUID callerSid = sidAsUuid(jwt);
     log.info("[revokeSession] callerUserId={} targetSid={}", callerUserId, sid);
@@ -192,10 +173,10 @@ public class AuthController {
   }
 
   private static UUID subjectAsUuid(Jwt jwt) {
-    return UUID.fromString(jwt.getSubject());
+    return UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
   }
 
   private static UUID sidAsUuid(Jwt jwt) {
-    return UUID.fromString(jwt.getClaimAsString("sid"));
+    return UUID.fromString(Objects.requireNonNull(jwt.getClaimAsString("sid")));
   }
 }
