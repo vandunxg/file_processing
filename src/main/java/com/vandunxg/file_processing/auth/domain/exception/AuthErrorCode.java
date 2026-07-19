@@ -13,6 +13,7 @@ public enum AuthErrorCode implements ResponseError {
   USER_NOT_FOUND(40401, "User not found", 404),
   INVALID_CREDENTIALS(40101, "Invalid username or password", 401),
   ACCOUNT_LOCKED(40301, "Account is locked", 403),
+  EMAIL_VERIFICATION_REQUIRED(40302, "Please verify your email before logging in", 403),
   REFRESH_TOKEN_INVALID(40102, "Refresh token is invalid, expired, or revoked", 401),
   REFRESH_TOKEN_REUSED(40103, "Refresh token was already used", 401),
   SESSION_NOT_FOUND(40402, "Session not found", 404),
