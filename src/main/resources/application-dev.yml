@@ -31,15 +31,6 @@ spring:
           starttls:
             enable: ${MAIL_SMTP_STARTTLS:false}
 
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          # Dev-only: satisfies SecurityConfiguration's oauth2ResourceServer().jwt() so the
-          # context can start before real JWT issuance (Login) exists. No token is ever issued
-          # against this key yet; it only lets Spring build a JwtDecoder bean at startup.
-          public-key-location: ${AUTH_JWT_DEV_PUBLIC_KEY_LOCATION:file:local/jwt/dev-public.pem}
-
   jpa:
     show-sql: false
     properties:
@@ -56,6 +47,9 @@ spring:
       enabled: true
     livereload:
       enabled: true
+
+  rabbitmq:
+    enable: true
 
   web:
     error:

@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import com.vandunxg.file_processing.auth.configuration.AuthProperties;
 import com.vandunxg.file_processing.auth.domain.model.EmailVerificationToken;
+import com.vandunxg.file_processing.testsupport.AuthPropertiesFixture;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -49,16 +50,25 @@ class RedisEmailVerificationTokenAdapterIT {
     invalidateRedisScript.setResultType(Long.class);
     invalidateScript = invalidateRedisScript;
 
+    AuthProperties defaults = AuthPropertiesFixture.defaults();
     AuthProperties authProperties =
         new AuthProperties(
-            null,
-            null,
-            null,
+            defaults.password(),
+            defaults.register(),
+            defaults.login(),
+            defaults.refresh(),
+            defaults.session(),
+            defaults.jwt(),
+            defaults.emailVerification(),
             new AuthProperties.Redis(
-                null,
+                defaults.redis().throttle(),
                 new AuthProperties.Redis.EmailVerificationKeys(
-                    "it:email-verify:token:", "it:email-verify:user:")),
-            null);
+                    "it:email-verify:token:", "it:email-verify:user:"),
+                defaults.redis().session(),
+                defaults.redis().refresh(),
+                defaults.redis().credentialVersion(),
+                defaults.redis().userSessions()),
+            defaults.amqp());
     adapter =
         new RedisEmailVerificationTokenAdapter(
             stringRedisTemplate, issueScript, invalidateScript, authProperties);

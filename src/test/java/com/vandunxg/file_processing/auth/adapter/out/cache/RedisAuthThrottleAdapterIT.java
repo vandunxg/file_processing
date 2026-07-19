@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Duration;
 
 import com.vandunxg.file_processing.auth.configuration.AuthProperties;
+import com.vandunxg.file_processing.testsupport.AuthPropertiesFixture;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -16,7 +17,7 @@ import org.springframework.data.redis.core.script.RedisScript;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.utility.DockerImageName;
 
-class RedisRegisterThrottleAdapterIT {
+class RedisAuthThrottleAdapterIT {
 
   private static final GenericContainer<?> REDIS =
       new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
@@ -47,62 +48,64 @@ class RedisRegisterThrottleAdapterIT {
 
   @Test
   void tryConsume_allowsUpToLimit_thenDeniesFurtherRequestsWithinTheSameWindow() {
-    AuthProperties.Redis.Throttle throttleProperties =
-        new AuthProperties.Redis.Throttle("it:allow-deny:", Duration.ofHours(1));
-    RedisRegisterThrottleAdapter adapter =
-        new RedisRegisterThrottleAdapter(
-            stringRedisTemplate,
-            script,
-            new AuthProperties(
-                null, null, null, new AuthProperties.Redis(throttleProperties, null), null));
+    RedisAuthThrottleAdapter adapter = adapterWithPrefix("it:allow-deny:");
 
     String key = "ip-" + System.nanoTime();
 
-    assertThat(adapter.tryConsume(key, 3)).isTrue();
-    assertThat(adapter.tryConsume(key, 3)).isTrue();
-    assertThat(adapter.tryConsume(key, 3)).isTrue();
-    assertThat(adapter.tryConsume(key, 3)).isFalse();
+    assertThat(adapter.tryConsume(key, 3, Duration.ofHours(1))).isTrue();
+    assertThat(adapter.tryConsume(key, 3, Duration.ofHours(1))).isTrue();
+    assertThat(adapter.tryConsume(key, 3, Duration.ofHours(1))).isTrue();
+    assertThat(adapter.tryConsume(key, 3, Duration.ofHours(1))).isFalse();
   }
 
   @Test
   void tryConsume_isolatesDifferentKeys() {
-    AuthProperties.Redis.Throttle throttleProperties =
-        new AuthProperties.Redis.Throttle("it:isolate:", Duration.ofHours(1));
-    RedisRegisterThrottleAdapter adapter =
-        new RedisRegisterThrottleAdapter(
-            stringRedisTemplate,
-            script,
-            new AuthProperties(
-                null, null, null, new AuthProperties.Redis(throttleProperties, null), null));
+    RedisAuthThrottleAdapter adapter = adapterWithPrefix("it:isolate:");
 
     String keyA = "ip-a-" + System.nanoTime();
     String keyB = "ip-b-" + System.nanoTime();
 
-    assertThat(adapter.tryConsume(keyA, 1)).isTrue();
-    assertThat(adapter.tryConsume(keyA, 1)).isFalse();
-    assertThat(adapter.tryConsume(keyB, 1)).isTrue();
+    assertThat(adapter.tryConsume(keyA, 1, Duration.ofHours(1))).isTrue();
+    assertThat(adapter.tryConsume(keyA, 1, Duration.ofHours(1))).isFalse();
+    assertThat(adapter.tryConsume(keyB, 1, Duration.ofHours(1))).isTrue();
   }
 
   @Test
   void tryConsume_allowsAgain_afterTheWindowFullyDecays() throws InterruptedException {
-    AuthProperties.Redis.Throttle throttleProperties =
-        new AuthProperties.Redis.Throttle("it:decay:", Duration.ofSeconds(2));
-    RedisRegisterThrottleAdapter adapter =
-        new RedisRegisterThrottleAdapter(
-            stringRedisTemplate,
-            script,
-            new AuthProperties(
-                null, null, null, new AuthProperties.Redis(throttleProperties, null), null));
+    RedisAuthThrottleAdapter adapter = adapterWithPrefix("it:decay:");
 
     String key = "ip-decay-" + System.nanoTime();
+    Duration shortWindow = Duration.ofSeconds(2);
 
-    assertThat(adapter.tryConsume(key, 1)).isTrue();
-    assertThat(adapter.tryConsume(key, 1)).isFalse();
+    assertThat(adapter.tryConsume(key, 1, shortWindow)).isTrue();
+    assertThat(adapter.tryConsume(key, 1, shortWindow)).isFalse();
 
     // Wait past two full 2s windows so the previous window's weighted contribution decays to
     // (near) zero — a real sleep is unavoidable here since the algorithm reads Redis server TIME.
     Thread.sleep(4500);
 
-    assertThat(adapter.tryConsume(key, 1)).isTrue();
+    assertThat(adapter.tryConsume(key, 1, shortWindow)).isTrue();
+  }
+
+  private static RedisAuthThrottleAdapter adapterWithPrefix(String prefix) {
+    AuthProperties defaults = AuthPropertiesFixture.defaults();
+    AuthProperties withPrefix =
+        new AuthProperties(
+            defaults.password(),
+            defaults.register(),
+            defaults.login(),
+            defaults.refresh(),
+            defaults.session(),
+            defaults.jwt(),
+            defaults.emailVerification(),
+            new AuthProperties.Redis(
+                new AuthProperties.Redis.Throttle(prefix, Duration.ofHours(1)),
+                defaults.redis().emailVerification(),
+                defaults.redis().session(),
+                defaults.redis().refresh(),
+                defaults.redis().credentialVersion(),
+                defaults.redis().userSessions()),
+            defaults.amqp());
+    return new RedisAuthThrottleAdapter(stringRedisTemplate, script, withPrefix);
   }
 }

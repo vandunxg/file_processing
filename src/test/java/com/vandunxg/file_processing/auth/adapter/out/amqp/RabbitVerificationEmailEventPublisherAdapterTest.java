@@ -22,17 +22,7 @@ class RabbitVerificationEmailEventPublisherAdapterTest {
   @Mock private AmqpEventPublisher amqpEventPublisher;
 
   private final AuthProperties authProperties =
-      new AuthProperties(
-          null,
-          null,
-          null,
-          null,
-          new AuthProperties.Amqp(
-              "auth.events",
-              new AuthProperties.Amqp.RoutingKey(
-                  "auth.audit-log.recorded", "auth.email.verification-requested"),
-              new AuthProperties.Amqp.Queue(
-                  "auth.audit-log.queue", "auth.email-verification.queue")));
+      com.vandunxg.file_processing.testsupport.AuthPropertiesFixture.defaults();
 
   @Test
   void publish_sendsEventToTheConfiguredRoute() {
@@ -46,7 +36,10 @@ class RabbitVerificationEmailEventPublisherAdapterTest {
 
     verify(amqpEventPublisher)
         .publish(
-            eq(MessageRoute.of("auth.events", "auth.email.verification-requested")),
+            eq(
+                MessageRoute.of(
+                    authProperties.amqp().exchange(),
+                    authProperties.amqp().routingKey().verificationEmail())),
             eq(
                 new SendVerificationEmailEvent(
                     "operator1@example.com",

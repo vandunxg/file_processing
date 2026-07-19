@@ -26,17 +26,7 @@ class RabbitAuditLogEventPublisherAdapterTest {
   @Mock private AmqpEventPublisher amqpEventPublisher;
 
   private final AuthProperties authProperties =
-      new AuthProperties(
-          null,
-          null,
-          null,
-          null,
-          new AuthProperties.Amqp(
-              "auth.events",
-              new AuthProperties.Amqp.RoutingKey(
-                  "auth.audit-log.recorded", "auth.email.verification-requested"),
-              new AuthProperties.Amqp.Queue(
-                  "auth.audit-log.queue", "auth.email-verification.queue")));
+      com.vandunxg.file_processing.testsupport.AuthPropertiesFixture.defaults();
 
   @Test
   void publish_sendsAuditLogToTheConfiguredRoute() {
@@ -57,7 +47,12 @@ class RabbitAuditLogEventPublisherAdapterTest {
     adapter.publish(auditLog);
 
     verify(amqpEventPublisher)
-        .publish(eq(MessageRoute.of("auth.events", "auth.audit-log.recorded")), eq(auditLog));
+        .publish(
+            eq(
+                MessageRoute.of(
+                    authProperties.amqp().exchange(),
+                    authProperties.amqp().routingKey().auditLog())),
+            eq(auditLog));
   }
 
   @Test

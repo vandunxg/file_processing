@@ -11,6 +11,11 @@ public enum AuthErrorCode implements ResponseError {
       40002, "Email verification token is invalid, expired, or already used", 400),
   USER_ALREADY_VERIFIED(40907, "Email has already been verified", 409),
   USER_NOT_FOUND(40401, "User not found", 404),
+  INVALID_CREDENTIALS(40101, "Invalid username or password", 401),
+  ACCOUNT_LOCKED(40301, "Account is locked", 403),
+  REFRESH_TOKEN_INVALID(40102, "Refresh token is invalid, expired, or revoked", 401),
+  REFRESH_TOKEN_REUSED(40103, "Refresh token was already used", 401),
+  SESSION_NOT_FOUND(40402, "Session not found", 404),
   INVALID_ROLE(50001, "Role is invalid or not supported", 500);
 
   private final Integer code;

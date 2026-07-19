@@ -1,6 +1,7 @@
 package com.vandunxg.file_processing.auth.domain.model;
 
 import java.text.Normalizer;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Set;
@@ -105,7 +106,35 @@ public class User extends AuditableDomain {
     return deletedAt != null;
   }
 
-  public boolean isLocked() {
-    return lockedUntil != null && lockedUntil.isAfter(Instant.now());
+  public boolean isLocked(Instant now) {
+    return lockedUntil != null && lockedUntil.isAfter(now);
+  }
+
+  public void registerFailedLogin(Instant now, int maxFailures, Duration lockDuration) {
+    if (now == null || lockDuration == null || maxFailures < 1) {
+      throw new IllegalArgumentException("Invalid failed-login parameters");
+    }
+    if (lockedUntil != null && !now.isBefore(lockedUntil)) {
+      // Prior lock window elapsed — start a new counter cycle.
+      this.failedLoginCount = 0;
+      this.lockedUntil = null;
+    }
+    this.failedLoginCount += 1;
+    if (this.failedLoginCount >= maxFailures) {
+      this.lockedUntil = now.plus(lockDuration);
+    }
+  }
+
+  public void resetFailedLogin() {
+    this.failedLoginCount = 0;
+    this.lockedUntil = null;
+  }
+
+  public void bumpCredentialVersion(Instant now) {
+    if (now == null) {
+      throw new IllegalArgumentException("now must not be null");
+    }
+    this.credentialVersion += 1;
+    this.passwordChangedAt = now;
   }
 }

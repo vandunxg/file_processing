@@ -2,6 +2,7 @@ package com.vandunxg.file_processing.auth.application.service;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -11,9 +12,9 @@ import com.vandunxg.common.utils.StrUtils;
 import com.vandunxg.file_processing.auth.application.command.RegisterCommand;
 import com.vandunxg.file_processing.auth.application.port.in.RegisterUseCase;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
+import com.vandunxg.file_processing.auth.application.port.out.AuthThrottlePort;
 import com.vandunxg.file_processing.auth.application.port.out.EmailVerificationTokenRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.PasswordHasherPort;
-import com.vandunxg.file_processing.auth.application.port.out.RegisterThrottlePort;
 import com.vandunxg.file_processing.auth.application.port.out.RoleRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRoleRepositoryPort;
@@ -46,8 +47,9 @@ public class RegisterService implements RegisterUseCase {
 
   private static final String OPERATOR_ROLE_CODE = "OPERATOR";
   private static final String THROTTLE_KEY_PREFIX = "register:";
+  private static final Duration REGISTER_THROTTLE_WINDOW = Duration.ofHours(1);
 
-  private final RegisterThrottlePort throttlePort;
+  private final AuthThrottlePort throttlePort;
   private final UserRepositoryPort userRepositoryPort;
   private final RoleRepositoryPort roleRepositoryPort;
   private final UserRoleRepositoryPort userRoleRepositoryPort;
@@ -66,7 +68,8 @@ public class RegisterService implements RegisterUseCase {
   public RegisterResult register(RegisterCommand command) {
     if (!throttlePort.tryConsume(
         THROTTLE_KEY_PREFIX + command.getIpAddress(),
-        authProperties.register().maxAttemptsPerHour())) {
+        authProperties.register().maxAttemptsPerHour(),
+        REGISTER_THROTTLE_WINDOW)) {
       log.warn(
           "[register] rate limited maxAttemptsPerHour={}",
           authProperties.register().maxAttemptsPerHour());

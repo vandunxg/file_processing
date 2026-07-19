@@ -2,6 +2,7 @@ package com.vandunxg.file_processing.auth.application.service;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 
 import com.vandunxg.common.utils.HashUtils;
@@ -9,8 +10,8 @@ import com.vandunxg.common.utils.IdUtils;
 import com.vandunxg.file_processing.auth.application.command.ResendVerificationEmailCommand;
 import com.vandunxg.file_processing.auth.application.port.in.ResendVerificationEmailUseCase;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
+import com.vandunxg.file_processing.auth.application.port.out.AuthThrottlePort;
 import com.vandunxg.file_processing.auth.application.port.out.EmailVerificationTokenRepositoryPort;
-import com.vandunxg.file_processing.auth.application.port.out.RegisterThrottlePort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.VerificationEmailEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.VerificationTokenGeneratorPort;
@@ -35,8 +36,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 public class ResendVerificationEmailService implements ResendVerificationEmailUseCase {
 
   private static final String THROTTLE_KEY_PREFIX = "resend:";
+  private static final Duration RESEND_THROTTLE_WINDOW = Duration.ofHours(1);
 
-  private final RegisterThrottlePort throttlePort;
+  private final AuthThrottlePort throttlePort;
   private final UserRepositoryPort userRepositoryPort;
   private final EmailVerificationTokenRepositoryPort tokenRepositoryPort;
   private final AuditLogEventPublisherPort auditLogEventPublisherPort;
@@ -50,7 +52,8 @@ public class ResendVerificationEmailService implements ResendVerificationEmailUs
   public void resend(ResendVerificationEmailCommand command) {
     if (!throttlePort.tryConsume(
         THROTTLE_KEY_PREFIX + command.getIpAddress(),
-        authProperties.emailVerification().resendMaxAttemptsPerHour())) {
+        authProperties.emailVerification().resendMaxAttemptsPerHour(),
+        RESEND_THROTTLE_WINDOW)) {
       log.warn(
           "[resend] rate limited maxAttemptsPerHour={}",
           authProperties.emailVerification().resendMaxAttemptsPerHour());
