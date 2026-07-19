@@ -21,8 +21,8 @@ import java.util.UUID;
 import com.vandunxg.common.utils.HashUtils;
 import com.vandunxg.file_processing.auth.application.command.ResendVerificationEmailCommand;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
+import com.vandunxg.file_processing.auth.application.port.out.AuthThrottlePort;
 import com.vandunxg.file_processing.auth.application.port.out.EmailVerificationTokenRepositoryPort;
-import com.vandunxg.file_processing.auth.application.port.out.RegisterThrottlePort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.VerificationEmailEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.VerificationTokenGeneratorPort;
@@ -34,6 +34,7 @@ import com.vandunxg.file_processing.auth.domain.model.EmailVerificationToken;
 import com.vandunxg.file_processing.auth.domain.model.OperationType;
 import com.vandunxg.file_processing.auth.domain.model.User;
 import com.vandunxg.file_processing.auth.domain.model.UserStatus;
+import com.vandunxg.file_processing.testsupport.AuthPropertiesFixture;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,7 +50,7 @@ class ResendVerificationEmailServiceTest {
 
   private static final Instant NOW = Instant.parse("2026-07-17T10:15:30Z");
 
-  @Mock private RegisterThrottlePort throttlePort;
+  @Mock private AuthThrottlePort throttlePort;
   @Mock private UserRepositoryPort userRepositoryPort;
   @Mock private EmailVerificationTokenRepositoryPort tokenRepositoryPort;
   @Mock private AuditLogEventPublisherPort auditLogEventPublisherPort;
@@ -60,21 +61,7 @@ class ResendVerificationEmailServiceTest {
 
   @BeforeEach
   void setUp() {
-    AuthProperties authProperties =
-        new AuthProperties(
-            new AuthProperties.Password("bcrypt", 10, 8, 128),
-            new AuthProperties.Register(5),
-            new AuthProperties.EmailVerification(
-                Duration.ofMinutes(15), "https://app.example.com/verify", 5),
-            new AuthProperties.Redis(
-                new AuthProperties.Redis.Throttle("test:throttle:", Duration.ofHours(1)),
-                new AuthProperties.Redis.EmailVerificationKeys(
-                    "test:email-verify:token:", "test:email-verify:user:")),
-            new AuthProperties.Amqp(
-                "test.auth.events",
-                new AuthProperties.Amqp.RoutingKey("test.audit-log", "test.verification-email"),
-                new AuthProperties.Amqp.Queue(
-                    "test.audit-log.queue", "test.verification-email.queue")));
+    AuthProperties authProperties = AuthPropertiesFixture.defaults();
     Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
     resendVerificationEmailService =
         new ResendVerificationEmailService(
@@ -169,7 +156,9 @@ class ResendVerificationEmailServiceTest {
   @Test
   void resendThrowsRateLimitedBeforeIdentifierLookupWhenThrottleExceeded() {
     ResendVerificationEmailCommand command = command("operator1@example.com");
-    when(throttlePort.tryConsume(eq("resend:" + command.getIpAddress()), eq(5))).thenReturn(false);
+    when(throttlePort.tryConsume(
+            eq("resend:" + command.getIpAddress()), eq(5), any(Duration.class)))
+        .thenReturn(false);
 
     assertThatThrownBy(() -> resendVerificationEmailService.resend(command))
         .isInstanceOf(AuthDomainException.class)
@@ -185,7 +174,7 @@ class ResendVerificationEmailServiceTest {
   }
 
   private void givenThrottleAllows() {
-    when(throttlePort.tryConsume(anyString(), eq(5))).thenReturn(true);
+    when(throttlePort.tryConsume(anyString(), eq(5), any(Duration.class))).thenReturn(true);
   }
 
   private static ResendVerificationEmailCommand command(String identifier) {

@@ -1,6 +1,7 @@
 package com.vandunxg.file_processing.auth.domain.model;
 
 import java.text.Normalizer;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Set;
@@ -10,12 +11,7 @@ import com.vandunxg.common.models.domain.AuditableDomain;
 import com.vandunxg.common.utils.IdUtils;
 import com.vandunxg.file_processing.auth.domain.exception.AuthDomainException;
 import com.vandunxg.file_processing.auth.domain.exception.AuthErrorCode;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import lombok.experimental.SuperBuilder;
 
 @Getter
@@ -34,7 +30,7 @@ public class User extends AuditableDomain {
   private String displayName;
   private String passwordHash;
   private UserStatus status;
-  private Set<Role> roles;
+  @Builder.Default private Set<Role> roles = Set.of();
   private boolean mustChangePassword;
   private int failedLoginCount;
   private Instant lockedUntil;
@@ -105,7 +101,40 @@ public class User extends AuditableDomain {
     return deletedAt != null;
   }
 
-  public boolean isLocked() {
-    return lockedUntil != null && lockedUntil.isAfter(Instant.now());
+  public boolean isLocked(Instant now) {
+    return lockedUntil != null && lockedUntil.isAfter(now);
+  }
+
+  public void registerFailedLogin(Instant now, int maxFailures, Duration lockDuration) {
+    if (now == null || lockDuration == null || maxFailures < 1) {
+      throw new IllegalArgumentException("Invalid failed-login parameters");
+    }
+    if (lockedUntil != null && !now.isBefore(lockedUntil)) {
+      // Prior to lock window elapsed — start a new counter cycle.
+      this.failedLoginCount = 0;
+      this.lockedUntil = null;
+    }
+    this.failedLoginCount += 1;
+    if (this.failedLoginCount >= maxFailures) {
+      this.lockedUntil = now.plus(lockDuration);
+    }
+  }
+
+  public void resetFailedLogin() {
+    this.failedLoginCount = 0;
+    this.lockedUntil = null;
+  }
+
+  public void bumpCredentialVersion(Instant now) {
+    if (now == null) {
+      throw new IllegalArgumentException("now must not be null");
+    }
+    this.credentialVersion += 1;
+    this.passwordChangedAt = now;
+  }
+
+  /** Reconstitutes roles after a persistence load; only the repository adapter should call this. */
+  public void enrichRoles(Set<Role> roles) {
+    this.roles = roles == null ? Set.of() : Set.copyOf(roles);
   }
 }

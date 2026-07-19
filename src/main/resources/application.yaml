@@ -55,6 +55,7 @@ spring:
         generate_statistics: false
     hibernate:
       ddl-auto: update
+    show-sql: false
 
   flyway:
     enabled: true
@@ -150,6 +151,13 @@ management:
       application: ${spring.application.name}
       environment: ${SPRING_PROFILES_ACTIVE:dev}
 
+  tracing:
+    sampling:
+      probability: 1.0
+    export:
+      zipkin:
+        enabled: false
+
 logging:
   file:
     path: /var/log/file-processing
@@ -187,8 +195,11 @@ app:
       access-token-ttl: ${AUTH_JWT_ACCESS_TOKEN_TTL:PT15M}
       password-change-token-ttl: ${AUTH_JWT_PW_CHG_TOKEN_TTL:PT5M}
       clock-skew: ${AUTH_JWT_CLOCK_SKEW:PT60S}
+
       active-kid: ${AUTH_JWT_ACTIVE_KID}
+
       private-key-pem-base64: ${AUTH_JWT_PRIVATE_KEY_PEM}
+
       public-keys:
         - kid: ${AUTH_JWT_ACTIVE_KID}
           pem-base64: ${AUTH_JWT_ACTIVE_PUBLIC_KEY_PEM}
@@ -200,9 +211,19 @@ app:
       max-length: 128
 
     login:
+      ip-max-per-hour: ${AUTH_LOGIN_IP_MAX_PER_HOUR:20}
+      username-max-per-window: ${AUTH_LOGIN_USERNAME_MAX_PER_WINDOW:5}
+      username-window: ${AUTH_LOGIN_USERNAME_WINDOW:PT15M}
+      refresh-ip-max-per-hour: ${AUTH_REFRESH_IP_MAX_PER_HOUR:60}
       max-failures: 5
       failure-window: PT15M
       lock-duration: PT15M
+
+    refresh:
+      token-ttl: ${AUTH_REFRESH_TOKEN_TTL:PT168H}
+
+    session:
+      credential-version-cache-ttl: ${AUTH_SESSION_CV_CACHE_TTL:PT5M}
 
     bootstrap:
       admin:
@@ -234,15 +255,31 @@ app:
       email-verification:
         token-key-prefix: ${AUTH_EMAIL_VERIFY_TOKEN_PREFIX:auth:email-verify:token:}
         user-key-prefix: ${AUTH_EMAIL_VERIFY_USER_PREFIX:auth:email-verify:user:}
+      session:
+        key-prefix: ${AUTH_SESSION_REDIS_PREFIX:auth:session:}
+      refresh:
+        key-prefix: ${AUTH_REFRESH_REDIS_PREFIX:auth:refresh:}
+        used-key-prefix: ${AUTH_REFRESH_USED_REDIS_PREFIX:auth:refresh:used:}
+        reuse-detection-window: ${AUTH_REFRESH_REUSE_WINDOW:PT60S}
+      credential-version:
+        key-prefix: ${AUTH_CV_REDIS_PREFIX:auth:user:cv:}
+      user-sessions:
+        key-prefix: ${AUTH_USER_SESSIONS_REDIS_PREFIX:auth:user:sessions:}
 
     amqp:
       exchange: ${AUTH_AMQP_EXCHANGE:auth.events}
       routing-key:
         audit-log: ${AUTH_AMQP_ROUTING_AUDIT_LOG:auth.audit-log.recorded}
         verification-email: ${AUTH_AMQP_ROUTING_VERIFY_EMAIL:auth.email.verification-requested}
+        session-persist: ${AUTH_AMQP_ROUTING_SESSION_PERSIST:auth.session.persist}
+        session-update: ${AUTH_AMQP_ROUTING_SESSION_UPDATE:auth.session.update}
+        session-revoke: ${AUTH_AMQP_ROUTING_SESSION_REVOKE:auth.session.revoke}
       queue:
         audit-log: ${AUTH_AMQP_QUEUE_AUDIT_LOG:auth.audit-log.queue}
         verification-email: ${AUTH_AMQP_QUEUE_VERIFY_EMAIL:auth.email-verification.queue}
+        session-persist: ${AUTH_AMQP_QUEUE_SESSION_PERSIST:auth.session-persist.queue}
+        session-update: ${AUTH_AMQP_QUEUE_SESSION_UPDATE:auth.session-update.queue}
+        session-revoke: ${AUTH_AMQP_QUEUE_SESSION_REVOKE:auth.session-revoke.queue}
 
   api:
     version: ${APP_API_VERSION:v1}

@@ -7,4 +7,7 @@ public interface PasswordHasherPort {
    * DelegatingPasswordEncoder}.
    */
   String hash(String rawPassword);
+
+  /** Constant-time verification against an encoded password produced by {@link #hash}. */
+  boolean matches(String rawPassword, String encodedPassword);
 }

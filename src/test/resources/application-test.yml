@@ -38,9 +38,19 @@ app:
       min-length: 8
       max-length: 128
     login:
+      ip-max-per-hour: 20
+      username-max-per-window: 5
+      username-window: PT15M
+      refresh-ip-max-per-hour: 60
       max-failures: 5
       failure-window: PT15M
       lock-duration: PT15M
+
+    refresh:
+      token-ttl: PT168H
+
+    session:
+      credential-version-cache-ttl: PT5M
     bootstrap:
       admin:
         enabled: false
@@ -58,12 +68,28 @@ app:
       email-verification:
         token-key-prefix: "test:auth:email-verify:token:"
         user-key-prefix: "test:auth:email-verify:user:"
+      session:
+        key-prefix: "test:auth:session:"
+      refresh:
+        key-prefix: "test:auth:refresh:"
+        used-key-prefix: "test:auth:refresh:used:"
+        reuse-detection-window: PT60S
+      credential-version:
+        key-prefix: "test:auth:user:cv:"
+      user-sessions:
+        key-prefix: "test:auth:user:sessions:"
 
     amqp:
       exchange: "test.auth.events"
       routing-key:
         audit-log: "test.auth.audit-log.recorded"
         verification-email: "test.auth.email.verification-requested"
+        session-persist: "test.auth.session.persist"
+        session-update: "test.auth.session.update"
+        session-revoke: "test.auth.session.revoke"
       queue:
         audit-log: "test.auth.audit-log.queue"
         verification-email: "test.auth.email-verification.queue"
+        session-persist: "test.auth.session-persist.queue"
+        session-update: "test.auth.session-update.queue"
+        session-revoke: "test.auth.session-revoke.queue"

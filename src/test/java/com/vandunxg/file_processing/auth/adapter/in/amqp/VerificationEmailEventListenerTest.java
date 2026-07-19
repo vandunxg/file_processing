@@ -2,6 +2,7 @@ package com.vandunxg.file_processing.auth.adapter.in.amqp;
 
 import static org.mockito.Mockito.verify;
 
+import com.vandunxg.common.amqp.model.MessageEnvelope;
 import com.vandunxg.file_processing.auth.application.port.out.EmailSenderPort;
 import com.vandunxg.file_processing.auth.domain.event.SendVerificationEmailEvent;
 import org.junit.jupiter.api.Test;
@@ -21,7 +22,7 @@ class VerificationEmailEventListenerTest {
         new SendVerificationEmailEvent(
             "operator1@example.com", "Operator One", "https://app.example.com/verify?token=raw");
 
-    listener.onSendVerificationEmailEvent(event);
+    listener.onSendVerificationEmailEvent(MessageEnvelope.wrap(event));
 
     verify(emailSenderPort)
         .sendVerificationEmail(

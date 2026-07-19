@@ -1,6 +1,7 @@
 package com.vandunxg.file_processing.auth.configuration;
 
 import java.time.Duration;
+import java.util.List;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -8,6 +9,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record AuthProperties(
     Password password,
     Register register,
+    Login login,
+    Refresh refresh,
+    Session session,
+    Jwt jwt,
     EmailVerification emailVerification,
     Redis redis,
     Amqp amqp) {
@@ -16,20 +21,71 @@ public record AuthProperties(
 
   public record Register(int maxAttemptsPerHour) {}
 
+  public record Login(
+      int ipMaxPerHour,
+      int usernameMaxPerWindow,
+      Duration usernameWindow,
+      int refreshIpMaxPerHour,
+      int maxFailures,
+      Duration failureWindow,
+      Duration lockDuration) {}
+
+  public record Refresh(Duration tokenTtl) {}
+
+  public record Session(Duration credentialVersionCacheTtl) {}
+
+  public record Jwt(
+      String issuer,
+      String audience,
+      Duration accessTokenTtl,
+      Duration passwordChangeTokenTtl,
+      Duration clockSkew,
+      String activeKid,
+      String privateKeyPemBase64,
+      List<PublicKey> publicKeys) {
+
+    public record PublicKey(String kid, String pemBase64) {}
+  }
+
   public record EmailVerification(
       Duration tokenTtl, String baseUrl, int resendMaxAttemptsPerHour) {}
 
-  public record Redis(Throttle throttle, EmailVerificationKeys emailVerification) {
+  public record Redis(
+      Throttle throttle,
+      EmailVerificationKeys emailVerification,
+      SessionKeys session,
+      RefreshKeys refresh,
+      CredentialVersionKeys credentialVersion,
+      UserSessionsKeys userSessions) {
 
     public record Throttle(String keyPrefix, Duration window) {}
 
     public record EmailVerificationKeys(String tokenKeyPrefix, String userKeyPrefix) {}
+
+    public record SessionKeys(String keyPrefix) {}
+
+    public record RefreshKeys(
+        String keyPrefix, String usedKeyPrefix, Duration reuseDetectionWindow) {}
+
+    public record CredentialVersionKeys(String keyPrefix) {}
+
+    public record UserSessionsKeys(String keyPrefix) {}
   }
 
   public record Amqp(String exchange, RoutingKey routingKey, Queue queue) {
 
-    public record RoutingKey(String auditLog, String verificationEmail) {}
+    public record RoutingKey(
+        String auditLog,
+        String verificationEmail,
+        String sessionPersist,
+        String sessionUpdate,
+        String sessionRevoke) {}
 
-    public record Queue(String auditLog, String verificationEmail) {}
+    public record Queue(
+        String auditLog,
+        String verificationEmail,
+        String sessionPersist,
+        String sessionUpdate,
+        String sessionRevoke) {}
   }
 }

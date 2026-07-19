@@ -5,6 +5,7 @@ import static org.mockito.Mockito.verify;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.vandunxg.common.amqp.model.MessageEnvelope;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogPort;
 import com.vandunxg.file_processing.auth.domain.model.AuditLog;
 import com.vandunxg.file_processing.auth.domain.model.AuditLogDomain;
@@ -32,7 +33,7 @@ class AuditLogEventListenerTest {
             .changedAt(Instant.now())
             .build();
 
-    listener.onAuditLogEvent(auditLog);
+    listener.onAuditLogEvent(MessageEnvelope.wrap(auditLog));
 
     verify(auditLogPort).record(auditLog);
   }

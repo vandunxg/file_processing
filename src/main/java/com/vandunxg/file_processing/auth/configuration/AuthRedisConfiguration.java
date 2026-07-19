@@ -32,4 +32,20 @@ public class AuthRedisConfiguration {
     script.setResultType(Long.class);
     return script;
   }
+
+  @Bean
+  RedisScript<Long> refreshTokenRotateScript() {
+    DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+    script.setLocation(new ClassPathResource("scripts/refresh-token-rotate.lua"));
+    script.setResultType(Long.class);
+    return script;
+  }
+
+  @Bean
+  RedisScript<Long> sessionRevokeScript() {
+    DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+    script.setLocation(new ClassPathResource("scripts/session-revoke.lua"));
+    script.setResultType(Long.class);
+    return script;
+  }
 }
