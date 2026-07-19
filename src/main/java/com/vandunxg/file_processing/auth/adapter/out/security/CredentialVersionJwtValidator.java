@@ -4,7 +4,6 @@ import java.util.UUID;
 
 import com.vandunxg.file_processing.auth.application.port.out.CredentialVersionCachePort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
-import com.vandunxg.file_processing.auth.domain.model.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.oauth2.core.OAuth2Error;
@@ -40,11 +39,7 @@ public class CredentialVersionJwtValidator implements OAuth2TokenValidator<Jwt> 
             .get(userId)
             .orElseGet(
                 () -> {
-                  int cv =
-                      userRepositoryPort
-                          .findById(userId)
-                          .map(User::getCredentialVersion)
-                          .orElse(-1);
+                  int cv = userRepositoryPort.findCredentialVersionById(userId).orElse(-1);
                   if (cv >= 1) {
                     cachePort.put(userId, cv);
                   }

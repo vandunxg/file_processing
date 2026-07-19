@@ -20,6 +20,9 @@ public interface UserRepositoryPort {
    */
   Optional<User> findByNormalizedIdentifier(String normalizedIdentifier);
 
+  /** Narrow read for hot paths (e.g. per-request JWT validation) that only need this one field. */
+  Optional<Integer> findCredentialVersionById(UUID id);
+
   /** MUST flush immediately (saveAndFlush) so unique-constraint races surface here. */
   User save(User user);
 }

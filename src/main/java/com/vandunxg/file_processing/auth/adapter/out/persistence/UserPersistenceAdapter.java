@@ -62,6 +62,11 @@ public class UserPersistenceAdapter implements UserRepositoryPort {
   }
 
   @Override
+  public Optional<Integer> findCredentialVersionById(UUID id) {
+    return jpaUserRepository.findCredentialVersionByIdAndDeletedAtIsNull(id);
+  }
+
+  @Override
   public User save(User user) {
     log.debug("[save] attempting to persist user userId={}", user.getId());
     // saveAndFlush is load-bearing: it forces the unique-constraint check (normalized_username /
