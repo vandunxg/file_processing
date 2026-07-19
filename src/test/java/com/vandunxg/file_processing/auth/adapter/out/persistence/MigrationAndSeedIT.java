@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Verifies the 7 Flyway migrations (V202607170900 - V202607170906) apply cleanly against a real
@@ -82,6 +83,7 @@ class MigrationAndSeedIT extends AuthIntegrationTestBase {
   }
 
   @Test
+  @Transactional
   void migrations_enforceUniqueTokenHash_onAuthEmailVerificationTokens() {
     UUID userId = UUID.randomUUID();
     Instant now = Instant.now();

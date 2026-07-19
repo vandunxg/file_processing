@@ -94,6 +94,31 @@ public class LoginService implements LoginUseCase {
 
     user.resetFailedLogin();
     User saved = userRepositoryPort.save(user);
+    AuditLog auditLog =
+        AuditLog.builder()
+            .id(IdUtils.nextId())
+            .domain(AuditLogDomain.AUTH)
+            .objectId(saved.getId())
+            .operation(OperationType.LOGIN_SUCCEEDED)
+            .changedBy(saved.getId())
+            .changedAt(now)
+            .ipAddress(ipHash)
+            .userAgent(command.getUserAgent())
+            .build();
+
+    if (saved.isMustChangePassword()) {
+      JwtIssuerPort.IssuedPasswordChangeToken passwordChangeToken =
+          jwtIssuerPort.issuePasswordChange(saved.getId(), saved.getCredentialVersion(), now);
+      credentialVersionCachePort.put(saved.getId(), saved.getCredentialVersion());
+      publishAfterCommit(auditLog);
+      return LoginResult.builder()
+          .status("PASSWORD_CHANGE_REQUIRED")
+          .passwordChangeToken(passwordChangeToken.token())
+          .expiresIn(
+              Duration.between(passwordChangeToken.issuedAt(), passwordChangeToken.expiresAt())
+                  .toSeconds())
+          .build();
+    }
 
     String rawRefresh = refreshTokenGeneratorPort.generate();
     String refreshHash = HashUtils.sha256(rawRefresh.getBytes(StandardCharsets.UTF_8));
@@ -116,17 +141,6 @@ public class LoginService implements LoginUseCase {
         jwtIssuerPort.issue(
             saved.getId(), session.getId(), saved.getCredentialVersion(), roleCodes, now);
 
-    AuditLog auditLog =
-        AuditLog.builder()
-            .id(IdUtils.nextId())
-            .domain(AuditLogDomain.AUTH)
-            .objectId(saved.getId())
-            .operation(OperationType.LOGIN_SUCCEEDED)
-            .changedBy(saved.getId())
-            .changedAt(now)
-            .ipAddress(ipHash)
-            .userAgent(command.getUserAgent())
-            .build();
     publishAfterCommit(auditLog);
 
     log.info("[login] login succeeded userId={} sid={}", saved.getId(), session.getId());

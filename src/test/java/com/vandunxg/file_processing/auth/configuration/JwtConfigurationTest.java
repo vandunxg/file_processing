@@ -1,5 +1,8 @@
 package com.vandunxg.file_processing.auth.configuration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -11,9 +14,6 @@ import java.util.Map;
 
 import com.nimbusds.jose.jwk.JWK;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JwtConfigurationTest {
 
@@ -65,7 +65,9 @@ class JwtConfigurationTest {
                 Duration.ofSeconds(60),
                 "current",
                 pemBase64(signingKeyPair, true),
-                List.of(new AuthProperties.Jwt.PublicKey("current", pemBase64(verificationKeyPair, false)))),
+                List.of(
+                    new AuthProperties.Jwt.PublicKey(
+                        "current", pemBase64(verificationKeyPair, false)))),
             null,
             null,
             null);
@@ -146,7 +148,13 @@ class JwtConfigurationTest {
             now,
             now.plusSeconds(60),
             Map.of("alg", "RS256"),
-            Map.of("sub", "user", "roles", List.of("OPERATOR"), "permissions", List.of("job:self_read")));
+            Map.of(
+                "sub",
+                "user",
+                "roles",
+                List.of("OPERATOR"),
+                "permissions",
+                List.of("job:self_read")));
 
     assertThat(configuration.jwtAuthenticationConverter().convert(jwt).getAuthorities())
         .extracting(authority -> authority.getAuthority())
@@ -161,12 +169,14 @@ class JwtConfigurationTest {
 
   private static String pemBase64(KeyPair keyPair, boolean privateKey) {
     String label = privateKey ? "PRIVATE KEY" : "PUBLIC KEY";
-    byte[] encoded = privateKey ? keyPair.getPrivate().getEncoded() : keyPair.getPublic().getEncoded();
+    byte[] encoded =
+        privateKey ? keyPair.getPrivate().getEncoded() : keyPair.getPublic().getEncoded();
     String pem =
         "-----BEGIN "
             + label
             + "-----\n"
-            + Base64.getMimeEncoder(64, "\n".getBytes(StandardCharsets.UTF_8)).encodeToString(encoded)
+            + Base64.getMimeEncoder(64, "\n".getBytes(StandardCharsets.UTF_8))
+                .encodeToString(encoded)
             + "\n-----END "
             + label
             + "-----";

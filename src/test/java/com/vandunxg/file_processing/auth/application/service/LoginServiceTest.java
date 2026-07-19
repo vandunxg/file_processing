@@ -100,7 +100,8 @@ class LoginServiceTest {
     when(throttlePort.tryConsume(anyString(), anyInt(), any(Duration.class))).thenReturn(true);
     when(userRepositoryPort.findByNormalizedIdentifier(USERNAME)).thenReturn(Optional.of(user));
     when(passwordHasherPort.matches(PASSWORD, PASSWORD_HASH)).thenReturn(true);
-    when(userRepositoryPort.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(userRepositoryPort.save(any(User.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
     when(refreshTokenGeneratorPort.generate()).thenReturn("raw-refresh-token");
     when(jwtIssuerPort.issue(any(), any(), anyInt(), any(), any()))
         .thenReturn(
@@ -119,6 +120,39 @@ class LoginServiceTest {
 
     verify(sessionRepositoryPort).save(any(Session.class));
     verify(credentialVersionCachePort).put(eq(user.getId()), eq(user.getCredentialVersion()));
+
+    new ArrayList<>(TransactionSynchronizationManager.getSynchronizations())
+        .forEach(TransactionSynchronization::afterCommit);
+
+    ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
+    verify(auditLogEventPublisherPort).publish(auditCaptor.capture());
+    assertThat(auditCaptor.getValue().getOperation()).isEqualTo(OperationType.LOGIN_SUCCEEDED);
+  }
+
+  @Test
+  void loginDoesNotIssueNormalTokensOrCreateASessionWhenPasswordChangeIsRequired() {
+    User user = userWithStatus(UserStatus.ACTIVE, true);
+    when(throttlePort.tryConsume(anyString(), anyInt(), any(Duration.class))).thenReturn(true);
+    when(userRepositoryPort.findByNormalizedIdentifier(USERNAME)).thenReturn(Optional.of(user));
+    when(passwordHasherPort.matches(PASSWORD, PASSWORD_HASH)).thenReturn(true);
+    when(userRepositoryPort.save(any(User.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(jwtIssuerPort.issuePasswordChange(any(), anyInt(), any()))
+        .thenReturn(
+            new JwtIssuerPort.IssuedPasswordChangeToken(
+                "password-change-token", NOW, NOW.plus(Duration.ofMinutes(5))));
+    TransactionSynchronizationManager.initSynchronization();
+
+    LoginResult result = loginService.login(loginCommand());
+
+    assertThat(result.getStatus()).isEqualTo("PASSWORD_CHANGE_REQUIRED");
+    assertThat(result.getPasswordChangeToken()).isNotBlank();
+    assertThat(result.getAccessToken()).isNull();
+    assertThat(result.getRefreshToken()).isNull();
+    verify(sessionRepositoryPort, never()).save(any(Session.class));
+    verify(jwtIssuerPort, never()).issue(any(), any(), anyInt(), any(), any());
+    verify(jwtIssuerPort).issuePasswordChange(user.getId(), user.getCredentialVersion(), NOW);
+    verifyNoInteractions(refreshTokenGeneratorPort);
 
     new ArrayList<>(TransactionSynchronizationManager.getSynchronizations())
         .forEach(TransactionSynchronization::afterCommit);
@@ -162,7 +196,8 @@ class LoginServiceTest {
     when(throttlePort.tryConsume(anyString(), anyInt(), any(Duration.class))).thenReturn(true);
     when(userRepositoryPort.findByNormalizedIdentifier(USERNAME)).thenReturn(Optional.of(user));
     when(passwordHasherPort.matches(PASSWORD, PASSWORD_HASH)).thenReturn(false);
-    when(userRepositoryPort.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(userRepositoryPort.save(any(User.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
 
     TransactionSynchronizationManager.initSynchronization();
 
@@ -193,7 +228,8 @@ class LoginServiceTest {
     when(throttlePort.tryConsume(anyString(), anyInt(), any(Duration.class))).thenReturn(true);
     when(userRepositoryPort.findByNormalizedIdentifier(USERNAME)).thenReturn(Optional.of(user));
     when(passwordHasherPort.matches(PASSWORD, PASSWORD_HASH)).thenReturn(false);
-    when(userRepositoryPort.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(userRepositoryPort.save(any(User.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
 
     TransactionSynchronizationManager.initSynchronization();
 
@@ -209,8 +245,10 @@ class LoginServiceTest {
 
     ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
     verify(auditLogEventPublisherPort, org.mockito.Mockito.times(2)).publish(auditCaptor.capture());
-    List<OperationType> operations = auditCaptor.getAllValues().stream().map(AuditLog::getOperation).toList();
-    assertThat(operations).containsExactly(OperationType.LOGIN_FAILED, OperationType.ACCOUNT_LOCKED_OUT);
+    List<OperationType> operations =
+        auditCaptor.getAllValues().stream().map(AuditLog::getOperation).toList();
+    assertThat(operations)
+        .containsExactly(OperationType.LOGIN_FAILED, OperationType.ACCOUNT_LOCKED_OUT);
   }
 
   @Test
@@ -235,7 +273,8 @@ class LoginServiceTest {
     when(throttlePort.tryConsume(anyString(), anyInt(), any(Duration.class))).thenReturn(true);
     when(userRepositoryPort.findByNormalizedIdentifier(USERNAME)).thenReturn(Optional.of(user));
     when(passwordHasherPort.matches(PASSWORD, PASSWORD_HASH)).thenReturn(false);
-    when(userRepositoryPort.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(userRepositoryPort.save(any(User.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
 
     assertThatThrownBy(() -> loginService.login(loginCommand()))
         .isInstanceOf(AuthDomainException.class)
@@ -294,6 +333,10 @@ class LoginServiceTest {
   }
 
   private static User userWithStatus(UserStatus status) {
+    return userWithStatus(status, false);
+  }
+
+  private static User userWithStatus(UserStatus status, boolean mustChangePassword) {
     return User.builder()
         .id(UUID.randomUUID())
         .username(USERNAME)
@@ -304,19 +347,30 @@ class LoginServiceTest {
         .passwordHash(PASSWORD_HASH)
         .status(status)
         .roles(Set.of(operatorRole()))
+        .mustChangePassword(mustChangePassword)
         .credentialVersion(1)
         .failedLoginCount(0)
         .build();
   }
 
   private static Role operatorRole() {
-    return Role.builder().id(UUID.randomUUID()).code("OPERATOR").status(ActiveStatus.ACTIVE).build();
+    return Role.builder()
+        .id(UUID.randomUUID())
+        .code("OPERATOR")
+        .status(ActiveStatus.ACTIVE)
+        .build();
   }
 
   private static AuthProperties authProperties() {
     AuthProperties.Login login =
         new AuthProperties.Login(
-            100, 100, Duration.ofMinutes(15), 100, 5, Duration.ofMinutes(15), Duration.ofMinutes(15));
+            100,
+            100,
+            Duration.ofMinutes(15),
+            100,
+            5,
+            Duration.ofMinutes(15),
+            Duration.ofMinutes(15));
     AuthProperties.Refresh refresh = new AuthProperties.Refresh(Duration.ofDays(7));
     return new AuthProperties(null, null, login, refresh, null, null, null, null, null);
   }

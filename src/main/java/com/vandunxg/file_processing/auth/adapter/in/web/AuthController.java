@@ -12,6 +12,7 @@ import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.MeResponse;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.RegisterResponse;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.SessionResponse;
 import com.vandunxg.file_processing.auth.adapter.in.web.mapper.AuthWebMapper;
+import com.vandunxg.file_processing.auth.adapter.out.security.PasswordChangeTokenDecoder;
 import com.vandunxg.file_processing.auth.application.command.LogoutCommand;
 import com.vandunxg.file_processing.auth.application.command.RevokeAllSessionsCommand;
 import com.vandunxg.file_processing.auth.application.command.RevokeSessionCommand;
@@ -39,6 +40,9 @@ public class AuthController {
   private final RegisterUseCase registerUseCase;
   private final VerifyEmailUseCase verifyEmailUseCase;
   private final ResendVerificationEmailUseCase resendVerificationEmailUseCase;
+  private final ForgotPasswordUseCase forgotPasswordUseCase;
+  private final ResetPasswordUseCase resetPasswordUseCase;
+  private final ChangePasswordUseCase changePasswordUseCase;
   private final LoginUseCase loginUseCase;
   private final RefreshTokenUseCase refreshTokenUseCase;
   private final LogoutUseCase logoutUseCase;
@@ -47,6 +51,7 @@ public class AuthController {
   private final ListSessionsUseCase listSessionsUseCase;
   private final GetCurrentUserUseCase getCurrentUserUseCase;
   private final AuthWebMapper webMapper;
+  private final PasswordChangeTokenDecoder passwordChangeTokenDecoder;
 
   @Operation(summary = "Register a new operator account")
   @SecurityRequirements
@@ -76,6 +81,46 @@ public class AuthController {
   public void resendVerification(
       @Valid @RequestBody ResendVerificationRequest request, HttpServletRequest http) {
     resendVerificationEmailUseCase.resend(webMapper.toCommand(request, clientIp(http)));
+  }
+
+  @Operation(summary = "Request a password reset email")
+  @SecurityRequirements
+  @PostMapping("/forgot-password")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void forgotPassword(
+      @Valid @RequestBody ForgotPasswordRequest request, HttpServletRequest http) {
+    forgotPasswordUseCase.request(webMapper.toCommand(request, clientIp(http)));
+  }
+
+  @Operation(summary = "Set a new password using an opaque reset token")
+  @SecurityRequirements
+  @PostMapping("/reset-password")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void resetPassword(
+      @Valid @RequestBody ResetPasswordRequest request, HttpServletRequest http) {
+    resetPasswordUseCase.reset(webMapper.toCommand(request, clientIp(http)));
+  }
+
+  @Operation(summary = "Change the authenticated user's password")
+  @PostMapping("/change-password")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void changePassword(
+      @Valid @RequestBody ChangePasswordRequest request,
+      @AuthenticationPrincipal Jwt jwt,
+      HttpServletRequest http) {
+    changePasswordUseCase.change(webMapper.toCommand(request, subjectAsUuid(jwt), clientIp(http)));
+  }
+
+  @Operation(summary = "Complete a forced first-login password change")
+  @PostMapping("/complete-password-change")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void completePasswordChange(
+      @Valid @RequestBody ChangePasswordRequest request,
+      @RequestHeader(value = "Authorization", required = false) String authorization,
+      HttpServletRequest http) {
+    Jwt jwt = passwordChangeTokenDecoder.decode(authorization);
+    changePasswordUseCase.complete(
+        webMapper.toCommand(request, subjectAsUuid(jwt), clientIp(http)));
   }
 
   @Operation(summary = "Log in with username and password; returns access + refresh tokens")

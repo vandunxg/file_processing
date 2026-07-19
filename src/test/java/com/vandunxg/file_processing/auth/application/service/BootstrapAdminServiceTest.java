@@ -76,7 +76,8 @@ class BootstrapAdminServiceTest {
     when(userRepositoryPort.existsAny()).thenReturn(false);
     when(roleRepositoryPort.findByCode("ADMIN")).thenReturn(Optional.of(adminRole));
     when(passwordHasherPort.hash("BootstrapPass123")).thenReturn("{bcrypt}hashed");
-    when(userRepositoryPort.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(userRepositoryPort.save(any(User.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
 
     TransactionSynchronizationManager.initSynchronization();
 
@@ -102,7 +103,8 @@ class BootstrapAdminServiceTest {
     assertThat(userRoleCaptor.getValue().getRoleId()).isEqualTo(adminRole.getId());
     verifyNoInteractions(auditLogEventPublisherPort);
 
-    TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+    TransactionSynchronizationManager.getSynchronizations()
+        .forEach(TransactionSynchronization::afterCommit);
 
     ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
     verify(auditLogEventPublisherPort).publish(auditCaptor.capture());
@@ -119,10 +121,7 @@ class BootstrapAdminServiceTest {
 
     verify(bootstrapAdminLockPort).acquire();
     verifyNoInteractions(
-        roleRepositoryPort,
-        userRoleRepositoryPort,
-        passwordHasherPort,
-        auditLogEventPublisherPort);
+        roleRepositoryPort, userRoleRepositoryPort, passwordHasherPort, auditLogEventPublisherPort);
     verify(userRepositoryPort, never()).save(any());
   }
 

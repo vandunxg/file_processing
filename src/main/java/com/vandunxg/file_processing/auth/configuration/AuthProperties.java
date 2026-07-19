@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.List;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 
 @ConfigurationProperties(prefix = "app.auth")
 public record AuthProperties(
@@ -15,10 +16,16 @@ public record AuthProperties(
     Bootstrap bootstrap,
     Jwt jwt,
     EmailVerification emailVerification,
+    PasswordReset passwordReset,
     Redis redis,
     Amqp amqp) {
 
-  /** Keeps existing programmatic construction disabled unless bootstrap is explicitly configured. */
+  @ConstructorBinding
+  public AuthProperties {}
+
+  /**
+   * Keeps existing programmatic construction disabled unless bootstrap is explicitly configured.
+   */
   public AuthProperties(
       Password password,
       Register register,
@@ -38,6 +45,42 @@ public record AuthProperties(
         new Bootstrap(new Bootstrap.Admin(false, "", "", "", "System Administrator")),
         jwt,
         emailVerification,
+        new PasswordReset(
+            Duration.ofMinutes(15),
+            "https://app.example.com/reset-password",
+            20,
+            5,
+            Duration.ofMinutes(15)),
+        redis,
+        amqp);
+  }
+
+  public AuthProperties(
+      Password password,
+      Register register,
+      Login login,
+      Refresh refresh,
+      Session session,
+      Bootstrap bootstrap,
+      Jwt jwt,
+      EmailVerification emailVerification,
+      Redis redis,
+      Amqp amqp) {
+    this(
+        password,
+        register,
+        login,
+        refresh,
+        session,
+        bootstrap,
+        jwt,
+        emailVerification,
+        new PasswordReset(
+            Duration.ofMinutes(15),
+            "https://app.example.com/reset-password",
+            20,
+            5,
+            Duration.ofMinutes(15)),
         redis,
         amqp);
   }
@@ -80,6 +123,13 @@ public record AuthProperties(
 
   public record EmailVerification(
       Duration tokenTtl, String baseUrl, int resendMaxAttemptsPerHour) {}
+
+  public record PasswordReset(
+      Duration tokenTtl,
+      String baseUrl,
+      int ipMaxAttemptsPerHour,
+      int identifierMaxAttemptsPerWindow,
+      Duration identifierWindow) {}
 
   public record Redis(
       Throttle throttle,

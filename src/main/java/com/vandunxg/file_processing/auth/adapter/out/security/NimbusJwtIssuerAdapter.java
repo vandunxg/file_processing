@@ -47,4 +47,27 @@ public class NimbusJwtIssuerAdapter implements JwtIssuerPort {
     Jwt jwt = jwtEncoder.encode(JwtEncoderParameters.from(header, claims));
     return new IssuedAccessToken(jwt.getTokenValue(), now, expiresAt);
   }
+
+  @Override
+  public IssuedPasswordChangeToken issuePasswordChange(
+      UUID userId, int credentialVersion, Instant now) {
+    Instant expiresAt = now.plus(authProperties.jwt().passwordChangeTokenTtl());
+    JwtClaimsSet claims =
+        JwtClaimsSet.builder()
+            .issuer(authProperties.jwt().issuer())
+            .audience(List.of(authProperties.jwt().audience()))
+            .subject(userId.toString())
+            .claim("cv", credentialVersion)
+            .claim("typ", "password_change")
+            .issuedAt(now)
+            .expiresAt(expiresAt)
+            .id(UUID.randomUUID().toString())
+            .build();
+    JwsHeader header =
+        JwsHeader.with(org.springframework.security.oauth2.jose.jws.SignatureAlgorithm.RS256)
+            .keyId(authProperties.jwt().activeKid())
+            .build();
+    Jwt jwt = jwtEncoder.encode(JwtEncoderParameters.from(header, claims));
+    return new IssuedPasswordChangeToken(jwt.getTokenValue(), now, expiresAt);
+  }
 }

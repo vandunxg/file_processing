@@ -163,6 +163,34 @@ public class User extends AuditableDomain {
     this.passwordChangedAt = now;
   }
 
+  public void resetPassword(String passwordHash, Instant now) {
+    if (passwordHash == null
+        || passwordHash.isBlank()
+        || now == null
+        || (!isActive() && !isPendingVerify())) {
+      throw new AuthDomainException(AuthErrorCode.PASSWORD_RESET_NOT_ALLOWED);
+    }
+    this.passwordHash = passwordHash;
+    this.credentialVersion += 1;
+    this.passwordChangedAt = now;
+    this.failedLoginCount = 0;
+    this.lockedUntil = null;
+    this.mustChangePassword = false;
+    if (isPendingVerify()) {
+      this.status = UserStatus.ACTIVE;
+      this.emailVerifiedAt = now;
+    }
+  }
+
+  public void changePassword(String passwordHash, Instant now) {
+    if (passwordHash == null || passwordHash.isBlank() || now == null) {
+      throw new IllegalArgumentException("Invalid password change parameters");
+    }
+    this.passwordHash = passwordHash;
+    this.mustChangePassword = false;
+    bumpCredentialVersion(now);
+  }
+
   /** Reconstitutes roles after a persistence load; only the repository adapter should call this. */
   public void enrichRoles(Set<Role> roles) {
     this.roles = roles == null ? Set.of() : Set.copyOf(roles);

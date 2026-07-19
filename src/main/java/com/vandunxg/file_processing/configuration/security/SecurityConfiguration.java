@@ -10,7 +10,6 @@ import org.springframework.data.domain.AuditorAware;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.access.expression.method.DefaultMethodSecurityExpressionHandler;
 import org.springframework.security.access.expression.method.MethodSecurityExpressionHandler;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -19,7 +18,9 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationProvider;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
@@ -38,6 +39,9 @@ public class SecurityConfiguration {
     "/api/v1/auth/register",
     "/api/v1/auth/verify-email",
     "/api/v1/auth/resend-verification",
+    "/api/v1/auth/forgot-password",
+    "/api/v1/auth/reset-password",
+    "/api/v1/auth/complete-password-change",
     "/api/v1/auth/login",
     "/api/v1/auth/refresh",
     "/api/v1/certificate/.well-known/jwks.json",
@@ -59,9 +63,13 @@ public class SecurityConfiguration {
 
   private final RegexPermissionEvaluator customPermissionEvaluator;
   private final JwtAuthenticationConverter jwtAuthenticationConverter;
+  private final JwtDecoder jwtDecoder;
 
   @Bean
   public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    JwtAuthenticationProvider jwtAuthenticationProvider = new JwtAuthenticationProvider(jwtDecoder);
+    jwtAuthenticationProvider.setJwtAuthenticationConverter(jwtAuthenticationConverter);
+
     http.csrf(AbstractHttpConfigurer::disable)
         .sessionManagement(
             sessionAuthenticationStrategy ->
@@ -79,7 +87,9 @@ public class SecurityConfiguration {
                     .requestMatchers(AUTHENTICATED_URLS)
                     .authenticated())
         .oauth2ResourceServer(
-            oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));
+            oauth2 ->
+                oauth2.authenticationManagerResolver(
+                    request -> jwtAuthenticationProvider::authenticate));
     //            .exceptionHandling(
     //                exHandling ->
     // exHandling.authenticationEntryPoint(this.customAuthenticationEntryPoint));

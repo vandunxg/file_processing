@@ -105,7 +105,9 @@ public class BootstrapAdminService implements BootstrapAdminUseCase {
         || !email.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")
         || displayName.length() < 2
         || displayName.length() > 150
-        || !passwordPolicy.validate(admin.password(), User.normalize(username), User.normalize(email)).valid()) {
+        || !passwordPolicy
+            .validate(admin.password(), User.normalize(username), User.normalize(email))
+            .valid()) {
       throw new IllegalStateException("Invalid bootstrap admin configuration");
     }
   }

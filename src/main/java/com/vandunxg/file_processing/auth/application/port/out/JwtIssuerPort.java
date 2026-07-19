@@ -9,5 +9,9 @@ public interface JwtIssuerPort {
   IssuedAccessToken issue(
       UUID userId, UUID sessionId, int credentialVersion, List<String> roles, Instant now);
 
+  IssuedPasswordChangeToken issuePasswordChange(UUID userId, int credentialVersion, Instant now);
+
   record IssuedAccessToken(String token, Instant issuedAt, Instant expiresAt) {}
+
+  record IssuedPasswordChangeToken(String token, Instant issuedAt, Instant expiresAt) {}
 }

@@ -20,8 +20,8 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
-import com.nimbusds.jose.proc.SecurityContext;
 import com.nimbusds.jose.proc.JWSVerificationKeySelector;
+import com.nimbusds.jose.proc.SecurityContext;
 import com.nimbusds.jwt.proc.DefaultJWTProcessor;
 import com.vandunxg.file_processing.auth.adapter.out.security.CredentialVersionJwtValidator;
 import com.vandunxg.file_processing.auth.adapter.out.security.SessionAllowListJwtValidator;
@@ -30,16 +30,15 @@ import com.vandunxg.file_processing.auth.application.port.out.SessionRepositoryP
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.context.annotation.Primary;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.jwt.*;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 
-/**
- * Wires the configured RSA keypair used to sign and verify access tokens.
- */
+/** Wires the configured RSA keypair used to sign and verify access tokens. */
 @Configuration
 public class JwtConfiguration {
 
@@ -66,7 +65,10 @@ public class JwtConfiguration {
           authProperties.jwt().publicKeys().stream()
               .map(
                   key ->
-                      (JWK) new RSAKey.Builder(readPublicKey(key.pemBase64())).keyID(key.kid()).build())
+                      (JWK)
+                          new RSAKey.Builder(readPublicKey(key.pemBase64()))
+                              .keyID(key.kid())
+                              .build())
               .toList();
       return new KeyMaterial(priv, pub, activeKid, new JWKSet(publicKeys));
     }
@@ -90,6 +92,7 @@ public class JwtConfiguration {
   }
 
   @Bean
+  @Primary
   JwtDecoder jwtDecoder(
       KeyMaterial keyMaterial,
       AuthProperties authProperties,
@@ -97,10 +100,7 @@ public class JwtConfiguration {
       CredentialVersionCachePort credentialVersionCachePort,
       UserRepositoryPort userRepositoryPort,
       Clock clock) {
-    JWKSource<SecurityContext> jwkSource = new ImmutableJWKSet<>(keyMaterial.publicJwkSet());
-    DefaultJWTProcessor<SecurityContext> jwtProcessor = new DefaultJWTProcessor<>();
-    jwtProcessor.setJWSKeySelector(new JWSVerificationKeySelector<>(JWSAlgorithm.RS256, jwkSource));
-    NimbusJwtDecoder decoder = new NimbusJwtDecoder(jwtProcessor);
+    NimbusJwtDecoder decoder = newJwtDecoder(keyMaterial);
 
     OAuth2TokenValidator<Jwt> defaults =
         JwtValidators.createDefaultWithIssuer(authProperties.jwt().issuer());
@@ -117,6 +117,28 @@ public class JwtConfiguration {
     decoder.setJwtValidator(
         new DelegatingOAuth2TokenValidator<>(
             defaults, audienceValidator, typeValidator, sessionAllowList, credentialVersion));
+    return decoder;
+  }
+
+  @Bean("passwordChangeJwtDecoder")
+  JwtDecoder passwordChangeJwtDecoder(
+      KeyMaterial keyMaterial,
+      AuthProperties authProperties,
+      CredentialVersionCachePort credentialVersionCachePort,
+      UserRepositoryPort userRepositoryPort) {
+    NimbusJwtDecoder decoder = newJwtDecoder(keyMaterial);
+    OAuth2TokenValidator<Jwt> defaults =
+        JwtValidators.createDefaultWithIssuer(authProperties.jwt().issuer());
+    OAuth2TokenValidator<Jwt> audienceValidator =
+        new JwtClaimValidator<List<String>>(
+            JwtClaimNames.AUD, aud -> aud != null && aud.contains(authProperties.jwt().audience()));
+    OAuth2TokenValidator<Jwt> typeValidator =
+        new JwtClaimValidator<>("typ", type -> "password_change".equals(type));
+    OAuth2TokenValidator<Jwt> credentialVersion =
+        new CredentialVersionJwtValidator(credentialVersionCachePort, userRepositoryPort);
+    decoder.setJwtValidator(
+        new DelegatingOAuth2TokenValidator<>(
+            defaults, audienceValidator, typeValidator, credentialVersion));
     return decoder;
   }
 
@@ -142,6 +164,13 @@ public class JwtConfiguration {
   public record KeyMaterial(
       RSAPrivateKey privateKey, RSAPublicKey publicKey, String kid, JWKSet publicJwkSet) {}
 
+  private static NimbusJwtDecoder newJwtDecoder(KeyMaterial keyMaterial) {
+    JWKSource<SecurityContext> jwkSource = new ImmutableJWKSet<>(keyMaterial.publicJwkSet());
+    DefaultJWTProcessor<SecurityContext> jwtProcessor = new DefaultJWTProcessor<>();
+    jwtProcessor.setJWSKeySelector(new JWSVerificationKeySelector<>(JWSAlgorithm.RS256, jwkSource));
+    return new NimbusJwtDecoder(jwtProcessor);
+  }
+
   private static String publicKeyPem(AuthProperties authProperties, String kid) {
     return authProperties.jwt().publicKeys().stream()
         .filter(pk -> kid.equals(pk.kid()))
@@ -156,7 +185,8 @@ public class JwtConfiguration {
       return;
     }
     Set<String> kids = new HashSet<>();
-    if (publicKeys.stream().anyMatch(key -> key.kid() == null || key.kid().isBlank() || !kids.add(key.kid()))) {
+    if (publicKeys.stream()
+        .anyMatch(key -> key.kid() == null || key.kid().isBlank() || !kids.add(key.kid()))) {
       throw new IllegalStateException("JWT public key ids must be unique");
     }
   }
