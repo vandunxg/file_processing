@@ -37,15 +37,16 @@
 1. Rate-limit: `authThrottlePort.tryConsume("login:ip:" + ipHash, ipMaxPerHour, Duration.ofHours(1))` AND `authThrottlePort.tryConsume("login:user:" + normalizedUsername, usernameMaxPerWindow, usernameWindow)`. Either denied → `warn` + `AUTH_RATE_LIMITED (429)`.
 2. Load user by `normalizedUsername`. Miss → `warn` + `INVALID_CREDENTIALS`.
 3. `user.isLocked(now)` → `warn` + `ACCOUNT_LOCKED`.
-4. `user.status != ACTIVE` → `warn` + `INVALID_CREDENTIALS` (enumeration-safe: do not reveal `PENDING_VERIFY`).
-5. Password mismatch → `user.registerFailedLogin(now, maxFailures, lockDuration)` → `userRepositoryPort.save(user)` → publish `LOGIN_FAILED` and, if this call transitioned the account into lock, `ACCOUNT_LOCKED_OUT` → `warn` + `INVALID_CREDENTIALS`.
-6. Success → `user.resetFailedLogin()`; `userRepositoryPort.save(user)`.
-7. `rawRefresh = refreshTokenGeneratorPort.generate()` (32 bytes URL-safe); `refreshHash = HashUtils.sha256(rawRefresh)`.
-8. `session = Session.issue(user.id, user.credentialVersion, refreshHash, ua, ipHash, now, refreshTtl)`.
-9. `sessionRepositoryPort.save(session)` (Redis atomic writes: `HSET auth:session:<sid> …`, `SET auth:refresh:<hash> <sid> PX <ttl>`, `SADD auth:user:<uid>:sessions <sid>`; RabbitMQ publish `SessionPersistEvent`).
-10. `jwtIssuerPort.issue(user.id, sid, cv, roles, now)` → access token.
-11. Publish `LOGIN_SUCCEEDED` audit event (after tx commit).
-12. Return `LoginResponse`.
+4. Password mismatch → `user.registerFailedLogin(now, maxFailures, lockDuration)` → `userRepositoryPort.save(user)` → publish `LOGIN_FAILED` and, if this call transitioned the account into lock, `ACCOUNT_LOCKED_OUT` → `warn` + `INVALID_CREDENTIALS`.
+5. `user.isPendingVerify()` (checked only *after* the password matches, per `auth-module-requirements.md` AUTH-UC-05 step 9 / AC-05.6) → `warn` + `EMAIL_VERIFICATION_REQUIRED`.
+6. `!user.isActive()` (remaining non-`ACTIVE` states, e.g. `DISABLED`, or soft-deleted) → `warn` + `INVALID_CREDENTIALS`.
+7. Success → `user.resetFailedLogin()`; `userRepositoryPort.save(user)`.
+8. `rawRefresh = refreshTokenGeneratorPort.generate()` (32 bytes URL-safe); `refreshHash = HashUtils.sha256(rawRefresh)`.
+9. `session = Session.issue(user.id, user.credentialVersion, refreshHash, ua, ipHash, now, refreshTtl)`.
+10. `sessionRepositoryPort.save(session)` (Redis atomic writes: `HSET auth:session:<sid> …`, `SET auth:refresh:<hash> <sid> PX <ttl>`, `SADD auth:user:<uid>:sessions <sid>`; RabbitMQ publish `SessionPersistEvent`).
+11. `jwtIssuerPort.issue(user.id, sid, cv, roles, now)` → access token.
+12. Publish `LOGIN_SUCCEEDED` audit event (after tx commit).
+13. Return `LoginResponse`.
 
 ### Refresh (`POST /auth/refresh`)
 
@@ -225,13 +226,14 @@ app:
 
 | Constant | Code | HTTP | Meaning |
 |---|---|---|---|
-| `INVALID_CREDENTIALS` | 40101 | 401 | Wrong username/password OR account not `ACTIVE` (enumeration-safe) |
+| `INVALID_CREDENTIALS` | 40101 | 401 | Wrong username/password, or account `DISABLED`/soft-deleted (enumeration-safe — checked only after the password matches) |
 | `ACCOUNT_LOCKED` | 40301 | 403 | Lockout in effect; remaining time is not disclosed |
+| `EMAIL_VERIFICATION_REQUIRED` | 40302 | 403 | Password matched but `user.status == PENDING_VERIFY`; matches `auth-module-requirements.md` AUTH-UC-05 step 9 / AC-05.6 (that doc's `40301` code number predates `ACCOUNT_LOCKED` claiming it and was never binding — the name is what's authoritative) |
 | `REFRESH_TOKEN_INVALID` | 40102 | 401 | Refresh token unknown, expired, or session revoked / `cv` mismatched |
 | `REFRESH_TOKEN_REUSED` | 40103 | 401 | Rotated refresh token was replayed |
 | `SESSION_NOT_FOUND` | 40402 | 404 | Session id does not exist or is not owned by the caller |
 
-All five names must be present in **both** `messages.properties` and `messages_vi.properties` (RULE §6.5). `AUTH_RATE_LIMITED` is reused for `/login` and `/refresh`.
+All six names must be present in **both** `messages.properties` and `messages_vi.properties` (RULE §6.5). `AUTH_RATE_LIMITED` is reused for `/login` and `/refresh`.
 
 ## Audit event catalog (added to `OperationType`)
 
@@ -300,7 +302,7 @@ Every audit `AuditLog` carries: `id`, `domain=AUTH`, `objectId=userId` (or `sess
 **Unit tests (no Spring context):**
 - `SessionDomainTest` — issue validation, rotate rejects revoked/expired, revoke idempotent, isActive edges.
 - `UserDomainTest` extension — `registerFailedLogin` cycle (reset when past lock), `resetFailedLogin`, `bumpCredentialVersion`, `isLocked(now)`.
-- `LoginServiceTest` — happy, unknown user, locked, unverified (returns `INVALID_CREDENTIALS`), wrong password (counter increments, lock-transition audit fires), rate-limit denies both buckets.
+- `LoginServiceTest` — happy, unknown user, locked, wrong password (counter increments, lock-transition audit fires), pending-verify with correct password (returns `EMAIL_VERIFICATION_REQUIRED`), pending-verify with wrong password (still `INVALID_CREDENTIALS` — password checked first), disabled account, rate-limit denies both buckets.
 - `RefreshTokenServiceTest` — happy, unknown refresh, reused refresh (cascade revoke + `REFRESH_TOKEN_REUSED`), expired session, `cv` mismatch, rate-limit.
 - `LogoutServiceTest`, `RevokeAllSessionsServiceTest`, `RevokeSessionServiceTest` (including foreign-owner returns 404), `ListSessionsServiceTest`, `GetCurrentUserServiceTest`.
 

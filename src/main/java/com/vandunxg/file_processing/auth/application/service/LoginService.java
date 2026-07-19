@@ -78,13 +78,17 @@ public class LoginService implements LoginUseCase {
       log.warn("[login] account locked userId={}", user.getId());
       throw new AuthDomainException(AuthErrorCode.ACCOUNT_LOCKED);
     }
-    if (!user.isActive()) {
-      log.warn("[login] account not active userId={} status={}", user.getId(), user.getStatus());
-      throw new AuthDomainException(AuthErrorCode.INVALID_CREDENTIALS);
-    }
     if (!passwordHasherPort.matches(command.getPassword(), user.getPasswordHash())) {
       recordFailedLogin(user, now, ipHash);
       log.warn("[login] invalid password userId={}", user.getId());
+      throw new AuthDomainException(AuthErrorCode.INVALID_CREDENTIALS);
+    }
+    if (user.isPendingVerify()) {
+      log.warn("[login] account not verified userId={}", user.getId());
+      throw new AuthDomainException(AuthErrorCode.EMAIL_VERIFICATION_REQUIRED);
+    }
+    if (!user.isActive()) {
+      log.warn("[login] account not active userId={} status={}", user.getId(), user.getStatus());
       throw new AuthDomainException(AuthErrorCode.INVALID_CREDENTIALS);
     }
 
