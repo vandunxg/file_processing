@@ -19,6 +19,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
@@ -39,7 +40,7 @@ public class SecurityConfiguration {
     "/api/v1/auth/resend-verification",
     "/api/v1/auth/login",
     "/api/v1/auth/refresh",
-    "/api/certificate/.well-known/jwks.json",
+    "/api/v1/certificate/.well-known/jwks.json",
   };
 
   private static final String[] AUTHENTICATED_URLS = {"/api/**"};
@@ -57,6 +58,7 @@ public class SecurityConfiguration {
   };
 
   private final RegexPermissionEvaluator customPermissionEvaluator;
+  private final JwtAuthenticationConverter jwtAuthenticationConverter;
 
   @Bean
   public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -76,7 +78,8 @@ public class SecurityConfiguration {
                     .permitAll()
                     .requestMatchers(AUTHENTICATED_URLS)
                     .authenticated())
-        .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
+        .oauth2ResourceServer(
+            oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));
     //            .exceptionHandling(
     //                exHandling ->
     // exHandling.authenticationEntryPoint(this.customAuthenticationEntryPoint));

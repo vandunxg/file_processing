@@ -30,6 +30,11 @@ public class UserPersistenceAdapter implements UserRepositoryPort {
   private final RolePersistenceMapper rolePersistenceMapper;
 
   @Override
+  public boolean existsAny() {
+    return jpaUserRepository.count() > 0;
+  }
+
+  @Override
   public boolean existsByNormalizedUsername(String normalizedUsername) {
     return jpaUserRepository.existsByNormalizedUsernameAndDeletedAtIsNull(normalizedUsername);
   }

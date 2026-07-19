@@ -12,10 +12,35 @@ public record AuthProperties(
     Login login,
     Refresh refresh,
     Session session,
+    Bootstrap bootstrap,
     Jwt jwt,
     EmailVerification emailVerification,
     Redis redis,
     Amqp amqp) {
+
+  /** Keeps existing programmatic construction disabled unless bootstrap is explicitly configured. */
+  public AuthProperties(
+      Password password,
+      Register register,
+      Login login,
+      Refresh refresh,
+      Session session,
+      Jwt jwt,
+      EmailVerification emailVerification,
+      Redis redis,
+      Amqp amqp) {
+    this(
+        password,
+        register,
+        login,
+        refresh,
+        session,
+        new Bootstrap(new Bootstrap.Admin(false, "", "", "", "System Administrator")),
+        jwt,
+        emailVerification,
+        redis,
+        amqp);
+  }
 
   public record Password(String encoder, int bcryptCost, int minLength, int maxLength) {}
 
@@ -33,6 +58,12 @@ public record AuthProperties(
   public record Refresh(Duration tokenTtl) {}
 
   public record Session(Duration credentialVersionCacheTtl) {}
+
+  public record Bootstrap(Admin admin) {
+
+    public record Admin(
+        boolean enabled, String username, String email, String password, String displayName) {}
+  }
 
   public record Jwt(
       String issuer,

@@ -69,6 +69,36 @@ public class User extends AuditableDomain {
         .build();
   }
 
+  public static User bootstrapAdmin(
+      String username,
+      String email,
+      String displayName,
+      String passwordHash,
+      Role adminRole,
+      Instant now) {
+    if (adminRole == null
+        || adminRole.isDeleted()
+        || !adminRole.isActive()
+        || !"ADMIN".equals(adminRole.getCode())) {
+      throw new AuthDomainException(AuthErrorCode.INVALID_ROLE);
+    }
+    return User.builder()
+        .id(IdUtils.nextId())
+        .username(normalizeVisible(username))
+        .normalizedUsername(normalize(username))
+        .email(normalize(email))
+        .normalizedEmail(normalize(email))
+        .displayName(normalizeDisplayName(displayName))
+        .passwordHash(passwordHash)
+        .status(UserStatus.ACTIVE)
+        .roles(Set.of(adminRole))
+        .mustChangePassword(true)
+        .credentialVersion(1)
+        .passwordChangedAt(now)
+        .emailVerifiedAt(now)
+        .build();
+  }
+
   public static String normalize(String value) {
     return normalizeVisible(value).toLowerCase(Locale.ROOT);
   }

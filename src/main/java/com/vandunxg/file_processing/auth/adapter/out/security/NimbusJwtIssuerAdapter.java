@@ -34,6 +34,7 @@ public class NimbusJwtIssuerAdapter implements JwtIssuerPort {
             .subject(userId.toString())
             .claim("sid", sessionId.toString())
             .claim("cv", credentialVersion)
+            .claim("typ", "access")
             .claim("roles", roles == null ? List.of() : roles)
             .issuedAt(now)
             .expiresAt(expiresAt)

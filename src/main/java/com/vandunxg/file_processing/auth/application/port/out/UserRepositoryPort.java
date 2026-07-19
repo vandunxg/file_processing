@@ -7,6 +7,9 @@ import com.vandunxg.file_processing.auth.domain.model.User;
 
 public interface UserRepositoryPort {
 
+  /** Includes soft-deleted users: bootstrap is allowed only on a truly empty system. */
+  boolean existsAny();
+
   boolean existsByNormalizedUsername(String normalizedUsername);
 
   boolean existsByNormalizedEmail(String normalizedEmail);

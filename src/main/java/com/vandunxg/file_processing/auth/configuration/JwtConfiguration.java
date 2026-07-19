@@ -2,47 +2,50 @@ package com.vandunxg.file_processing.auth.configuration;
 
 import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.time.Clock;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.jwk.JWK;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.nimbusds.jose.proc.JWSVerificationKeySelector;
+import com.nimbusds.jwt.proc.DefaultJWTProcessor;
 import com.vandunxg.file_processing.auth.adapter.out.security.CredentialVersionJwtValidator;
 import com.vandunxg.file_processing.auth.adapter.out.security.SessionAllowListJwtValidator;
 import com.vandunxg.file_processing.auth.application.port.out.CredentialVersionCachePort;
 import com.vandunxg.file_processing.auth.application.port.out.SessionRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.jwt.*;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 
 /**
- * Wires the RSA keypair used to sign and verify access tokens. When {@code
- * app.auth.jwt.private-key-pem-base64} and its matching public key entry are absent the config
- * generates an in-memory keypair at boot — safe only for dev / integration tests, and warned
- * loudly. Production must supply real PEMs via environment variables.
+ * Wires the configured RSA keypair used to sign and verify access tokens.
  */
 @Configuration
-@Slf4j(topic = "AUTH-JWT-CONFIG")
 public class JwtConfiguration {
 
   @Bean
   KeyMaterial jwtKeyMaterial(AuthProperties authProperties) {
+    validatePublicKeyIds(authProperties.jwt().publicKeys());
     String kidCandidate = authProperties.jwt().activeKid();
     final String activeKid =
         kidCandidate == null || kidCandidate.isBlank() ? "dev-generated" : kidCandidate;
@@ -56,20 +59,18 @@ public class JwtConfiguration {
     if (hasPrivate && hasPublic) {
       RSAPrivateKey priv = readPrivateKey(authProperties.jwt().privateKeyPemBase64());
       RSAPublicKey pub = readPublicKey(publicKeyPem(authProperties, activeKid));
-      return new KeyMaterial(priv, pub, activeKid);
+      if (!priv.getModulus().equals(pub.getModulus())) {
+        throw new IllegalStateException("Active JWT private and public keys do not match");
+      }
+      List<JWK> publicKeys =
+          authProperties.jwt().publicKeys().stream()
+              .map(
+                  key ->
+                      (JWK) new RSAKey.Builder(readPublicKey(key.pemBase64())).keyID(key.kid()).build())
+              .toList();
+      return new KeyMaterial(priv, pub, activeKid, new JWKSet(publicKeys));
     }
-    log.warn(
-        "[jwtKeyMaterial] generating an ephemeral RSA keypair — DO NOT USE IN PRODUCTION. "
-            + "Set app.auth.jwt.private-key-pem-base64 and app.auth.jwt.public-keys.");
-    try {
-      KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
-      gen.initialize(2048);
-      KeyPair pair = gen.generateKeyPair();
-      return new KeyMaterial(
-          (RSAPrivateKey) pair.getPrivate(), (RSAPublicKey) pair.getPublic(), activeKid);
-    } catch (Exception e) {
-      throw new IllegalStateException("Failed to generate RSA keypair", e);
-    }
+    throw new IllegalStateException("JWT signing keys are required");
   }
 
   @Bean
@@ -84,6 +85,11 @@ public class JwtConfiguration {
   }
 
   @Bean
+  JWKSet jwtPublicJwkSet(KeyMaterial keyMaterial) {
+    return keyMaterial.publicJwkSet();
+  }
+
+  @Bean
   JwtDecoder jwtDecoder(
       KeyMaterial keyMaterial,
       AuthProperties authProperties,
@@ -91,13 +97,18 @@ public class JwtConfiguration {
       CredentialVersionCachePort credentialVersionCachePort,
       UserRepositoryPort userRepositoryPort,
       Clock clock) {
-    NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(keyMaterial.publicKey()).build();
+    JWKSource<SecurityContext> jwkSource = new ImmutableJWKSet<>(keyMaterial.publicJwkSet());
+    DefaultJWTProcessor<SecurityContext> jwtProcessor = new DefaultJWTProcessor<>();
+    jwtProcessor.setJWSKeySelector(new JWSVerificationKeySelector<>(JWSAlgorithm.RS256, jwkSource));
+    NimbusJwtDecoder decoder = new NimbusJwtDecoder(jwtProcessor);
 
     OAuth2TokenValidator<Jwt> defaults =
         JwtValidators.createDefaultWithIssuer(authProperties.jwt().issuer());
     OAuth2TokenValidator<Jwt> audienceValidator =
         new JwtClaimValidator<List<String>>(
             JwtClaimNames.AUD, aud -> aud != null && aud.contains(authProperties.jwt().audience()));
+    OAuth2TokenValidator<Jwt> typeValidator =
+        new JwtClaimValidator<>("typ", type -> "access".equals(type));
     OAuth2TokenValidator<Jwt> sessionAllowList =
         new SessionAllowListJwtValidator(sessionRepositoryPort, clock);
     OAuth2TokenValidator<Jwt> credentialVersion =
@@ -105,22 +116,31 @@ public class JwtConfiguration {
 
     decoder.setJwtValidator(
         new DelegatingOAuth2TokenValidator<>(
-            defaults, audienceValidator, sessionAllowList, credentialVersion));
+            defaults, audienceValidator, typeValidator, sessionAllowList, credentialVersion));
     return decoder;
   }
 
   @Bean
   JwtAuthenticationConverter jwtAuthenticationConverter() {
-    JwtGrantedAuthoritiesConverter authorities = new JwtGrantedAuthoritiesConverter();
-    authorities.setAuthoritiesClaimName("roles");
-    authorities.setAuthorityPrefix("ROLE_");
+    JwtGrantedAuthoritiesConverter roles = new JwtGrantedAuthoritiesConverter();
+    roles.setAuthoritiesClaimName("roles");
+    roles.setAuthorityPrefix("ROLE_");
+    JwtGrantedAuthoritiesConverter permissions = new JwtGrantedAuthoritiesConverter();
+    permissions.setAuthoritiesClaimName("permissions");
+    permissions.setAuthorityPrefix("");
     JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-    converter.setJwtGrantedAuthoritiesConverter(authorities);
+    converter.setJwtGrantedAuthoritiesConverter(
+        jwt -> {
+          Collection<GrantedAuthority> authorities = new ArrayList<>(roles.convert(jwt));
+          authorities.addAll(permissions.convert(jwt));
+          return authorities;
+        });
     converter.setPrincipalClaimName("sub");
     return converter;
   }
 
-  public record KeyMaterial(RSAPrivateKey privateKey, RSAPublicKey publicKey, String kid) {}
+  public record KeyMaterial(
+      RSAPrivateKey privateKey, RSAPublicKey publicKey, String kid, JWKSet publicJwkSet) {}
 
   private static String publicKeyPem(AuthProperties authProperties, String kid) {
     return authProperties.jwt().publicKeys().stream()
@@ -129,6 +149,16 @@ public class JwtConfiguration {
         .map(AuthProperties.Jwt.PublicKey::pemBase64)
         .orElseThrow(
             () -> new IllegalStateException("No public key registered for active kid " + kid));
+  }
+
+  private static void validatePublicKeyIds(List<AuthProperties.Jwt.PublicKey> publicKeys) {
+    if (publicKeys == null) {
+      return;
+    }
+    Set<String> kids = new HashSet<>();
+    if (publicKeys.stream().anyMatch(key -> key.kid() == null || key.kid().isBlank() || !kids.add(key.kid()))) {
+      throw new IllegalStateException("JWT public key ids must be unique");
+    }
   }
 
   private static RSAPublicKey readPublicKey(String value) {
