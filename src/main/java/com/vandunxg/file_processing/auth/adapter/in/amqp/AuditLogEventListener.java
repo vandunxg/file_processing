@@ -1,5 +1,6 @@
 package com.vandunxg.file_processing.auth.adapter.in.amqp;
 
+import com.vandunxg.common.amqp.model.MessageEnvelope;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogPort;
 import com.vandunxg.file_processing.auth.domain.model.AuditLog;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +16,8 @@ public class AuditLogEventListener {
   private final AuditLogPort auditLogPort;
 
   @RabbitListener(queues = "${app.auth.amqp.queue.audit-log}")
-  public void onAuditLogEvent(AuditLog auditLog) {
+  public void onAuditLogEvent(MessageEnvelope<AuditLog> envelope) {
+    AuditLog auditLog = envelope.payload();
     log.debug("[onAuditLogEvent] received audit log event objectId={}", auditLog.getObjectId());
     auditLogPort.record(auditLog);
   }

@@ -1,5 +1,6 @@
 package com.vandunxg.file_processing.auth.adapter.in.amqp;
 
+import com.vandunxg.common.amqp.model.MessageEnvelope;
 import com.vandunxg.file_processing.auth.application.port.out.EmailSenderPort;
 import com.vandunxg.file_processing.auth.domain.event.SendVerificationEmailEvent;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +16,8 @@ public class VerificationEmailEventListener {
   private final EmailSenderPort emailSenderPort;
 
   @RabbitListener(queues = "${app.auth.amqp.queue.verification-email}")
-  public void onSendVerificationEmailEvent(SendVerificationEmailEvent event) {
+  public void onSendVerificationEmailEvent(MessageEnvelope<SendVerificationEmailEvent> envelope) {
+    SendVerificationEmailEvent event = envelope.payload();
     // Never log event.verificationLink(): it carries the raw opaque token.
     log.debug("[onSendVerificationEmailEvent] received verification email event");
     emailSenderPort.sendVerificationEmail(
