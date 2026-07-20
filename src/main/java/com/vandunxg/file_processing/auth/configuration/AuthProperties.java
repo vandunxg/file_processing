@@ -98,7 +98,15 @@ public record AuthProperties(
       Duration failureWindow,
       Duration lockDuration) {}
 
-  public record Refresh(Duration tokenTtl) {}
+  public record Refresh(Duration tokenTtl, boolean cookieSecure) {
+
+    @ConstructorBinding
+    public Refresh {}
+
+    public Refresh(Duration tokenTtl) {
+      this(tokenTtl, true);
+    }
+  }
 
   public record Session(Duration credentialVersionCacheTtl) {}
 

@@ -21,6 +21,7 @@ public enum AuthErrorCode implements ResponseError {
   INVALID_CREDENTIALS(40101, "Invalid username or password", 401),
   ACCOUNT_LOCKED(40301, "Account is locked", 403),
   EMAIL_VERIFICATION_REQUIRED(40302, "Please verify your email before logging in", 403),
+  CSRF_TOKEN_INVALID(40303, "CSRF token is invalid", 403),
   REFRESH_TOKEN_INVALID(40102, "Refresh token is invalid, expired, or revoked", 401),
   REFRESH_TOKEN_REUSED(40103, "Refresh token was already used", 401),
   PASSWORD_CHANGE_TOKEN_INVALID(40106, "Password change token is invalid, expired, or stale", 401),

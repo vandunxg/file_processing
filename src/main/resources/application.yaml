@@ -221,6 +221,7 @@ app:
 
     refresh:
       token-ttl: ${AUTH_REFRESH_TOKEN_TTL:PT168H}
+      cookie-secure: ${AUTH_REFRESH_COOKIE_SECURE:true}
 
     session:
       credential-version-cache-ttl: ${AUTH_SESSION_CV_CACHE_TTL:PT5M}

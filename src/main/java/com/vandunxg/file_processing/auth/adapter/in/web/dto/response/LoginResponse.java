@@ -13,8 +13,6 @@ public record LoginResponse(
     @Schema(description = "Signed JWT access token") String accessToken,
     @Schema(description = "Issued JWT TTL in seconds") long expiresIn,
     @Schema(description = "Access token absolute expiry") Instant accessTokenExpiresAt,
-    @Schema(description = "Opaque refresh token; store securely, rotate on every use")
-        String refreshToken,
     @Schema(description = "Refresh token TTL in seconds") Long refreshExpiresIn,
     @Schema(description = "Refresh token absolute expiry") Instant refreshTokenExpiresAt,
     @Schema(description = "Server-side session identifier") UUID sessionId,

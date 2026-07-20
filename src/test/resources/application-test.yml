@@ -51,6 +51,7 @@ app:
 
     refresh:
       token-ttl: PT168H
+      cookie-secure: false
 
     session:
       credential-version-cache-ttl: PT5M

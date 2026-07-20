@@ -29,6 +29,7 @@ import com.vandunxg.file_processing.auth.domain.model.User;
 import com.vandunxg.file_processing.auth.domain.model.UserStatus;
 import com.vandunxg.file_processing.testsupport.AuthIntegrationTestBase;
 import com.vandunxg.file_processing.testsupport.PostgresIntegrationTest;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -309,6 +310,150 @@ class AuthControllerIT extends AuthIntegrationTestBase {
                     "{\"currentPassword\":\"%s\",\"newPassword\":\"%s\",\"confirmPassword\":\"%s\"}"
                         .formatted(currentPassword, newPassword, newPassword)))
         .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void login_setsRefreshAndCsrfCookies_withoutReturningTheRefreshToken() throws Exception {
+    String username = "cookie-login";
+    String password = "CurrentStrongPassw0rd!";
+    saveActiveUser(username, password, "Cookie Login");
+
+    LoginRequest request = new LoginRequest();
+    request.setUsername(username);
+    request.setPassword(password);
+    MvcResult result =
+        mockMvc
+            .perform(
+                post(BASE_URL + "/login")
+                    .header("X-Real-IP", "203.0.114.7")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
+            .andReturn();
+
+    Cookie refreshCookie = result.getResponse().getCookie("fps_refresh");
+    assertThat(refreshCookie).isNotNull();
+    assertThat(refreshCookie.isHttpOnly()).isTrue();
+    assertThat(refreshCookie.getSecure()).isFalse();
+    assertThat(refreshCookie.getPath()).isEqualTo(BASE_URL);
+    assertThat(refreshCookie.getAttribute("SameSite")).isEqualTo("Strict");
+    assertThat(refreshCookie.getMaxAge()).isPositive();
+
+    Cookie csrfCookie = result.getResponse().getCookie("fps_csrf");
+    assertThat(csrfCookie).isNotNull();
+    assertThat(csrfCookie.isHttpOnly()).isFalse();
+    assertThat(csrfCookie.getSecure()).isFalse();
+    assertThat(csrfCookie.getPath()).isEqualTo(BASE_URL);
+    assertThat(csrfCookie.getAttribute("SameSite")).isEqualTo("Strict");
+    assertThat(csrfCookie.getMaxAge()).isPositive();
+  }
+
+  @Test
+  void refresh_returnsCsrfTokenInvalid_whenHeaderDoesNotMatchCookie() throws Exception {
+    mockMvc
+        .perform(
+            post(BASE_URL + "/refresh")
+                .header("X-CSRF-Token", "wrong-token")
+                .cookie(
+                    new Cookie("fps_refresh", "refresh-token"),
+                    new Cookie("fps_csrf", "csrf-token")))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.error").value("CSRF_TOKEN_INVALID"));
+  }
+
+  @Test
+  void refresh_rotatesBothCookies_whenCsrfHeaderMatchesCookie() throws Exception {
+    String username = "cookie-refresh";
+    String password = "CurrentStrongPassw0rd!";
+    saveActiveUser(username, password, "Cookie Refresh");
+
+    LoginRequest request = new LoginRequest();
+    request.setUsername(username);
+    request.setPassword(password);
+    MvcResult loginResult =
+        mockMvc
+            .perform(
+                post(BASE_URL + "/login")
+                    .header("X-Real-IP", "203.0.114.8")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isOk())
+            .andReturn();
+    Cookie refreshCookie = loginResult.getResponse().getCookie("fps_refresh");
+    Cookie csrfCookie = loginResult.getResponse().getCookie("fps_csrf");
+
+    MvcResult refreshResult =
+        mockMvc
+            .perform(
+                post(BASE_URL + "/refresh")
+                    .header("X-CSRF-Token", csrfCookie.getValue())
+                    .cookie(refreshCookie, csrfCookie)
+                    .header("X-Real-IP", "203.0.114.8"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
+            .andReturn();
+
+    assertThat(refreshResult.getResponse().getCookie("fps_refresh").getValue())
+        .isNotEqualTo(refreshCookie.getValue());
+    assertThat(refreshResult.getResponse().getCookie("fps_csrf").getValue())
+        .isNotEqualTo(csrfCookie.getValue());
+  }
+
+  @Test
+  void logout_clearsRefreshAndCsrfCookies() throws Exception {
+    String username = "cookie-logout";
+    String password = "CurrentStrongPassw0rd!";
+    saveActiveUser(username, password, "Cookie Logout");
+
+    MvcResult result =
+        mockMvc
+            .perform(
+                post(BASE_URL + "/logout")
+                    .header("Authorization", "Bearer " + login(username, password, "203.0.114.9")))
+            .andExpect(status().isNoContent())
+            .andReturn();
+
+    assertThat(result.getResponse().getCookie("fps_refresh").getMaxAge()).isZero();
+    assertThat(result.getResponse().getCookie("fps_csrf").getMaxAge()).isZero();
+  }
+
+  @Test
+  void revokeAll_clearsRefreshAndCsrfCookies() throws Exception {
+    String username = "cookie-revoke-all";
+    String password = "CurrentStrongPassw0rd!";
+    saveActiveUser(username, password, "Cookie Revoke All");
+
+    MvcResult result =
+        mockMvc
+            .perform(
+                post(BASE_URL + "/sessions/revoke-all")
+                    .header("Authorization", "Bearer " + login(username, password, "203.0.114.10")))
+            .andExpect(status().isNoContent())
+            .andReturn();
+
+    assertThat(result.getResponse().getCookie("fps_refresh").getMaxAge()).isZero();
+    assertThat(result.getResponse().getCookie("fps_csrf").getMaxAge()).isZero();
+  }
+
+  private void saveActiveUser(String username, String password, String displayName) {
+    Instant now = Instant.now();
+    userRepositoryPort.save(
+        User.builder()
+            .id(UUID.randomUUID())
+            .username(username)
+            .normalizedUsername(username)
+            .email(username + "@example.com")
+            .normalizedEmail(username + "@example.com")
+            .displayName(displayName)
+            .passwordHash(passwordHasherPort.hash(password))
+            .status(UserStatus.ACTIVE)
+            .roles(Set.of())
+            .mustChangePassword(false)
+            .credentialVersion(1)
+            .passwordChangedAt(now)
+            .emailVerifiedAt(now)
+            .build());
   }
 
   @Test
