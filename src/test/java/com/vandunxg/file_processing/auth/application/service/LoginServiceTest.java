@@ -118,7 +118,7 @@ class LoginServiceTest {
     assertThat(result.getUserId()).isEqualTo(user.getId());
     assertThat(user.getFailedLoginCount()).isZero();
 
-    verify(sessionRepositoryPort).save(any(Session.class));
+    verify(sessionRepositoryPort).save(any(Session.class), anyString());
     verify(credentialVersionCachePort).put(eq(user.getId()), eq(user.getCredentialVersion()));
 
     new ArrayList<>(TransactionSynchronizationManager.getSynchronizations())
@@ -149,7 +149,7 @@ class LoginServiceTest {
     assertThat(result.getPasswordChangeToken()).isNotBlank();
     assertThat(result.getAccessToken()).isNull();
     assertThat(result.getRefreshToken()).isNull();
-    verify(sessionRepositoryPort, never()).save(any(Session.class));
+    verify(sessionRepositoryPort, never()).save(any(Session.class), anyString());
     verify(jwtIssuerPort, never()).issue(any(), any(), anyInt(), any(), any());
     verify(jwtIssuerPort).issuePasswordChange(user.getId(), user.getCredentialVersion(), NOW);
     verifyNoInteractions(refreshTokenGeneratorPort);

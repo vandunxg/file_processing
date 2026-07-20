@@ -14,7 +14,6 @@ class LoginDomainTest {
   private static final Instant NOW = Instant.parse("2026-07-19T10:15:30Z");
   private static final Duration LOCK_DURATION = Duration.ofMinutes(15);
   private static final int MAX_FAILURES = 5;
-  private static final String REFRESH_HASH = "a".repeat(64);
 
   @Test
   void registerFailedLoginIncrementsCounterUntilThresholdThenLocks() {
@@ -80,13 +79,11 @@ class LoginDomainTest {
     UUID userId = UUID.randomUUID();
 
     Session session =
-        Session.issue(
-            id, userId, 1, REFRESH_HASH, "curl/8", "ip-hash".repeat(9), NOW, Duration.ofDays(7));
+        Session.issue(id, userId, 1, "curl/8", "ip-hash".repeat(9), NOW, Duration.ofDays(7));
 
     assertThat(session.getId()).isEqualTo(id);
     assertThat(session.getUserId()).isEqualTo(userId);
     assertThat(session.getCredentialVersion()).isEqualTo(1);
-    assertThat(session.getRefreshTokenHash()).isEqualTo(REFRESH_HASH);
     assertThat(session.getIssuedAt()).isEqualTo(NOW);
     assertThat(session.getLastUsedAt()).isEqualTo(NOW);
     assertThat(session.getExpiresAt()).isEqualTo(NOW.plus(Duration.ofDays(7)));
@@ -101,44 +98,16 @@ class LoginDomainTest {
     UUID userId = UUID.randomUUID();
     Duration ttl = Duration.ofDays(7);
 
-    assertThatThrownBy(() -> Session.issue(null, userId, 1, REFRESH_HASH, "ua", null, NOW, ttl))
+    assertThatThrownBy(() -> Session.issue(null, userId, 1, "ua", null, NOW, ttl))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> Session.issue(id, null, 1, REFRESH_HASH, "ua", null, NOW, ttl))
+    assertThatThrownBy(() -> Session.issue(id, null, 1, "ua", null, NOW, ttl))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> Session.issue(id, userId, 0, REFRESH_HASH, "ua", null, NOW, ttl))
+    assertThatThrownBy(() -> Session.issue(id, userId, 0, "ua", null, NOW, ttl))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> Session.issue(id, userId, 1, "raw-token", "ua", null, NOW, ttl))
+    assertThatThrownBy(() -> Session.issue(id, userId, 1, "ua", " ", NOW, ttl))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> Session.issue(id, userId, 1, "A".repeat(64), "ua", null, NOW, ttl))
+    assertThatThrownBy(() -> Session.issue(id, userId, 1, "ua", null, NOW, Duration.ZERO))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> Session.issue(id, userId, 1, REFRESH_HASH, "ua", " ", NOW, ttl))
-        .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(
-            () -> Session.issue(id, userId, 1, REFRESH_HASH, "ua", null, NOW, Duration.ZERO))
-        .isInstanceOf(IllegalArgumentException.class);
-  }
-
-  @Test
-  void rotateRefreshUpdatesHashAndLastUsedAt() {
-    Session session = defaultSession();
-    String newHash = "b".repeat(64);
-
-    session.rotateRefresh(newHash, NOW.plusSeconds(60));
-
-    assertThat(session.getRefreshTokenHash()).isEqualTo(newHash);
-    assertThat(session.getLastUsedAt()).isEqualTo(NOW.plusSeconds(60));
-  }
-
-  @Test
-  void rotateRefreshRejectsRevokedOrExpiredSession() {
-    Session revoked = defaultSession();
-    revoked.revoke(RevocationReason.LOGOUT, NOW.plusSeconds(1));
-    assertThatThrownBy(() -> revoked.rotateRefresh("b".repeat(64), NOW.plusSeconds(2)))
-        .isInstanceOf(IllegalStateException.class);
-
-    Session expired = defaultSession();
-    assertThatThrownBy(() -> expired.rotateRefresh("b".repeat(64), NOW.plus(Duration.ofDays(7))))
-        .isInstanceOf(IllegalStateException.class);
   }
 
   @Test
@@ -155,14 +124,7 @@ class LoginDomainTest {
 
   private static Session defaultSession() {
     return Session.issue(
-        UUID.randomUUID(),
-        UUID.randomUUID(),
-        1,
-        REFRESH_HASH,
-        "user-agent",
-        null,
-        NOW,
-        Duration.ofDays(7));
+        UUID.randomUUID(), UUID.randomUUID(), 1, "user-agent", null, NOW, Duration.ofDays(7));
   }
 
   private static User activeUser() {

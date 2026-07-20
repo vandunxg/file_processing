@@ -100,6 +100,11 @@ public class RefreshTokenService implements RefreshTokenUseCase {
         sessionRepositoryPort.rotateRefresh(
             sid, incomingHash, newHash, now, session.getExpiresAt());
     if (!rotated) {
+      if (sessionRepositoryPort.resolveReusedSessionIdByHash(incomingHash).isPresent()) {
+        handleReuseCascade(sid, ipHash, now);
+        log.warn("[refresh] token reuse detected during rotation sid={}", sid);
+        throw new AuthDomainException(AuthErrorCode.REFRESH_TOKEN_REUSED);
+      }
       log.warn("[refresh] concurrent rotation detected sid={}", sid);
       throw new AuthDomainException(AuthErrorCode.REFRESH_TOKEN_INVALID);
     }
@@ -146,15 +151,12 @@ public class RefreshTokenService implements RefreshTokenUseCase {
   }
 
   private void handleReuseCascade(UUID sessionId, String ipHash, Instant now) {
-    Optional<Session> maybe = sessionRepositoryPort.findActiveById(sessionId, now);
+    Optional<Session> maybe = sessionRepositoryPort.findById(sessionId);
     UUID userId = maybe.map(Session::getUserId).orElse(null);
+    sessionRepositoryPort.revoke(sessionId, RevocationReason.TOKEN_REUSE, now);
     if (userId == null) {
-      // The archived session tells us who the attacker impersonated; without Redis or a fallback
-      // we cannot fan-out. Revoke the single session and audit — do not error the caller.
-      sessionRepositoryPort.revoke(sessionId, RevocationReason.TOKEN_REUSE, now);
       return;
     }
-    sessionRepositoryPort.revokeAllForUser(userId, RevocationReason.TOKEN_REUSE, now);
     userRepositoryPort
         .findById(userId)
         .ifPresent(

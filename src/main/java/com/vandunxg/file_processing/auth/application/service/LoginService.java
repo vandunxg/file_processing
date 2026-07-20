@@ -128,12 +128,11 @@ public class LoginService implements LoginUseCase {
             IdUtils.nextId(),
             saved.getId(),
             saved.getCredentialVersion(),
-            refreshHash,
             command.getUserAgent(),
             ipHash,
             now,
             authProperties.refresh().tokenTtl());
-    sessionRepositoryPort.save(session);
+    sessionRepositoryPort.save(session, refreshHash);
     credentialVersionCachePort.put(saved.getId(), saved.getCredentialVersion());
 
     List<String> roleCodes = saved.getRoles().stream().map(Role::getCode).toList();
