@@ -36,4 +36,8 @@ public interface JpaRefreshTokenRepository extends JpaRepository<RefreshTokenEnt
       WHERE t.sessionId = :sessionId AND t.revokedAt IS NULL
       """)
   int revokeAllForSession(@Param("sessionId") UUID sessionId, @Param("now") Instant now);
+
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query("DELETE FROM RefreshTokenEntity t WHERE t.sessionId IN :sessionIds")
+  int deleteAllBySessionIdIn(@Param("sessionIds") java.util.List<UUID> sessionIds);
 }

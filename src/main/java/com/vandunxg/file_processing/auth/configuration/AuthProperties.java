@@ -17,6 +17,7 @@ public record AuthProperties(
     Jwt jwt,
     EmailVerification emailVerification,
     PasswordReset passwordReset,
+    Cleanup cleanup,
     Redis redis,
     Amqp amqp) {
 
@@ -51,6 +52,7 @@ public record AuthProperties(
             20,
             5,
             Duration.ofMinutes(15)),
+        new Cleanup(Duration.ofHours(1), 100),
         redis,
         amqp);
   }
@@ -81,6 +83,7 @@ public record AuthProperties(
             20,
             5,
             Duration.ofMinutes(15)),
+        new Cleanup(Duration.ofHours(1), 100),
         redis,
         amqp);
   }
@@ -138,6 +141,16 @@ public record AuthProperties(
       int ipMaxAttemptsPerHour,
       int identifierMaxAttemptsPerWindow,
       Duration identifierWindow) {}
+
+  public record Cleanup(Duration cadence, int batchSize) {
+
+    public Cleanup {
+      if (cadence == null || cadence.isZero() || cadence.isNegative() || batchSize < 1) {
+        throw new IllegalArgumentException(
+            "Cleanup cadence must be positive and batch size at least one");
+      }
+    }
+  }
 
   public record Redis(
       Throttle throttle,

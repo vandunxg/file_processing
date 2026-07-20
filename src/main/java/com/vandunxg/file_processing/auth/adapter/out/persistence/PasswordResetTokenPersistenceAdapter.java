@@ -10,6 +10,7 @@ import com.vandunxg.file_processing.auth.application.port.out.PasswordResetToken
 import com.vandunxg.file_processing.auth.domain.model.PasswordResetToken;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 @RequiredArgsConstructor
@@ -30,6 +31,12 @@ public class PasswordResetTokenPersistenceAdapter implements PasswordResetTokenR
   @Override
   public void invalidateAllForUser(UUID userId, Instant now) {
     repository.invalidateAllForUser(userId, now);
+  }
+
+  @Override
+  @Transactional
+  public int deleteExpired(Instant now, int limit) {
+    return repository.deleteExpired(now, limit);
   }
 
   private PasswordResetTokenEntity toEntity(PasswordResetToken token) {

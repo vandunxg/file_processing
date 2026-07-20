@@ -168,6 +168,68 @@ class RefreshTokenPersistenceAdapterIT extends AuthIntegrationTestBase {
         .isEqualTo(2);
   }
 
+  @Test
+  void deletesExpiredAndRevokedFamiliesButKeepsActiveSessions() {
+    Instant now = Instant.parse("2026-07-20T10:15:30Z");
+    Role operator = roleRepositoryPort.findByCode("OPERATOR").orElseThrow();
+    User user =
+        userRepositoryPort.save(
+            User.register(
+                "refresh-cleanup-" + System.nanoTime(),
+                "refresh-cleanup-" + System.nanoTime() + "@example.com",
+                "Refresh Cleanup",
+                "{bcrypt}$2a$stubhash",
+                operator,
+                now));
+    Session expired =
+        Session.issue(
+            UUID.randomUUID(),
+            user.getId(),
+            user.getCredentialVersion(),
+            "JUnit",
+            null,
+            now.minus(Duration.ofDays(2)),
+            Duration.ofDays(1));
+    Session revoked =
+        Session.issue(
+            UUID.randomUUID(),
+            user.getId(),
+            user.getCredentialVersion(),
+            "JUnit",
+            null,
+            now,
+            Duration.ofDays(1));
+    revoked.revoke(RevocationReason.LOGOUT, now);
+    Session active =
+        Session.issue(
+            UUID.randomUUID(),
+            user.getId(),
+            user.getCredentialVersion(),
+            "JUnit",
+            null,
+            now,
+            Duration.ofDays(1));
+    sessionRepositoryPort.save(expired, "f".repeat(64));
+    sessionRepositoryPort.save(revoked, "a".repeat(64));
+    sessionRepositoryPort.save(active, "b".repeat(64));
+
+    assertThat(sessionRepositoryPort.deleteExpiredOrRevoked(now, 10)).isEqualTo(2);
+    assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM auth_refresh_sessions WHERE id = ?",
+                Integer.class,
+                active.getId()))
+        .isEqualTo(1);
+    assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM auth_refresh_tokens WHERE session_id IN (?, ?)",
+                Integer.class,
+                expired.getId(),
+                revoked.getId()))
+        .isZero();
+    assertThat(sessionRepositoryPort.deleteExpiredOrRevoked(now, 10)).isZero();
+  }
+
   private boolean rotateWhenReady(
       Session session, String oldHash, String newHash, CountDownLatch ready, CountDownLatch start)
       throws InterruptedException {

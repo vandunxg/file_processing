@@ -24,7 +24,9 @@ import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.ResetPasswor
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.VerifyEmailRequest;
 import com.vandunxg.file_processing.auth.application.port.out.EmailSenderPort;
 import com.vandunxg.file_processing.auth.application.port.out.PasswordHasherPort;
+import com.vandunxg.file_processing.auth.application.port.out.RoleRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
+import com.vandunxg.file_processing.auth.application.port.out.UserRoleRepositoryPort;
 import com.vandunxg.file_processing.auth.domain.model.User;
 import com.vandunxg.file_processing.auth.domain.model.UserStatus;
 import com.vandunxg.file_processing.testsupport.AuthIntegrationTestBase;
@@ -71,6 +73,8 @@ class AuthControllerIT extends AuthIntegrationTestBase {
   @Autowired private ObjectMapper objectMapper;
   @Autowired private CapturingEmailSenderPort capturingEmailSenderPort;
   @Autowired private UserRepositoryPort userRepositoryPort;
+  @Autowired private RoleRepositoryPort roleRepositoryPort;
+  @Autowired private UserRoleRepositoryPort userRoleRepositoryPort;
   @Autowired private PasswordHasherPort passwordHasherPort;
 
   @Test
@@ -422,12 +426,16 @@ class AuthControllerIT extends AuthIntegrationTestBase {
   void revokeAll_clearsRefreshAndCsrfCookies() throws Exception {
     String username = "cookie-revoke-all";
     String password = "CurrentStrongPassw0rd!";
-    saveActiveUser(username, password, "Cookie Revoke All");
+    UUID userId = saveActiveUser(username, password, "Cookie Revoke All");
+    userRoleRepositoryPort.replaceRoles(
+        userId,
+        Set.of(roleRepositoryPort.findByCode("OPERATOR").orElseThrow().getId()),
+        Instant.now());
 
     MvcResult result =
         mockMvc
             .perform(
-                post(BASE_URL + "/sessions/revoke-all")
+                post("/api/v1/me/sessions/revoke-all")
                     .header("Authorization", "Bearer " + login(username, password, "203.0.114.10")))
             .andExpect(status().isNoContent())
             .andReturn();
@@ -436,11 +444,12 @@ class AuthControllerIT extends AuthIntegrationTestBase {
     assertThat(result.getResponse().getCookie("fps_csrf").getMaxAge()).isZero();
   }
 
-  private void saveActiveUser(String username, String password, String displayName) {
+  private UUID saveActiveUser(String username, String password, String displayName) {
     Instant now = Instant.now();
+    UUID userId = UUID.randomUUID();
     userRepositoryPort.save(
         User.builder()
-            .id(UUID.randomUUID())
+            .id(userId)
             .username(username)
             .normalizedUsername(username)
             .email(username + "@example.com")
@@ -454,6 +463,7 @@ class AuthControllerIT extends AuthIntegrationTestBase {
             .passwordChangedAt(now)
             .emailVerifiedAt(now)
             .build());
+    return userId;
   }
 
   @Test

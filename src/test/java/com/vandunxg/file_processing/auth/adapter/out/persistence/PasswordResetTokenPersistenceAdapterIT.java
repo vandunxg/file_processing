@@ -48,6 +48,47 @@ class PasswordResetTokenPersistenceAdapterIT extends AuthIntegrationTestBase {
         .isEqualTo(now.plusSeconds(1));
   }
 
+  @Test
+  @Transactional
+  void deletesExpiredTokensInBoundedBatches() {
+    UUID userId = UUID.randomUUID();
+    Instant now = Instant.parse("2026-07-20T10:15:30Z");
+    createUser(userId, now);
+    PasswordResetToken firstExpired =
+        token(userId, "c".repeat(64), now.minus(Duration.ofMinutes(30)));
+    PasswordResetToken secondExpired =
+        token(userId, "d".repeat(64), now.minus(Duration.ofMinutes(31)));
+    PasswordResetToken active = token(userId, "e".repeat(64), now);
+    passwordResetTokenPersistenceAdapter.save(firstExpired);
+    passwordResetTokenPersistenceAdapter.save(secondExpired);
+    passwordResetTokenPersistenceAdapter.save(active);
+
+    assertThat(passwordResetTokenPersistenceAdapter.deleteExpired(now, 1)).isEqualTo(1);
+    assertThat(
+            java.util.stream.Stream.of(firstExpired, secondExpired)
+                .filter(
+                    token ->
+                        passwordResetTokenPersistenceAdapter
+                            .findByTokenHashForUpdate(token.getTokenHash())
+                            .isPresent()))
+        .singleElement()
+        .isIn(firstExpired, secondExpired);
+    assertThat(passwordResetTokenPersistenceAdapter.findByTokenHashForUpdate(active.getTokenHash()))
+        .contains(active);
+    assertThat(passwordResetTokenPersistenceAdapter.deleteExpired(now, 10)).isEqualTo(1);
+    assertThat(
+            passwordResetTokenPersistenceAdapter.findByTokenHashForUpdate(
+                firstExpired.getTokenHash()))
+        .isEmpty();
+    assertThat(
+            passwordResetTokenPersistenceAdapter.findByTokenHashForUpdate(
+                secondExpired.getTokenHash()))
+        .isEmpty();
+    assertThat(passwordResetTokenPersistenceAdapter.findByTokenHashForUpdate(active.getTokenHash()))
+        .contains(active);
+    assertThat(passwordResetTokenPersistenceAdapter.deleteExpired(now, 10)).isZero();
+  }
+
   private static PasswordResetToken token(UUID userId, String tokenHash, Instant now) {
     return PasswordResetToken.issue(
         UUID.randomUUID(), userId, tokenHash, now, Duration.ofMinutes(15), null);

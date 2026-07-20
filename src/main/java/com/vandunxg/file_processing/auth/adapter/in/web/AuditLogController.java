@@ -9,6 +9,7 @@ import com.vandunxg.common.models.dto.response.Response;
 import com.vandunxg.file_processing.auth.application.service.AuditReadService;
 import com.vandunxg.file_processing.auth.domain.model.AuditLog;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,11 +19,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("${app.api.prefix}/${app.api.version}/admin/audit-logs")
 @RequiredArgsConstructor
+@Tag(
+    name = "Admin audit logs",
+    description = "Bearer access token required. `all:manage` satisfies `audit:read`.")
 public class AuditLogController {
 
   private final AuditReadService auditReadService;
 
-  @Operation(summary = "Read security audit logs")
+  @Operation(summary = "Read security audit logs", description = "Requires `audit:read`.")
   @GetMapping
   @PreAuthorize("hasPermission(null, 'audit:read')")
   public Response<List<AuditLogResponse>> list() {

@@ -36,4 +36,20 @@ public interface JpaSessionRepository extends JpaRepository<SessionEntity, UUID>
       @Param("userId") UUID userId,
       @Param("now") Instant now,
       @Param("reason") com.vandunxg.file_processing.auth.domain.model.RevocationReason reason);
+
+  @Query(
+      value =
+          """
+          SELECT id FROM auth_refresh_sessions
+          WHERE deleted_at IS NULL
+            AND (expires_at <= :now OR revoked_at IS NOT NULL)
+          ORDER BY expires_at, revoked_at, id
+          LIMIT :limit
+          """,
+      nativeQuery = true)
+  List<UUID> findExpiredOrRevokedIds(@Param("now") Instant now, @Param("limit") int limit);
+
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query("DELETE FROM SessionEntity s WHERE s.id IN :sessionIds")
+  int deleteAllByIdIn(@Param("sessionIds") List<UUID> sessionIds);
 }

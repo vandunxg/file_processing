@@ -13,4 +13,6 @@ public interface PasswordResetTokenRepositoryPort {
   Optional<PasswordResetToken> findByTokenHashForUpdate(String tokenHash);
 
   void invalidateAllForUser(UUID userId, Instant now);
+
+  int deleteExpired(Instant now, int limit);
 }

@@ -50,6 +50,10 @@ public class SecurityConfiguration {
 
   private static final String[] AUTHENTICATED_URLS = {"/api/**"};
 
+  private static final String[] ACTUATOR_PROBE_URLS = {
+    "/actuator/health/liveness", "/actuator/health/readiness"
+  };
+
   private static final String[] IGNORE_URLS = {
     "/js/*.js",
     "/js/*.html",
@@ -86,6 +90,12 @@ public class SecurityConfiguration {
                     .permitAll()
                     .requestMatchers(PUBLIC_URLS)
                     .permitAll()
+                    .requestMatchers(ACTUATOR_PROBE_URLS)
+                    .permitAll()
+                    .requestMatchers("/actuator/prometheus")
+                    .hasAuthority("all:manage")
+                    .requestMatchers("/actuator/**")
+                    .denyAll()
                     .requestMatchers(AUTHENTICATED_URLS)
                     .authenticated())
         .oauth2ResourceServer(

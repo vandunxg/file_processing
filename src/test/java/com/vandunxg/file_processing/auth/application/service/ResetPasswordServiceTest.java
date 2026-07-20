@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.vandunxg.common.utils.HashUtils;
+import com.vandunxg.file_processing.auth.adapter.out.metrics.AuthMetrics;
 import com.vandunxg.file_processing.auth.application.command.ResetPasswordCommand;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.CredentialVersionCachePort;
@@ -57,6 +58,7 @@ class ResetPasswordServiceTest {
   @Mock private SessionRepositoryPort sessionRepositoryPort;
   @Mock private CredentialVersionCachePort credentialVersionCachePort;
   @Mock private AuditLogEventPublisherPort auditLogEventPublisherPort;
+  @Mock private AuthMetrics authMetrics;
 
   private ResetPasswordService resetPasswordService;
 
@@ -70,6 +72,7 @@ class ResetPasswordServiceTest {
             sessionRepositoryPort,
             credentialVersionCachePort,
             auditLogEventPublisherPort,
+            authMetrics,
             Clock.fixed(NOW, ZoneOffset.UTC));
   }
 
@@ -115,6 +118,7 @@ class ResetPasswordServiceTest {
     verify(auditLogEventPublisherPort).publish(auditCaptor.capture());
     assertThat(auditCaptor.getValue().getOperation())
         .isEqualTo(OperationType.PASSWORD_RESET_COMPLETED);
+    verify(authMetrics).passwordResetCompleted();
   }
 
   @Test
@@ -154,6 +158,7 @@ class ResetPasswordServiceTest {
     assertThat(token.getUsedAt()).isNull();
     verify(tokenRepositoryPort, never()).save(any());
     verifyNoInteractions(passwordHasherPort, sessionRepositoryPort, credentialVersionCachePort);
+    verify(authMetrics).passwordResetRejected();
   }
 
   @Test

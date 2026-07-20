@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.vandunxg.common.utils.HashUtils;
+import com.vandunxg.file_processing.auth.adapter.out.metrics.AuthMetrics;
 import com.vandunxg.file_processing.auth.application.command.ForgotPasswordCommand;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.AuthThrottlePort;
@@ -57,6 +58,7 @@ class ForgotPasswordServiceTest {
   @Mock private VerificationTokenGeneratorPort tokenGeneratorPort;
   @Mock private EmailSenderPort emailSenderPort;
   @Mock private AuditLogEventPublisherPort auditLogEventPublisherPort;
+  @Mock private AuthMetrics authMetrics;
 
   private ForgotPasswordService forgotPasswordService;
 
@@ -70,6 +72,7 @@ class ForgotPasswordServiceTest {
             tokenGeneratorPort,
             emailSenderPort,
             auditLogEventPublisherPort,
+            authMetrics,
             AuthPropertiesFixture.defaults(),
             Clock.fixed(NOW, ZoneOffset.UTC));
   }
@@ -119,6 +122,7 @@ class ForgotPasswordServiceTest {
     verify(auditLogEventPublisherPort).publish(auditCaptor.capture());
     assertThat(auditCaptor.getValue().getOperation())
         .isEqualTo(OperationType.PASSWORD_RESET_REQUESTED);
+    verify(authMetrics).passwordResetRequested();
   }
 
   @Test
@@ -176,6 +180,7 @@ class ForgotPasswordServiceTest {
         tokenGeneratorPort,
         emailSenderPort,
         auditLogEventPublisherPort);
+    verify(authMetrics).forgotPasswordRateLimited();
   }
 
   private static User user(UUID id, UserStatus status) {

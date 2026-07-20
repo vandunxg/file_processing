@@ -22,4 +22,19 @@ public interface JpaPasswordResetTokenRepository
   @Query(
       "update PasswordResetTokenEntity t set t.usedAt = :now where t.userId = :userId and t.usedAt is null")
   void invalidateAllForUser(@Param("userId") UUID userId, @Param("now") Instant now);
+
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query(
+      value =
+          """
+          DELETE FROM auth_password_reset_tokens
+          WHERE id IN (
+            SELECT id FROM auth_password_reset_tokens
+            WHERE expires_at <= :now
+            ORDER BY expires_at, id
+            LIMIT :limit
+          )
+          """,
+      nativeQuery = true)
+  int deleteExpired(@Param("now") Instant now, @Param("limit") int limit);
 }

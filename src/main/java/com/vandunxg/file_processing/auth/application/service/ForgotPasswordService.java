@@ -7,6 +7,7 @@ import java.time.Instant;
 
 import com.vandunxg.common.utils.HashUtils;
 import com.vandunxg.common.utils.IdUtils;
+import com.vandunxg.file_processing.auth.adapter.out.metrics.AuthMetrics;
 import com.vandunxg.file_processing.auth.application.command.ForgotPasswordCommand;
 import com.vandunxg.file_processing.auth.application.port.in.ForgotPasswordUseCase;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
@@ -45,6 +46,7 @@ public class ForgotPasswordService implements ForgotPasswordUseCase {
   private final VerificationTokenGeneratorPort tokenGeneratorPort;
   private final EmailSenderPort emailSenderPort;
   private final AuditLogEventPublisherPort auditLogEventPublisherPort;
+  private final AuthMetrics authMetrics;
   private final AuthProperties authProperties;
   private final Clock clock;
 
@@ -57,12 +59,14 @@ public class ForgotPasswordService implements ForgotPasswordUseCase {
         IP_THROTTLE_PREFIX + ipHash,
         authProperties.passwordReset().ipMaxAttemptsPerHour(),
         IP_WINDOW)) {
+      authMetrics.forgotPasswordRateLimited();
       throw new AuthDomainException(AuthErrorCode.AUTH_RATE_LIMITED);
     }
     if (!throttlePort.tryConsume(
         IDENTIFIER_THROTTLE_PREFIX + hash(normalizedIdentifier),
         authProperties.passwordReset().identifierMaxAttemptsPerWindow(),
         authProperties.passwordReset().identifierWindow())) {
+      authMetrics.forgotPasswordRateLimited();
       throw new AuthDomainException(AuthErrorCode.AUTH_RATE_LIMITED);
     }
 
@@ -86,6 +90,7 @@ public class ForgotPasswordService implements ForgotPasswordUseCase {
             authProperties.passwordReset().tokenTtl(),
             ipHash);
     tokenRepositoryPort.save(token);
+    authMetrics.passwordResetRequested();
 
     AuditLog audit =
         AuditLog.builder()

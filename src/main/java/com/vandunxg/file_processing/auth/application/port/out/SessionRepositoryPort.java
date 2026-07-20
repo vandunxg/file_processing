@@ -38,4 +38,6 @@ public interface SessionRepositoryPort {
   int revokeAllForUser(UUID userId, RevocationReason reason, Instant now);
 
   List<Session> listActiveByUser(UUID userId, Instant now);
+
+  int deleteExpiredOrRevoked(Instant now, int limit);
 }

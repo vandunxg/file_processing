@@ -256,6 +256,10 @@ app:
       identifier-max-attempts-per-window: ${AUTH_PASSWORD_RESET_IDENTIFIER_MAX_PER_WINDOW:5}
       identifier-window: ${AUTH_PASSWORD_RESET_IDENTIFIER_WINDOW:PT15M}
 
+    cleanup:
+      cadence: ${AUTH_CLEANUP_CADENCE:PT1H}
+      batch-size: ${AUTH_CLEANUP_BATCH_SIZE:100}
+
     redis:
       throttle:
         key-prefix: ${AUTH_THROTTLE_REDIS_PREFIX:auth:throttle:}

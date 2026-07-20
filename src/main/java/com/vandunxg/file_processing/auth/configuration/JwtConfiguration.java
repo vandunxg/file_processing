@@ -25,7 +25,9 @@ import com.nimbusds.jose.proc.JWSVerificationKeySelector;
 import com.nimbusds.jose.proc.SecurityContext;
 import com.nimbusds.jwt.proc.DefaultJWTProcessor;
 import com.vandunxg.common.models.UserAuthentication;
+import com.vandunxg.file_processing.auth.adapter.out.metrics.AuthMetrics;
 import com.vandunxg.file_processing.auth.adapter.out.security.CredentialVersionJwtValidator;
+import com.vandunxg.file_processing.auth.adapter.out.security.MetricsJwtDecoder;
 import com.vandunxg.file_processing.auth.adapter.out.security.SessionAllowListJwtValidator;
 import com.vandunxg.file_processing.auth.application.port.out.CredentialVersionCachePort;
 import com.vandunxg.file_processing.auth.application.port.out.SessionRepositoryPort;
@@ -102,6 +104,7 @@ public class JwtConfiguration {
       SessionRepositoryPort sessionRepositoryPort,
       CredentialVersionCachePort credentialVersionCachePort,
       UserRepositoryPort userRepositoryPort,
+      AuthMetrics authMetrics,
       Clock clock) {
     NimbusJwtDecoder decoder = newJwtDecoder(keyMaterial);
 
@@ -120,7 +123,7 @@ public class JwtConfiguration {
     decoder.setJwtValidator(
         new DelegatingOAuth2TokenValidator<>(
             defaults, audienceValidator, typeValidator, sessionAllowList, credentialVersion));
-    return decoder;
+    return new MetricsJwtDecoder(decoder, authMetrics);
   }
 
   @Bean("passwordChangeJwtDecoder")
@@ -128,7 +131,8 @@ public class JwtConfiguration {
       KeyMaterial keyMaterial,
       AuthProperties authProperties,
       CredentialVersionCachePort credentialVersionCachePort,
-      UserRepositoryPort userRepositoryPort) {
+      UserRepositoryPort userRepositoryPort,
+      AuthMetrics authMetrics) {
     NimbusJwtDecoder decoder = newJwtDecoder(keyMaterial);
     OAuth2TokenValidator<Jwt> defaults =
         JwtValidators.createDefaultWithIssuer(authProperties.jwt().issuer());
@@ -142,7 +146,7 @@ public class JwtConfiguration {
     decoder.setJwtValidator(
         new DelegatingOAuth2TokenValidator<>(
             defaults, audienceValidator, typeValidator, credentialVersion));
-    return decoder;
+    return new MetricsJwtDecoder(decoder, authMetrics);
   }
 
   @Bean

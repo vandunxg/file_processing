@@ -3,7 +3,6 @@ package com.vandunxg.file_processing.auth.adapter.in.web;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
-import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -11,27 +10,23 @@ import com.vandunxg.common.models.dto.response.Response;
 import com.vandunxg.common.web.support.IpUtils;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.*;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.LoginResponse;
-import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.MeResponse;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.RegisterResponse;
-import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.SessionResponse;
 import com.vandunxg.file_processing.auth.adapter.in.web.mapper.AuthWebMapper;
 import com.vandunxg.file_processing.auth.adapter.out.security.PasswordChangeTokenDecoder;
 import com.vandunxg.file_processing.auth.application.command.LogoutCommand;
 import com.vandunxg.file_processing.auth.application.command.RefreshTokenCommand;
-import com.vandunxg.file_processing.auth.application.command.RevokeAllSessionsCommand;
-import com.vandunxg.file_processing.auth.application.command.RevokeSessionCommand;
 import com.vandunxg.file_processing.auth.application.port.in.*;
 import com.vandunxg.file_processing.auth.application.port.out.RefreshTokenGeneratorPort;
-import com.vandunxg.file_processing.auth.application.query.GetCurrentUserQuery;
-import com.vandunxg.file_processing.auth.application.query.ListSessionsQuery;
 import com.vandunxg.file_processing.auth.configuration.AuthProperties;
 import com.vandunxg.file_processing.auth.domain.exception.AuthDomainException;
 import com.vandunxg.file_processing.auth.domain.exception.AuthErrorCode;
-import com.vandunxg.file_processing.auth.domain.model.RevocationReason;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -47,6 +42,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("${app.api.prefix}/${app.api.version}/auth")
 @RequiredArgsConstructor
 @Slf4j(topic = "AUTH-CONTROLLER")
+@Tag(name = "Authentication", description = "Public authentication and authenticated session flows")
 public class AuthController {
 
   private static final String AUTH_COOKIE_PATH = "/api/v1/auth";
@@ -63,10 +59,6 @@ public class AuthController {
   private final LoginUseCase loginUseCase;
   private final RefreshTokenUseCase refreshTokenUseCase;
   private final LogoutUseCase logoutUseCase;
-  private final RevokeAllSessionsUseCase revokeAllSessionsUseCase;
-  private final RevokeSessionUseCase revokeSessionUseCase;
-  private final ListSessionsUseCase listSessionsUseCase;
-  private final GetCurrentUserUseCase getCurrentUserUseCase;
   private final AuthWebMapper webMapper;
   private final PasswordChangeTokenDecoder passwordChangeTokenDecoder;
   private final RefreshTokenGeneratorPort refreshTokenGeneratorPort;
@@ -102,8 +94,15 @@ public class AuthController {
     resendVerificationEmailUseCase.resend(webMapper.toCommand(request, clientIp(http)));
   }
 
-  @Operation(summary = "Request a password reset email")
+  @Operation(
+      summary = "Request a password reset email",
+      description = "Unknown usernames or emails return `404 USER_NOT_FOUND`.")
   @SecurityRequirements
+  @ApiResponses({
+    @ApiResponse(responseCode = "204", description = "Password-reset request accepted"),
+    @ApiResponse(responseCode = "404", description = "User not found"),
+    @ApiResponse(responseCode = "429", description = "Password-reset rate limit exceeded")
+  })
   @PostMapping("/forgot-password")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void forgotPassword(
@@ -130,7 +129,9 @@ public class AuthController {
     changePasswordUseCase.change(webMapper.toCommand(request, subjectAsUuid(jwt), clientIp(http)));
   }
 
-  @Operation(summary = "Complete a forced first-login password change")
+  @Operation(
+      summary = "Complete a forced first-login password change",
+      description = "Requires a password-change JWT in the `Authorization` header.")
   @PostMapping("/complete-password-change")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void completePasswordChange(
@@ -157,12 +158,36 @@ public class AuthController {
     return Response.of(webMapper.toResponse(result));
   }
 
-  @Operation(summary = "Rotate the HttpOnly refresh cookie; requires a matching CSRF header")
+  @Operation(
+      summary = "Rotate the HttpOnly refresh cookie",
+      description =
+          "Requires `fps_refresh` and a matching `fps_csrf`/`X-CSRF-Token` double-submit pair. A successful refresh rotates the refresh token and replaces both cookies.")
   @SecurityRequirements
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Access token issued and both auth cookies rotated"),
+    @ApiResponse(
+        responseCode = "401",
+        description = "Refresh token is invalid, expired, revoked, or reused"),
+    @ApiResponse(responseCode = "403", description = "CSRF token is missing or does not match")
+  })
   @PostMapping("/refresh")
   public Response<LoginResponse> refresh(
-      @CookieValue(value = REFRESH_COOKIE, required = false) String refreshToken,
-      @CookieValue(value = CSRF_COOKIE, required = false) String csrfCookie,
+      @Parameter(
+              name = REFRESH_COOKIE,
+              in = ParameterIn.COOKIE,
+              description = "HttpOnly opaque refresh token",
+              required = true)
+          @CookieValue(value = REFRESH_COOKIE, required = false)
+          String refreshToken,
+      @Parameter(
+              name = CSRF_COOKIE,
+              in = ParameterIn.COOKIE,
+              description = "Readable CSRF token that must match the request header",
+              required = true)
+          @CookieValue(value = CSRF_COOKIE, required = false)
+          String csrfCookie,
       @Parameter(
               name = CSRF_HEADER,
               in = ParameterIn.HEADER,
@@ -197,58 +222,6 @@ public class AuthController {
     logoutUseCase.logout(
         LogoutCommand.builder().sessionId(sid).userId(userId).ipAddress(clientIp(http)).build());
     clearAuthCookies(response);
-  }
-
-  @Operation(summary = "Revoke every active session of the caller (sign out everywhere)")
-  @PostMapping("/sessions/revoke-all")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void revokeAll(
-      @AuthenticationPrincipal Jwt jwt, HttpServletRequest http, HttpServletResponse response) {
-    UUID userId = subjectAsUuid(jwt);
-    log.info("[revokeAll] userId={}", userId);
-    revokeAllSessionsUseCase.revokeAll(
-        RevokeAllSessionsCommand.builder()
-            .userId(userId)
-            .reason(RevocationReason.USER_TRIGGERED)
-            .ipAddress(clientIp(http))
-            .build());
-    clearAuthCookies(response);
-  }
-
-  @Operation(summary = "Return the authenticated user's profile")
-  @GetMapping("/me")
-  public Response<MeResponse> me(@AuthenticationPrincipal Jwt jwt) {
-    UUID userId = subjectAsUuid(jwt);
-    var result = getCurrentUserUseCase.me(GetCurrentUserQuery.builder().userId(userId).build());
-    return Response.of(webMapper.toResponse(result));
-  }
-
-  @Operation(summary = "List the caller's active sessions")
-  @GetMapping("/sessions")
-  public Response<List<SessionResponse>> listSessions(@AuthenticationPrincipal Jwt jwt) {
-    UUID userId = subjectAsUuid(jwt);
-    UUID currentSid = sidAsUuid(jwt);
-    var results =
-        listSessionsUseCase.list(
-            ListSessionsQuery.builder().userId(userId).currentSessionId(currentSid).build());
-    return Response.of(results.stream().map(webMapper::toResponse).toList());
-  }
-
-  @Operation(summary = "Revoke one of the caller's sessions by id")
-  @DeleteMapping("/sessions/{sid}")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void revokeSession(
-      @PathVariable UUID sid, @AuthenticationPrincipal Jwt jwt, HttpServletRequest http) {
-    UUID callerUserId = subjectAsUuid(jwt);
-    UUID callerSid = sidAsUuid(jwt);
-    log.info("[revokeSession] callerUserId={} targetSid={}", callerUserId, sid);
-    revokeSessionUseCase.revoke(
-        RevokeSessionCommand.builder()
-            .sessionId(sid)
-            .callerUserId(callerUserId)
-            .callerSessionId(callerSid)
-            .ipAddress(clientIp(http))
-            .build());
   }
 
   private String clientIp(HttpServletRequest http) {

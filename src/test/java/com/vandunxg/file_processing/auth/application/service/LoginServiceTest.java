@@ -21,6 +21,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import com.vandunxg.file_processing.auth.adapter.out.metrics.AuthMetrics;
 import com.vandunxg.file_processing.auth.application.command.LoginCommand;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.AuthThrottlePort;
@@ -68,6 +69,7 @@ class LoginServiceTest {
   @Mock private AuthorityService authorityService;
   @Mock private CredentialVersionCachePort credentialVersionCachePort;
   @Mock private AuditLogEventPublisherPort auditLogEventPublisherPort;
+  @Mock private AuthMetrics authMetrics;
 
   private LoginService loginService;
 
@@ -85,6 +87,7 @@ class LoginServiceTest {
             authorityService,
             credentialVersionCachePort,
             auditLogEventPublisherPort,
+            authMetrics,
             authProperties(),
             clock);
   }
@@ -131,6 +134,7 @@ class LoginServiceTest {
             eq(List.of("OPERATOR")),
             eq(List.of("file:self_create")),
             eq(NOW));
+    verify(authMetrics).loginSucceeded();
 
     new ArrayList<>(TransactionSynchronizationManager.getSynchronizations())
         .forEach(TransactionSynchronization::afterCommit);
@@ -164,6 +168,7 @@ class LoginServiceTest {
     verify(jwtIssuerPort, never()).issue(any(), any(), anyInt(), any(), any(), any());
     verify(jwtIssuerPort).issuePasswordChange(user.getId(), user.getCredentialVersion(), NOW);
     verifyNoInteractions(refreshTokenGeneratorPort);
+    verify(authMetrics).loginSucceeded();
 
     new ArrayList<>(TransactionSynchronizationManager.getSynchronizations())
         .forEach(TransactionSynchronization::afterCommit);
@@ -184,6 +189,7 @@ class LoginServiceTest {
         .isEqualTo(AuthErrorCode.INVALID_CREDENTIALS);
 
     verifyNoInteractions(passwordHasherPort, sessionRepositoryPort, jwtIssuerPort);
+    verify(authMetrics).loginInvalidCredentials();
   }
 
   @Test
@@ -199,6 +205,7 @@ class LoginServiceTest {
         .isEqualTo(AuthErrorCode.ACCOUNT_LOCKED);
 
     verifyNoInteractions(passwordHasherPort, sessionRepositoryPort, jwtIssuerPort);
+    verify(authMetrics).loginLocked();
   }
 
   @Test
@@ -219,6 +226,7 @@ class LoginServiceTest {
 
     assertThat(user.getFailedLoginCount()).isEqualTo(1);
     verifyNoInteractions(sessionRepositoryPort, jwtIssuerPort);
+    verify(authMetrics).loginInvalidCredentials();
 
     new ArrayList<>(TransactionSynchronizationManager.getSynchronizations())
         .forEach(TransactionSynchronization::afterCommit);
@@ -276,6 +284,7 @@ class LoginServiceTest {
 
     verify(userRepositoryPort, never()).save(any());
     verifyNoInteractions(sessionRepositoryPort, jwtIssuerPort, auditLogEventPublisherPort);
+    verify(authMetrics).loginPendingVerification();
   }
 
   @Test
@@ -307,6 +316,7 @@ class LoginServiceTest {
 
     verify(userRepositoryPort, never()).save(any());
     verifyNoInteractions(sessionRepositoryPort, jwtIssuerPort);
+    verify(authMetrics).loginDisabled();
   }
 
   @Test
@@ -320,6 +330,7 @@ class LoginServiceTest {
         .isEqualTo(AuthErrorCode.AUTH_RATE_LIMITED);
 
     verifyNoInteractions(userRepositoryPort, passwordHasherPort);
+    verify(authMetrics).loginRateLimited();
   }
 
   private static LoginCommand loginCommand() {

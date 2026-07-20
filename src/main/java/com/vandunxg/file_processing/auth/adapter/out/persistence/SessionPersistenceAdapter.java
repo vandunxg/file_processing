@@ -146,4 +146,15 @@ public class SessionPersistenceAdapter implements SessionRepositoryPort {
         .filter(session -> session.isActive(now))
         .toList();
   }
+
+  @Override
+  @Transactional
+  public int deleteExpiredOrRevoked(Instant now, int limit) {
+    List<UUID> sessionIds = jpaSessionRepository.findExpiredOrRevokedIds(now, limit);
+    if (sessionIds.isEmpty()) {
+      return 0;
+    }
+    jpaRefreshTokenRepository.deleteAllBySessionIdIn(sessionIds);
+    return jpaSessionRepository.deleteAllByIdIn(sessionIds);
+  }
 }

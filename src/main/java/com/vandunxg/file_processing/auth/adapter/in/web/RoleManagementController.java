@@ -14,6 +14,7 @@ import com.vandunxg.file_processing.auth.domain.model.ResourceCode;
 import com.vandunxg.file_processing.auth.domain.model.Role;
 import com.vandunxg.file_processing.auth.domain.model.RolePermission;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -34,40 +35,45 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("${app.api.prefix}/${app.api.version}/roles")
 @RequiredArgsConstructor
+@Tag(
+    name = "Admin roles",
+    description = "Bearer access token required. `all:manage` satisfies every role permission.")
 public class RoleManagementController {
 
   private final RoleManagementService roleManagementService;
   private final PermissionCatalogService permissionCatalogService;
 
-  @Operation(summary = "List roles")
+  @Operation(summary = "List roles", description = "Requires `role:read` or `user:read`.")
   @GetMapping
   @PreAuthorize("hasPermission(null, 'role:read') or hasPermission(null, 'user:read')")
   public Response<List<RoleResponse>> list() {
     return Response.of(roleManagementService.list().stream().map(RoleResponse::from).toList());
   }
 
-  @Operation(summary = "Read the permission resource catalog")
+  @Operation(
+      summary = "Read the permission resource catalog",
+      description = "Requires `role:read`.")
   @GetMapping("/resources")
   @PreAuthorize("hasPermission(null, 'role:read')")
   public Response<List<ResourceCode>> resources() {
     return Response.of(permissionCatalogService.resources());
   }
 
-  @Operation(summary = "Read the permission catalog")
+  @Operation(summary = "Read the permission catalog", description = "Requires `role:read`.")
   @GetMapping("/permissions")
   @PreAuthorize("hasPermission(null, 'role:read')")
   public Response<List<PermissionCatalogService.ResourcePermission>> permissions() {
     return Response.of(permissionCatalogService.permissions());
   }
 
-  @Operation(summary = "Read a role")
+  @Operation(summary = "Read a role", description = "Requires `role:read`.")
   @GetMapping("/{roleId}")
   @PreAuthorize("hasPermission(null, 'role:read')")
   public Response<RoleResponse> detail(@PathVariable UUID roleId) {
     return Response.of(RoleResponse.from(roleManagementService.detail(roleId)));
   }
 
-  @Operation(summary = "Create a mutable role")
+  @Operation(summary = "Create a mutable role", description = "Requires `role:create`.")
   @PostMapping
   @PreAuthorize("hasPermission(null, 'role:create')")
   public Response<RoleResponse> create(
@@ -82,7 +88,9 @@ public class RoleManagementController {
                 permissions(request))));
   }
 
-  @Operation(summary = "Update a role and replace its permission set")
+  @Operation(
+      summary = "Update a role and replace its permission set",
+      description = "Requires `role:update`.")
   @PostMapping("/{roleId}/update")
   @PreAuthorize("hasPermission(null, 'role:update')")
   public Response<RoleResponse> update(
@@ -100,7 +108,7 @@ public class RoleManagementController {
                 permissions(request))));
   }
 
-  @Operation(summary = "Set or clear role inheritance")
+  @Operation(summary = "Set or clear role inheritance", description = "Requires `role:update`.")
   @PostMapping("/inheritance")
   @PreAuthorize("hasPermission(null, 'role:update')")
   public Response<RoleResponse> setInheritance(
@@ -111,7 +119,7 @@ public class RoleManagementController {
                 subject(jwt), request.roleId(), request.roleInheritedId())));
   }
 
-  @Operation(summary = "Activate a role")
+  @Operation(summary = "Activate a role", description = "Requires `role:update`.")
   @PostMapping("/{roleId}/active")
   @PreAuthorize("hasPermission(null, 'role:update')")
   public Response<RoleResponse> activate(
@@ -119,7 +127,7 @@ public class RoleManagementController {
     return Response.of(RoleResponse.from(roleManagementService.activate(subject(jwt), roleId)));
   }
 
-  @Operation(summary = "Inactivate a role")
+  @Operation(summary = "Inactivate a role", description = "Requires `role:update`.")
   @PostMapping("/{roleId}/inactive")
   @PreAuthorize("hasPermission(null, 'role:update')")
   public Response<RoleResponse> inactivate(
@@ -127,7 +135,9 @@ public class RoleManagementController {
     return Response.of(RoleResponse.from(roleManagementService.inactivate(subject(jwt), roleId)));
   }
 
-  @Operation(summary = "Delete an inactive, unassigned mutable role")
+  @Operation(
+      summary = "Delete an inactive, unassigned mutable role",
+      description = "Requires `role:delete`.")
   @PostMapping("/{roleId}/delete")
   @PreAuthorize("hasPermission(null, 'role:delete')")
   public Response<Void> delete(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID roleId) {

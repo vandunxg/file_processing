@@ -17,6 +17,7 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.vandunxg.file_processing.auth.adapter.out.metrics.AuthMetrics;
 import com.vandunxg.file_processing.auth.application.command.RefreshTokenCommand;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.AuthThrottlePort;
@@ -50,6 +51,7 @@ class RefreshTokenServiceTest {
   @Mock private RefreshTokenGeneratorPort refreshTokenGeneratorPort;
   @Mock private SessionRepositoryPort sessionRepositoryPort;
   @Mock private UserRepositoryPort userRepositoryPort;
+  @Mock private AuthMetrics authMetrics;
 
   private RefreshTokenService refreshTokenService;
 
@@ -65,6 +67,7 @@ class RefreshTokenServiceTest {
             jwtIssuerPort,
             authorityService,
             auditLogEventPublisherPort,
+            authMetrics,
             authProperties(),
             Clock.fixed(NOW, ZoneOffset.UTC));
   }
@@ -100,6 +103,7 @@ class RefreshTokenServiceTest {
         .revokeAllForUser(any(UUID.class), eq(RevocationReason.TOKEN_REUSE), eq(NOW));
     verify(userRepositoryPort).save(user);
     verify(credentialVersionCachePort).invalidate(userId);
+    verify(authMetrics).refreshTokenReused();
   }
 
   @Test
@@ -135,6 +139,19 @@ class RefreshTokenServiceTest {
     assertThat(user.getCredentialVersion()).isEqualTo(2);
     verify(sessionRepositoryPort).revoke(sessionId, RevocationReason.TOKEN_REUSE, NOW);
     verify(credentialVersionCachePort).invalidate(userId);
+    verify(authMetrics).refreshTokenReused();
+  }
+
+  @Test
+  void refreshRecordsRateLimitDenials() {
+    when(throttlePort.tryConsume(anyString(), anyInt(), any(Duration.class))).thenReturn(false);
+
+    assertThatThrownBy(() -> refreshTokenService.refresh(refreshCommand()))
+        .isInstanceOf(AuthDomainException.class)
+        .extracting("error")
+        .isEqualTo(AuthErrorCode.AUTH_RATE_LIMITED);
+
+    verify(authMetrics).refreshRateLimited();
   }
 
   private static RefreshTokenCommand refreshCommand() {

@@ -7,6 +7,7 @@ import java.util.Objects;
 
 import com.vandunxg.common.utils.HashUtils;
 import com.vandunxg.common.utils.IdUtils;
+import com.vandunxg.file_processing.auth.adapter.out.metrics.AuthMetrics;
 import com.vandunxg.file_processing.auth.application.command.ResetPasswordCommand;
 import com.vandunxg.file_processing.auth.application.port.in.ResetPasswordUseCase;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
@@ -42,6 +43,7 @@ public class ResetPasswordService implements ResetPasswordUseCase {
   private final SessionRepositoryPort sessionRepositoryPort;
   private final CredentialVersionCachePort credentialVersionCachePort;
   private final AuditLogEventPublisherPort auditLogEventPublisherPort;
+  private final AuthMetrics authMetrics;
   private final Clock clock;
   private final PasswordPolicy passwordPolicy = new PasswordPolicy();
 
@@ -51,29 +53,29 @@ public class ResetPasswordService implements ResetPasswordUseCase {
     PasswordResetToken token =
         tokenRepositoryPort
             .findByTokenHashForUpdate(hash(command.getToken()))
-            .orElseThrow(() -> new AuthDomainException(AuthErrorCode.PASSWORD_RESET_TOKEN_INVALID));
+            .orElseThrow(() -> rejected(AuthErrorCode.PASSWORD_RESET_TOKEN_INVALID));
     Instant now = Instant.now(clock);
     if (!token.isUsableAt(now)) {
-      throw new AuthDomainException(AuthErrorCode.PASSWORD_RESET_TOKEN_INVALID);
+      throw rejected(AuthErrorCode.PASSWORD_RESET_TOKEN_INVALID);
     }
 
     User user =
         userRepositoryPort
             .findById(token.getUserId())
-            .orElseThrow(() -> new AuthDomainException(AuthErrorCode.PASSWORD_RESET_TOKEN_INVALID));
+            .orElseThrow(() -> rejected(AuthErrorCode.PASSWORD_RESET_TOKEN_INVALID));
     if (!user.isActive() && !user.isPendingVerify()) {
-      throw new AuthDomainException(AuthErrorCode.PASSWORD_RESET_TOKEN_INVALID);
+      throw rejected(AuthErrorCode.PASSWORD_RESET_TOKEN_INVALID);
     }
     if (!Objects.equals(command.getNewPassword(), command.getConfirmPassword())) {
-      throw new AuthDomainException(AuthErrorCode.PASSWORD_CONFIRMATION_MISMATCH);
+      throw rejected(AuthErrorCode.PASSWORD_CONFIRMATION_MISMATCH);
     }
     if (!passwordPolicy
         .validate(command.getNewPassword(), user.getNormalizedUsername(), user.getNormalizedEmail())
         .valid()) {
-      throw new AuthDomainException(AuthErrorCode.PASSWORD_POLICY_VIOLATION);
+      throw rejected(AuthErrorCode.PASSWORD_POLICY_VIOLATION);
     }
     if (passwordHasherPort.matches(command.getNewPassword(), user.getPasswordHash())) {
-      throw new AuthDomainException(AuthErrorCode.PASSWORD_SAME_AS_CURRENT);
+      throw rejected(AuthErrorCode.PASSWORD_SAME_AS_CURRENT);
     }
 
     token.consume(now);
@@ -82,6 +84,7 @@ public class ResetPasswordService implements ResetPasswordUseCase {
     userRepositoryPort.save(user);
     sessionRepositoryPort.revokeAllForUser(user.getId(), RevocationReason.PASSWORD_CHANGED, now);
     credentialVersionCachePort.invalidate(user.getId());
+    authMetrics.passwordResetCompleted();
 
     AuditLog audit =
         AuditLog.builder()
@@ -115,5 +118,10 @@ public class ResetPasswordService implements ResetPasswordUseCase {
 
   private static String hash(String value) {
     return value == null ? null : HashUtils.sha256(value.getBytes(StandardCharsets.UTF_8));
+  }
+
+  private AuthDomainException rejected(AuthErrorCode errorCode) {
+    authMetrics.passwordResetRejected();
+    return new AuthDomainException(errorCode);
   }
 }

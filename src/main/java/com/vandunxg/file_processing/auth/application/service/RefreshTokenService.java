@@ -10,6 +10,7 @@ import java.util.UUID;
 
 import com.vandunxg.common.utils.HashUtils;
 import com.vandunxg.common.utils.IdUtils;
+import com.vandunxg.file_processing.auth.adapter.out.metrics.AuthMetrics;
 import com.vandunxg.file_processing.auth.application.command.RefreshTokenCommand;
 import com.vandunxg.file_processing.auth.application.port.in.RefreshTokenUseCase;
 import com.vandunxg.file_processing.auth.application.port.out.*;
@@ -41,6 +42,7 @@ public class RefreshTokenService implements RefreshTokenUseCase {
   private final JwtIssuerPort jwtIssuerPort;
   private final AuthorityService authorityService;
   private final AuditLogEventPublisherPort auditLogEventPublisherPort;
+  private final AuthMetrics authMetrics;
   private final AuthProperties authProperties;
   private final Clock clock;
 
@@ -50,6 +52,7 @@ public class RefreshTokenService implements RefreshTokenUseCase {
     String ipHash = hashIp(command.getIpAddress());
     if (!throttlePort.tryConsume(
         IP_THROTTLE_PREFIX + ipHash, authProperties.login().refreshIpMaxPerHour(), IP_WINDOW)) {
+      authMetrics.refreshRateLimited();
       log.warn("[refresh] rate limited by ip");
       throw new AuthDomainException(AuthErrorCode.AUTH_RATE_LIMITED);
     }
@@ -153,6 +156,7 @@ public class RefreshTokenService implements RefreshTokenUseCase {
   }
 
   private void handleReuseCascade(UUID sessionId, String ipHash, Instant now) {
+    authMetrics.refreshTokenReused();
     Optional<Session> maybe = sessionRepositoryPort.findById(sessionId);
     UUID userId = maybe.map(Session::getUserId).orElse(null);
     sessionRepositoryPort.revoke(sessionId, RevocationReason.TOKEN_REUSE, now);
