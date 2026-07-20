@@ -3,6 +3,8 @@ package com.vandunxg.file_processing.auth.adapter.out.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -12,6 +14,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.vandunxg.file_processing.auth.application.port.out.RoleRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
+import com.vandunxg.file_processing.auth.application.port.out.UserRoleRepositoryPort;
 import com.vandunxg.file_processing.auth.domain.model.Role;
 import com.vandunxg.file_processing.auth.domain.model.User;
 import com.vandunxg.file_processing.testsupport.AuthIntegrationTestBase;
@@ -33,6 +36,7 @@ class UserPersistenceAdapterIT extends AuthIntegrationTestBase {
 
   @Autowired private UserRepositoryPort userRepositoryPort;
   @Autowired private RoleRepositoryPort roleRepositoryPort;
+  @Autowired private UserRoleRepositoryPort userRoleRepositoryPort;
 
   @Test
   void save_exactlyOneWinsAndTheOtherThrowsDataIntegrityViolation_whenSameNormalizedUsernameRaces()
@@ -82,6 +86,27 @@ class UserPersistenceAdapterIT extends AuthIntegrationTestBase {
     } finally {
       executor.shutdown();
     }
+  }
+
+  @Test
+  void countActiveAdminsCountsUsersWithTheActiveAdminRole() {
+    Role adminRole = roleRepositoryPort.findByCode("ADMIN").orElseThrow();
+    long before = userRepositoryPort.countActiveAdmins();
+    Instant now = Instant.now();
+    User admin =
+        User.adminCreate(
+            "admin-count-" + System.nanoTime(),
+            "admin-count-" + UUID.randomUUID() + "@example.com",
+            "Admin Count",
+            "{bcrypt}$2a$stubhash",
+            Set.of(adminRole),
+            true,
+            now);
+
+    User saved = userRepositoryPort.save(admin);
+    userRoleRepositoryPort.replaceRoles(saved.getId(), Set.of(adminRole.getId()), now);
+
+    assertThat(userRepositoryPort.countActiveAdmins()).isEqualTo(before + 1);
   }
 
   private boolean attemptSave(User user, CountDownLatch ready, CountDownLatch start)

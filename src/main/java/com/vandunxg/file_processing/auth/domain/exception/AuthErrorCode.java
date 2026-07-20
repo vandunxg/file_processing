@@ -26,7 +26,14 @@ public enum AuthErrorCode implements ResponseError {
   REFRESH_TOKEN_REUSED(40103, "Refresh token was already used", 401),
   PASSWORD_CHANGE_TOKEN_INVALID(40106, "Password change token is invalid, expired, or stale", 401),
   SESSION_NOT_FOUND(40402, "Session not found", 404),
-  INVALID_ROLE(50001, "Role is invalid or not supported", 500);
+  INVALID_ROLE(42201, "Role is invalid or not supported", 422),
+  ROLE_NOT_FOUND(40403, "Role not found", 404),
+  ROLE_CODE_ALREADY_EXISTS(40908, "Role code already exists", 409),
+  ROLE_INHERITANCE_CYCLE(40909, "Role inheritance would create a cycle", 409),
+  ROLE_STILL_ASSIGNED(40910, "Role is still assigned to users", 409),
+  ROLE_IS_CONST(40911, "System role cannot be changed this way", 409),
+  LAST_ACTIVE_ADMIN(40912, "At least one active administrator is required", 409),
+  ROLE_IS_ACTIVE(40913, "Role must be inactive before deletion", 409);
 
   private final Integer code;
   private final String message;

@@ -1,9 +1,11 @@
 package com.vandunxg.file_processing.auth.adapter.out.persistence.entity;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
@@ -22,4 +24,16 @@ public interface JpaUserRepository extends JpaRepository<UserEntity, UUID> {
 
   @Query("select u.credentialVersion from UserEntity u where u.id = :id and u.deletedAt is null")
   Optional<Integer> findCredentialVersionByIdAndDeletedAtIsNull(UUID id);
+
+  List<UserEntity> findAllByDeletedAtIsNullOrderByCreatedAtDesc();
+
+  @Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+  Optional<UserEntity> findWithLockByIdAndDeletedAtIsNull(UUID id);
+
+  @Query(
+      "select count(u) from UserEntity u join UserRoleEntity ur on ur.userId = u.id "
+          + "join RoleEntity r on r.id = ur.roleId "
+          + "where r.code = 'ADMIN' and r.deletedAt is null and ur.deletedAt is null "
+          + "and u.deletedAt is null and u.status = com.vandunxg.file_processing.auth.domain.model.UserStatus.ACTIVE")
+  long countActiveAdmins();
 }

@@ -46,6 +46,7 @@ class RefreshTokenServiceTest {
   @Mock private AuthThrottlePort throttlePort;
   @Mock private CredentialVersionCachePort credentialVersionCachePort;
   @Mock private JwtIssuerPort jwtIssuerPort;
+  @Mock private AuthorityService authorityService;
   @Mock private RefreshTokenGeneratorPort refreshTokenGeneratorPort;
   @Mock private SessionRepositoryPort sessionRepositoryPort;
   @Mock private UserRepositoryPort userRepositoryPort;
@@ -62,6 +63,7 @@ class RefreshTokenServiceTest {
             credentialVersionCachePort,
             refreshTokenGeneratorPort,
             jwtIssuerPort,
+            authorityService,
             auditLogEventPublisherPort,
             authProperties(),
             Clock.fixed(NOW, ZoneOffset.UTC));

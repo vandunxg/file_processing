@@ -53,6 +53,26 @@ public class UserPersistenceAdapter implements UserRepositoryPort {
   }
 
   @Override
+  public Optional<User> findByIdForUpdate(UUID id) {
+    return jpaUserRepository
+        .findWithLockByIdAndDeletedAtIsNull(id)
+        .map(userPersistenceMapper::toDomain)
+        .map(this::enrich);
+  }
+
+  @Override
+  public List<User> findAll() {
+    return enrichAll(
+        userPersistenceMapper.toDomain(
+            jpaUserRepository.findAllByDeletedAtIsNullOrderByCreatedAtDesc()));
+  }
+
+  @Override
+  public long countActiveAdmins() {
+    return jpaUserRepository.countActiveAdmins();
+  }
+
+  @Override
   public Optional<User> findByNormalizedIdentifier(String normalizedIdentifier) {
     if (normalizedIdentifier != null && normalizedIdentifier.contains("@")) {
       return jpaUserRepository

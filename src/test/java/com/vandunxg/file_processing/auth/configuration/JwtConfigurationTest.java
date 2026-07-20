@@ -11,8 +11,10 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import com.nimbusds.jose.jwk.JWK;
+import com.vandunxg.common.models.UserAuthentication;
 import org.junit.jupiter.api.Test;
 
 class JwtConfigurationTest {
@@ -150,12 +152,14 @@ class JwtConfigurationTest {
             Map.of("alg", "RS256"),
             Map.of(
                 "sub",
-                "user",
+                UUID.randomUUID().toString(),
                 "roles",
                 List.of("OPERATOR"),
                 "permissions",
                 List.of("job:self_read")));
 
+    assertThat(configuration.jwtAuthenticationConverter().convert(jwt))
+        .isInstanceOf(UserAuthentication.class);
     assertThat(configuration.jwtAuthenticationConverter().convert(jwt).getAuthorities())
         .extracting(authority -> authority.getAuthority())
         .contains("ROLE_OPERATOR", "job:self_read");

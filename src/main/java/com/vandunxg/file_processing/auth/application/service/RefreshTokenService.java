@@ -39,6 +39,7 @@ public class RefreshTokenService implements RefreshTokenUseCase {
   private final CredentialVersionCachePort credentialVersionCachePort;
   private final RefreshTokenGeneratorPort refreshTokenGeneratorPort;
   private final JwtIssuerPort jwtIssuerPort;
+  private final AuthorityService authorityService;
   private final AuditLogEventPublisherPort auditLogEventPublisherPort;
   private final AuthProperties authProperties;
   private final Clock clock;
@@ -121,7 +122,8 @@ public class RefreshTokenService implements RefreshTokenUseCase {
         user.getRoles() == null ? List.of() : user.getRoles().stream().map(Role::getCode).toList();
 
     JwtIssuerPort.IssuedAccessToken accessToken =
-        jwtIssuerPort.issue(user.getId(), sid, currentCv, roleCodes, now);
+        jwtIssuerPort.issue(
+            user.getId(), sid, currentCv, roleCodes, authorityService.permissionsFor(user), now);
 
     publishAuditAfterCommit(
         AuditLog.builder()

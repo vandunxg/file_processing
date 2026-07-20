@@ -25,7 +25,12 @@ public class NimbusJwtIssuerAdapter implements JwtIssuerPort {
 
   @Override
   public IssuedAccessToken issue(
-      UUID userId, UUID sessionId, int credentialVersion, List<String> roles, Instant now) {
+      UUID userId,
+      UUID sessionId,
+      int credentialVersion,
+      List<String> roles,
+      List<String> permissions,
+      Instant now) {
     Instant expiresAt = now.plus(authProperties.jwt().accessTokenTtl());
     JwtClaimsSet claims =
         JwtClaimsSet.builder()
@@ -36,6 +41,7 @@ public class NimbusJwtIssuerAdapter implements JwtIssuerPort {
             .claim("cv", credentialVersion)
             .claim("typ", "access")
             .claim("roles", roles == null ? List.of() : roles)
+            .claim("permissions", permissions == null ? List.of() : permissions)
             .issuedAt(now)
             .expiresAt(expiresAt)
             .id(sessionId + ":" + now.getEpochSecond())

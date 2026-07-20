@@ -16,20 +16,13 @@ import org.mapstruct.ReportingPolicy;
     unmappedSourcePolicy = ReportingPolicy.WARN)
 public interface RolePersistenceMapper extends EntityMapper<Role, RoleEntity> {
 
-  // roleInheritedId, name, description, isConst and version have no domain field to receive
-  // them; they are simply left unmapped (unmappedSourcePolicy = WARN, not an error).
   @Override
+  @Mapping(target = "isConst", source = "const")
+  @Mapping(target = "permissions", ignore = true)
   Role toDomain(RoleEntity entity);
 
-  // This delivery only reads roles, never writes one (RoleRepositoryPort is read-only), so this
-  // method is never called in practice; ignores below keep the build green and give the entity
-  // safe defaults (see RoleEntity field initializers) if it is ever invoked.
   @Override
-  @Mapping(target = "roleInheritedId", ignore = true)
-  @Mapping(target = "name", ignore = true)
-  @Mapping(target = "description", ignore = true)
-  @Mapping(target = "const", ignore = true)
-  @Mapping(target = "version", ignore = true)
+  @Mapping(target = "const", source = "const")
   @Mapping(target = "createdAt", ignore = true)
   @Mapping(target = "lastModifiedAt", ignore = true)
   @Mapping(target = "createdBy", ignore = true)

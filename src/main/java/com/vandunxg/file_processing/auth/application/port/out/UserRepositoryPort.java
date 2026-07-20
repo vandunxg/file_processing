@@ -1,5 +1,6 @@
 package com.vandunxg.file_processing.auth.application.port.out;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -16,6 +17,12 @@ public interface UserRepositoryPort {
 
   /** Returns the fully hydrated aggregate, including roles. */
   Optional<User> findById(UUID id);
+
+  Optional<User> findByIdForUpdate(UUID id);
+
+  List<User> findAll();
+
+  long countActiveAdmins();
 
   /**
    * Returns the fully hydrated aggregate, including roles. '@' present -> email lookup, else

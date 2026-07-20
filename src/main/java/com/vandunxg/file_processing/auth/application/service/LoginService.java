@@ -39,6 +39,7 @@ public class LoginService implements LoginUseCase {
   private final RefreshTokenGeneratorPort refreshTokenGeneratorPort;
   private final SessionRepositoryPort sessionRepositoryPort;
   private final JwtIssuerPort jwtIssuerPort;
+  private final AuthorityService authorityService;
   private final CredentialVersionCachePort credentialVersionCachePort;
   private final AuditLogEventPublisherPort auditLogEventPublisherPort;
   private final AuthProperties authProperties;
@@ -136,9 +137,15 @@ public class LoginService implements LoginUseCase {
     credentialVersionCachePort.put(saved.getId(), saved.getCredentialVersion());
 
     List<String> roleCodes = saved.getRoles().stream().map(Role::getCode).toList();
+    List<String> permissions = authorityService.permissionsFor(saved);
     JwtIssuerPort.IssuedAccessToken accessToken =
         jwtIssuerPort.issue(
-            saved.getId(), session.getId(), saved.getCredentialVersion(), roleCodes, now);
+            saved.getId(),
+            session.getId(),
+            saved.getCredentialVersion(),
+            roleCodes,
+            permissions,
+            now);
 
     publishAfterCommit(auditLog);
 

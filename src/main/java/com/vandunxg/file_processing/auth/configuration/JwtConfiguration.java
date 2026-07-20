@@ -13,6 +13,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.jwk.JWK;
@@ -23,6 +24,7 @@ import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.JWSVerificationKeySelector;
 import com.nimbusds.jose.proc.SecurityContext;
 import com.nimbusds.jwt.proc.DefaultJWTProcessor;
+import com.vandunxg.common.models.UserAuthentication;
 import com.vandunxg.file_processing.auth.adapter.out.security.CredentialVersionJwtValidator;
 import com.vandunxg.file_processing.auth.adapter.out.security.SessionAllowListJwtValidator;
 import com.vandunxg.file_processing.auth.application.port.out.CredentialVersionCachePort;
@@ -31,11 +33,12 @@ import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.jwt.*;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 
 /** Wires the configured RSA keypair used to sign and verify access tokens. */
@@ -143,22 +146,18 @@ public class JwtConfiguration {
   }
 
   @Bean
-  JwtAuthenticationConverter jwtAuthenticationConverter() {
+  Converter<Jwt, AbstractAuthenticationToken> jwtAuthenticationConverter() {
     JwtGrantedAuthoritiesConverter roles = new JwtGrantedAuthoritiesConverter();
     roles.setAuthoritiesClaimName("roles");
     roles.setAuthorityPrefix("ROLE_");
     JwtGrantedAuthoritiesConverter permissions = new JwtGrantedAuthoritiesConverter();
     permissions.setAuthoritiesClaimName("permissions");
     permissions.setAuthorityPrefix("");
-    JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-    converter.setJwtGrantedAuthoritiesConverter(
-        jwt -> {
-          Collection<GrantedAuthority> authorities = new ArrayList<>(roles.convert(jwt));
-          authorities.addAll(permissions.convert(jwt));
-          return authorities;
-        });
-    converter.setPrincipalClaimName("sub");
-    return converter;
+    return jwt -> {
+      Collection<GrantedAuthority> authorities = new ArrayList<>(roles.convert(jwt));
+      authorities.addAll(permissions.convert(jwt));
+      return new UserAuthentication(jwt, authorities, UUID.fromString(jwt.getSubject()));
+    };
   }
 
   public record KeyMaterial(

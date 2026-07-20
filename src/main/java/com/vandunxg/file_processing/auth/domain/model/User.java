@@ -99,6 +99,41 @@ public class User extends AuditableDomain {
         .build();
   }
 
+  public static User adminCreate(
+      String username,
+      String email,
+      String displayName,
+      String passwordHash,
+      Set<Role> roles,
+      boolean autoVerifyEmail,
+      Instant now) {
+    if (passwordHash == null
+        || passwordHash.isBlank()
+        || roles == null
+        || roles.isEmpty()
+        || now == null) {
+      throw new IllegalArgumentException("A user requires a password, role, and creation time");
+    }
+    if (roles.stream().anyMatch(role -> role == null || !role.isActive())) {
+      throw new AuthDomainException(AuthErrorCode.INVALID_ROLE);
+    }
+    return User.builder()
+        .id(IdUtils.nextId())
+        .username(normalizeVisible(username))
+        .normalizedUsername(normalize(username))
+        .email(normalize(email))
+        .normalizedEmail(normalize(email))
+        .displayName(normalizeDisplayName(displayName))
+        .passwordHash(passwordHash)
+        .roles(Set.copyOf(roles))
+        .status(autoVerifyEmail ? UserStatus.ACTIVE : UserStatus.PENDING_VERIFY)
+        .mustChangePassword(true)
+        .credentialVersion(1)
+        .passwordChangedAt(now)
+        .emailVerifiedAt(autoVerifyEmail ? now : null)
+        .build();
+  }
+
   public static String normalize(String value) {
     return normalizeVisible(value).toLowerCase(Locale.ROOT);
   }
@@ -189,6 +224,51 @@ public class User extends AuditableDomain {
     this.passwordHash = passwordHash;
     this.mustChangePassword = false;
     bumpCredentialVersion(now);
+  }
+
+  public void updateByAdmin(String email, String displayName, Set<Role> roles) {
+    if (email == null || displayName == null || roles == null || roles.isEmpty()) {
+      throw new IllegalArgumentException("Email, display name, and at least one role are required");
+    }
+    if (roles.stream().anyMatch(role -> role == null || !role.isActive())) {
+      throw new AuthDomainException(AuthErrorCode.INVALID_ROLE);
+    }
+    this.email = normalize(email);
+    this.normalizedEmail = normalize(email);
+    this.displayName = normalizeDisplayName(displayName);
+    this.roles = Set.copyOf(roles);
+  }
+
+  public void disable() {
+    if (isDeleted()) {
+      throw new AuthDomainException(AuthErrorCode.USER_NOT_FOUND);
+    }
+    this.status = UserStatus.DISABLED;
+  }
+
+  public void enable() {
+    if (status == UserStatus.DISABLED) {
+      this.status = UserStatus.ACTIVE;
+    }
+  }
+
+  public void unlock() {
+    resetFailedLogin();
+  }
+
+  public void resetTemporaryPassword(String passwordHash, Instant now) {
+    if (passwordHash == null || passwordHash.isBlank() || now == null || isDeleted()) {
+      throw new IllegalArgumentException("Invalid temporary password reset");
+    }
+    this.passwordHash = passwordHash;
+    this.mustChangePassword = true;
+    this.credentialVersion += 1;
+    this.passwordChangedAt = now;
+    resetFailedLogin();
+  }
+
+  public void invalidateCredentials() {
+    this.credentialVersion += 1;
   }
 
   /** Reconstitutes roles after a persistence load; only the repository adapter should call this. */

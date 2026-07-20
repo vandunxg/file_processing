@@ -65,6 +65,7 @@ class LoginServiceTest {
   @Mock private RefreshTokenGeneratorPort refreshTokenGeneratorPort;
   @Mock private SessionRepositoryPort sessionRepositoryPort;
   @Mock private JwtIssuerPort jwtIssuerPort;
+  @Mock private AuthorityService authorityService;
   @Mock private CredentialVersionCachePort credentialVersionCachePort;
   @Mock private AuditLogEventPublisherPort auditLogEventPublisherPort;
 
@@ -81,6 +82,7 @@ class LoginServiceTest {
             refreshTokenGeneratorPort,
             sessionRepositoryPort,
             jwtIssuerPort,
+            authorityService,
             credentialVersionCachePort,
             auditLogEventPublisherPort,
             authProperties(),
@@ -103,7 +105,8 @@ class LoginServiceTest {
     when(userRepositoryPort.save(any(User.class)))
         .thenAnswer(invocation -> invocation.getArgument(0));
     when(refreshTokenGeneratorPort.generate()).thenReturn("raw-refresh-token");
-    when(jwtIssuerPort.issue(any(), any(), anyInt(), any(), any()))
+    when(authorityService.permissionsFor(user)).thenReturn(List.of("file:self_create"));
+    when(jwtIssuerPort.issue(any(), any(), anyInt(), any(), any(), any()))
         .thenReturn(
             new JwtIssuerPort.IssuedAccessToken(
                 "access-token", NOW, NOW.plus(Duration.ofMinutes(15))));
@@ -120,6 +123,14 @@ class LoginServiceTest {
 
     verify(sessionRepositoryPort).save(any(Session.class), anyString());
     verify(credentialVersionCachePort).put(eq(user.getId()), eq(user.getCredentialVersion()));
+    verify(jwtIssuerPort)
+        .issue(
+            eq(user.getId()),
+            any(UUID.class),
+            eq(user.getCredentialVersion()),
+            eq(List.of("OPERATOR")),
+            eq(List.of("file:self_create")),
+            eq(NOW));
 
     new ArrayList<>(TransactionSynchronizationManager.getSynchronizations())
         .forEach(TransactionSynchronization::afterCommit);
@@ -150,7 +161,7 @@ class LoginServiceTest {
     assertThat(result.getAccessToken()).isNull();
     assertThat(result.getRefreshToken()).isNull();
     verify(sessionRepositoryPort, never()).save(any(Session.class), anyString());
-    verify(jwtIssuerPort, never()).issue(any(), any(), anyInt(), any(), any());
+    verify(jwtIssuerPort, never()).issue(any(), any(), anyInt(), any(), any(), any());
     verify(jwtIssuerPort).issuePasswordChange(user.getId(), user.getCredentialVersion(), NOW);
     verifyNoInteractions(refreshTokenGeneratorPort);
 
