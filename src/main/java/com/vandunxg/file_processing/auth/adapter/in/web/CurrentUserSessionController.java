@@ -1,7 +1,5 @@
 package com.vandunxg.file_processing.auth.adapter.in.web;
 
-import java.util.UUID;
-
 import com.vandunxg.common.models.dto.response.Response;
 import com.vandunxg.common.web.support.IpUtils;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.SessionResponse;
@@ -22,19 +20,19 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Objects;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("${app.api.prefix}/${app.api.version}/me/sessions")
 @RequiredArgsConstructor
 @Tag(name = "Current user sessions", description = "Authenticated caller session management")
 public class CurrentUserSessionController {
+
+  private static final String HTTP_HEADER_SET_COOKIE = "Set-Cookie";
+  private static final String SESSION_ID_CLAIM = "sid";
 
   private final RevokeAllSessionsUseCase revokeAllSessionsUseCase;
   private final RevokeSessionUseCase revokeSessionUseCase;
@@ -48,8 +46,8 @@ public class CurrentUserSessionController {
     UUID userId = subjectAsUuid(jwt);
     UUID currentSid = sidAsUuid(jwt);
     var results =
-        listSessionsUseCase.list(
-            ListSessionsQuery.builder().userId(userId).currentSessionId(currentSid).build());
+      listSessionsUseCase.list(
+        ListSessionsQuery.builder().userId(userId).currentSessionId(currentSid).build());
     return Response.of(results.stream().map(webMapper::toResponse).toList());
   }
 
@@ -58,14 +56,14 @@ public class CurrentUserSessionController {
   @ResponseStatus(HttpStatus.NO_CONTENT)
   @PreAuthorize("hasPermission(null, 'session:self_delete')")
   public void revokeSession(
-      @PathVariable UUID sessionId, @AuthenticationPrincipal Jwt jwt, HttpServletRequest http) {
+    @PathVariable UUID sessionId, @AuthenticationPrincipal Jwt jwt, HttpServletRequest http) {
     revokeSessionUseCase.revoke(
-        RevokeSessionCommand.builder()
-            .sessionId(sessionId)
-            .callerUserId(subjectAsUuid(jwt))
-            .callerSessionId(sidAsUuid(jwt))
-            .ipAddress(IpUtils.getRemoteIp(http))
-            .build());
+      RevokeSessionCommand.builder()
+        .sessionId(sessionId)
+        .callerUserId(subjectAsUuid(jwt))
+        .callerSessionId(sidAsUuid(jwt))
+        .ipAddress(IpUtils.getRemoteIp(http))
+        .build());
   }
 
   @Operation(summary = "Revoke every active session of the caller (sign out everywhere)")
@@ -73,22 +71,22 @@ public class CurrentUserSessionController {
   @ResponseStatus(HttpStatus.NO_CONTENT)
   @PreAuthorize("hasPermission(null, 'session:self_delete')")
   public void revokeAll(
-      @AuthenticationPrincipal Jwt jwt, HttpServletRequest http, HttpServletResponse response) {
+    @AuthenticationPrincipal Jwt jwt, HttpServletRequest http, HttpServletResponse response) {
     revokeAllSessionsUseCase.revokeAll(
-        RevokeAllSessionsCommand.builder()
-            .userId(subjectAsUuid(jwt))
-            .reason(RevocationReason.USER_TRIGGERED)
-            .ipAddress(IpUtils.getRemoteIp(http))
-            .build());
-    response.setHeader("Set-Cookie", "fps_refresh=; Path=/api/v1/auth; Max-Age=0; HttpOnly");
-    response.addHeader("Set-Cookie", "fps_csrf=; Path=/api/v1/auth; Max-Age=0");
+      RevokeAllSessionsCommand.builder()
+        .userId(subjectAsUuid(jwt))
+        .reason(RevocationReason.USER_TRIGGERED)
+        .ipAddress(IpUtils.getRemoteIp(http))
+        .build());
+    response.setHeader(HTTP_HEADER_SET_COOKIE, "fps_refresh=; Path=/api/v1/auth; Max-Age=0; HttpOnly");
+    response.addHeader(HTTP_HEADER_SET_COOKIE, "fps_csrf=; Path=/api/v1/auth; Max-Age=0");
   }
 
   private static UUID subjectAsUuid(Jwt jwt) {
-    return UUID.fromString(jwt.getSubject());
+    return UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
   }
 
   private static UUID sidAsUuid(Jwt jwt) {
-    return UUID.fromString(jwt.getClaimAsString("sid"));
+    return UUID.fromString(Objects.requireNonNull(jwt.getClaimAsString(SESSION_ID_CLAIM)));
   }
 }
