@@ -71,13 +71,38 @@ class RoleManagementControllerIT extends AuthIntegrationTestBase {
   }
 
   @Test
+  void listAppliesRequestedPageAndPageSize() throws Exception {
+    Instant now = Instant.now();
+    String suffix = UUID.randomUUID().toString().substring(0, 8);
+    roleRepositoryPort.save(Role.create("PAGE_AAA_" + suffix, "A", null, now));
+    Role secondByCode =
+        roleRepositoryPort.save(
+            Role.create("PAGE_ZZZ_" + suffix, "Z", null, now.plusSeconds(1)));
+
+    mockMvc
+        .perform(
+            get("/api/v1/roles")
+                .header("Authorization", "Bearer " + accessToken("ADMIN", List.of("role:read")))
+                .queryParam("keyword", "PAGE")
+                .queryParam("pageIndex", "2")
+                .queryParam("pageSize", "1")
+                .queryParam("sortBy", "code.asc"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.page.pageIndex").value(2))
+        .andExpect(jsonPath("$.page.pageSize").value(1))
+        .andExpect(jsonPath("$.page.total").value(2))
+        .andExpect(jsonPath("$.data[0].code").value(secondByCode.getCode()));
+  }
+
+  @Test
   void listRejectsSortFieldsOutsideTheRoleDomainContract() throws Exception {
     mockMvc
         .perform(
             get("/api/v1/roles")
                 .header("Authorization", "Bearer " + accessToken("ADMIN", List.of("role:read")))
                 .queryParam("sortBy", "deletedAt.desc"))
-        .andExpect(status().isBadRequest());
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.errors[0].field").value("sortBy"));
   }
 
   private String accessToken(String roleCode, List<String> permissions) {

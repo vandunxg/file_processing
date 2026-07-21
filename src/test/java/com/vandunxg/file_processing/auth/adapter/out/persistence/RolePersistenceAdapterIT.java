@@ -30,6 +30,9 @@ class RolePersistenceAdapterIT extends AuthIntegrationTestBase {
     deleted.inactivate();
     deleted.delete(now);
     roleRepositoryPort.save(deleted);
+    Role inactive = Role.create("SEARCH_INACTIVE_" + suffix, "Search Inactive", "Reads logs", now);
+    inactive.inactivate();
+    roleRepositoryPort.save(inactive);
 
     RoleSearchQuery query =
         RoleSearchQuery.builder()
