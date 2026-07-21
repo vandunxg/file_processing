@@ -2,31 +2,28 @@ package com.vandunxg.file_processing.auth.adapter.in.web;
 
 import com.vandunxg.common.models.dto.response.PagingResponse;
 import com.vandunxg.common.models.dto.response.Response;
-import com.vandunxg.common.models.enums.Action;
+import com.vandunxg.common.web.support.SecurityUtils;
+import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.RoleInheritanceRequest;
+import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.RoleRequest;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.RoleSearchRequest;
+import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.ResourcePermissionResponse;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.RoleResponse;
 import com.vandunxg.file_processing.auth.adapter.in.web.mapper.RoleWebMapper;
+import com.vandunxg.file_processing.auth.application.command.RoleActionCommand;
+import com.vandunxg.file_processing.auth.application.port.in.PermissionCatalogUseCase;
+import com.vandunxg.file_processing.auth.application.port.in.RoleManagementUseCase;
 import com.vandunxg.file_processing.auth.application.port.in.SearchRolesUseCase;
 import com.vandunxg.file_processing.auth.application.query.RoleSearchQuery;
-import com.vandunxg.file_processing.auth.application.service.PermissionCatalogService;
-import com.vandunxg.file_processing.auth.application.service.RoleManagementService;
-import com.vandunxg.file_processing.auth.application.service.RoleManagementService.PermissionSpec;
-import com.vandunxg.file_processing.auth.domain.model.ResourceCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("${app.api.prefix}/${app.api.version}/roles")
@@ -38,8 +35,8 @@ public class RoleManagementController {
 
   private final RoleWebMapper roleWebMapper;
   private final SearchRolesUseCase searchRolesUseCase;
-  private final RoleManagementService roleManagementService;
-  private final PermissionCatalogService permissionCatalogService;
+  private final RoleManagementUseCase roleManagementUseCase;
+  private final PermissionCatalogUseCase permissionCatalogUseCase;
 
   @Operation(summary = "List roles", description = "Requires `role:read` or `user:read`.")
   @GetMapping
@@ -48,8 +45,7 @@ public class RoleManagementController {
 
     RoleSearchQuery query = roleWebMapper.toQuery(request);
 
-    return new PagingResponse<>(
-      searchRolesUseCase.search(query), roleWebMapper::toResponse);
+    return new PagingResponse<>(searchRolesUseCase.search(query), roleWebMapper::toResponse);
   }
 
   @Operation(
@@ -57,37 +53,32 @@ public class RoleManagementController {
     description = "Requires `role:read`.")
   @GetMapping("/resources")
   @PreAuthorize("hasPermission(null, 'role:read')")
-  public Response<List<ResourceCode>> resources() {
-    return Response.of(permissionCatalogService.resources());
+  public Response<List<String>> resources() {
+    return Response.of(roleWebMapper.toResourceCodes(permissionCatalogUseCase.resources()));
   }
 
   @Operation(summary = "Read the permission catalog", description = "Requires `role:read`.")
   @GetMapping("/permissions")
   @PreAuthorize("hasPermission(null, 'role:read')")
-  public Response<List<PermissionCatalogService.ResourcePermission>> permissions() {
-    return Response.of(permissionCatalogService.permissions());
+  public Response<List<ResourcePermissionResponse>> permissions() {
+    return Response.of(roleWebMapper.toPermissionResponses(permissionCatalogUseCase.permissions()));
   }
 
   @Operation(summary = "Read a role", description = "Requires `role:read`.")
   @GetMapping("/{roleId}")
   @PreAuthorize("hasPermission(null, 'role:read')")
   public Response<RoleResponse> detail(@PathVariable UUID roleId) {
-    return Response.of(roleWebMapper.toResponse(roleManagementService.detail(roleId)));
+    return Response.of(roleWebMapper.toResponse(roleManagementUseCase.detail(roleId)));
   }
 
   @Operation(summary = "Create a mutable role", description = "Requires `role:create`.")
   @PostMapping
+  @ResponseStatus(HttpStatus.CREATED)
   @PreAuthorize("hasPermission(null, 'role:create')")
-  public Response<RoleResponse> create(
-    @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody RoleRequest request) {
+  public Response<RoleResponse> create(@Valid @RequestBody RoleRequest request) {
     return Response.of(
       roleWebMapper.toResponse(
-        roleManagementService.create(
-          subject(jwt),
-          request.code(),
-          request.name(),
-          request.description(),
-          permissions(request))));
+        roleManagementUseCase.create(roleWebMapper.toCreateCommand(request, actorId()))));
   }
 
   @Operation(
@@ -96,45 +87,38 @@ public class RoleManagementController {
   @PostMapping("/{roleId}/update")
   @PreAuthorize("hasPermission(null, 'role:update')")
   public Response<RoleResponse> update(
-    @AuthenticationPrincipal Jwt jwt,
-    @PathVariable UUID roleId,
-    @Valid @RequestBody RoleRequest request) {
+    @PathVariable UUID roleId, @Valid @RequestBody RoleRequest request) {
     return Response.of(
       roleWebMapper.toResponse(
-        roleManagementService.update(
-          subject(jwt),
-          roleId,
-          request.code(),
-          request.name(),
-          request.description(),
-          permissions(request))));
+        roleManagementUseCase.update(
+          roleWebMapper.toUpdateCommand(request, actorId(), roleId))));
   }
 
   @Operation(summary = "Set or clear role inheritance", description = "Requires `role:update`.")
   @PostMapping("/inheritance")
   @PreAuthorize("hasPermission(null, 'role:update')")
-  public Response<RoleResponse> setInheritance(
-    @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody InheritanceRequest request) {
+  public Response<RoleResponse> setInheritance(@Valid @RequestBody RoleInheritanceRequest request) {
     return Response.of(
       roleWebMapper.toResponse(
-        roleManagementService.setInheritance(
-          subject(jwt), request.roleId(), request.roleInheritedId())));
+        roleManagementUseCase.setInheritance(roleWebMapper.toCommand(request, actorId()))));
   }
 
   @Operation(summary = "Activate a role", description = "Requires `role:update`.")
   @PostMapping("/{roleId}/active")
   @PreAuthorize("hasPermission(null, 'role:update')")
-  public Response<RoleResponse> activate(
-    @AuthenticationPrincipal Jwt jwt, @PathVariable UUID roleId) {
-    return Response.of(roleWebMapper.toResponse(roleManagementService.activate(subject(jwt), roleId)));
+  public Response<RoleResponse> activate(@PathVariable UUID roleId) {
+    return Response.of(
+      roleWebMapper.toResponse(
+        roleManagementUseCase.activate(new RoleActionCommand(actorId(), roleId))));
   }
 
   @Operation(summary = "Inactivate a role", description = "Requires `role:update`.")
   @PostMapping("/{roleId}/inactive")
   @PreAuthorize("hasPermission(null, 'role:update')")
-  public Response<RoleResponse> inactivate(
-    @AuthenticationPrincipal Jwt jwt, @PathVariable UUID roleId) {
-    return Response.of(roleWebMapper.toResponse(roleManagementService.inactivate(subject(jwt), roleId)));
+  public Response<RoleResponse> inactivate(@PathVariable UUID roleId) {
+    return Response.of(
+      roleWebMapper.toResponse(
+        roleManagementUseCase.inactivate(new RoleActionCommand(actorId(), roleId))));
   }
 
   @Operation(
@@ -142,35 +126,12 @@ public class RoleManagementController {
     description = "Requires `role:delete`.")
   @PostMapping("/{roleId}/delete")
   @PreAuthorize("hasPermission(null, 'role:delete')")
-  public Response<Void> delete(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID roleId) {
-    roleManagementService.delete(subject(jwt), roleId);
-    return Response.of(null);
+  public Response<Boolean> delete(@PathVariable UUID roleId) {
+    roleManagementUseCase.delete(new RoleActionCommand(actorId(), roleId));
+    return Response.of(Boolean.TRUE);
   }
 
-  private static Set<PermissionSpec> permissions(RoleRequest request) {
-    return request.permissions().stream()
-      .map(permission -> new PermissionSpec(permission.resourceCode(), permission.actions()))
-      .collect(Collectors.toSet());
-  }
-
-  private static UUID subject(Jwt jwt) {
-    return UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
-  }
-
-  public record RoleRequest(
-    @NotBlank @Pattern(regexp = "^[A-Za-z0-9_]+$") @Size(max = 50) String code,
-    @NotBlank @Size(max = 100) String name,
-    @Size(max = 1000) String description,
-    Set<@Valid PermissionRequest> permissions) {
-    public RoleRequest {
-      permissions = permissions == null ? Set.of() : Set.copyOf(permissions);
-    }
-  }
-
-  public record PermissionRequest(
-    @NotNull ResourceCode resourceCode, @NotEmpty Set<Action> actions) {
-  }
-
-  public record InheritanceRequest(@NotNull UUID roleId, UUID roleInheritedId) {
+  private static UUID actorId() {
+    return SecurityUtils.authentication().getUserId();
   }
 }

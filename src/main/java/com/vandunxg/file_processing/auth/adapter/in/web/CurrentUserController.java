@@ -1,5 +1,8 @@
 package com.vandunxg.file_processing.auth.adapter.in.web;
 
+import java.util.Objects;
+import java.util.UUID;
+
 import com.vandunxg.common.models.dto.response.Response;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.MeResponse;
 import com.vandunxg.file_processing.auth.adapter.in.web.mapper.AuthWebMapper;
@@ -15,9 +18,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Objects;
-import java.util.UUID;
-
 @RestController
 @RequestMapping("${app.api.prefix}/${app.api.version}/me")
 @RequiredArgsConstructor
@@ -32,10 +32,10 @@ public class CurrentUserController {
   @PreAuthorize("hasPermission(null, 'user:self_read')")
   public Response<MeResponse> me(@AuthenticationPrincipal Jwt jwt) {
     var result =
-      getCurrentUserUseCase.me(
-        GetCurrentUserQuery.builder()
-          .userId(UUID.fromString(Objects.requireNonNull(jwt.getSubject())))
-          .build());
+        getCurrentUserUseCase.me(
+            GetCurrentUserQuery.builder()
+                .userId(UUID.fromString(Objects.requireNonNull(jwt.getSubject())))
+                .build());
     return Response.of(webMapper.toResponse(result));
   }
 }

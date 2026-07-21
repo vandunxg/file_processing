@@ -1,11 +1,11 @@
 package com.vandunxg.file_processing.auth.application.port.out;
 
+import java.time.Instant;
+import java.util.*;
+
 import com.vandunxg.file_processing.auth.application.query.RoleSearchQuery;
 import com.vandunxg.file_processing.auth.domain.model.Role;
 import com.vandunxg.file_processing.auth.domain.model.RolePermission;
-
-import java.time.Instant;
-import java.util.*;
 
 public interface RoleRepositoryPort {
 

@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.UUID;
 
 import com.vandunxg.common.models.dto.PageDTO;
+import com.vandunxg.file_processing.auth.application.command.SetRoleInheritanceCommand;
+import com.vandunxg.file_processing.auth.application.command.UpdateRoleCommand;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.CredentialVersionCachePort;
 import com.vandunxg.file_processing.auth.application.port.out.RoleRepositoryPort;
@@ -90,7 +92,10 @@ class RoleManagementServiceTest {
             auditLogEventPublisherPort,
             Clock.fixed(Instant.parse("2026-07-20T12:00:00Z"), ZoneOffset.UTC));
 
-    assertThatThrownBy(() -> service.setInheritance(UUID.randomUUID(), childId, parentId))
+    assertThatThrownBy(
+            () ->
+                service.setInheritance(
+                    new SetRoleInheritanceCommand(UUID.randomUUID(), childId, parentId)))
         .isInstanceOf(AuthDomainException.class)
         .extracting("error")
         .isEqualTo(AuthErrorCode.ROLE_INHERITANCE_CYCLE);
@@ -120,7 +125,10 @@ class RoleManagementServiceTest {
         .thenAnswer(invocation -> invocation.getArgument(0));
     TransactionSynchronizationManager.initSynchronization();
 
-    newService().update(UUID.randomUUID(), roleId, "AUDITOR", "Auditor", null, java.util.Set.of());
+    newService()
+        .update(
+            new UpdateRoleCommand(
+                UUID.randomUUID(), roleId, "AUDITOR", "Auditor", null, java.util.Set.of()));
 
     assertThat(user.getCredentialVersion()).isEqualTo(2);
     verify(sessionRepositoryPort)

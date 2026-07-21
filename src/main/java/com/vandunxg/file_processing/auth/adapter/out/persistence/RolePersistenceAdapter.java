@@ -1,5 +1,9 @@
 package com.vandunxg.file_processing.auth.adapter.out.persistence;
 
+import java.time.Instant;
+import java.util.*;
+import java.util.stream.Collectors;
+
 import com.vandunxg.file_processing.auth.adapter.out.persistence.entity.JpaRolePermissionRepository;
 import com.vandunxg.file_processing.auth.adapter.out.persistence.entity.JpaRoleRepository;
 import com.vandunxg.file_processing.auth.adapter.out.persistence.entity.RolePermissionEntity;
@@ -13,10 +17,6 @@ import com.vandunxg.file_processing.auth.domain.model.RolePermission;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
-
-import java.time.Instant;
-import java.util.*;
-import java.util.stream.Collectors;
 
 @Repository
 @RequiredArgsConstructor
@@ -58,26 +58,26 @@ public class RolePersistenceAdapter implements RoleRepositoryPort {
   @Override
   public Role lockAdminRole() {
     return jpaRoleRepository
-      .findWithLockByCodeAndDeletedAtIsNull("ADMIN")
-      .map(this::toDomain)
-      .orElseThrow(() -> new AuthDomainException(AuthErrorCode.ROLE_NOT_FOUND));
+        .findWithLockByCodeAndDeletedAtIsNull("ADMIN")
+        .map(this::toDomain)
+        .orElseThrow(() -> new AuthDomainException(AuthErrorCode.ROLE_NOT_FOUND));
   }
 
   @Override
   public void replacePermissions(UUID roleId, Collection<RolePermission> permissions, Instant now) {
     List<RolePermissionEntity> existing =
-      jpaRolePermissionRepository.findByRoleIdAndDeletedAtIsNull(roleId);
+        jpaRolePermissionRepository.findByRoleIdAndDeletedAtIsNull(roleId);
     existing.forEach(permission -> permission.setDeletedAt(now));
     jpaRolePermissionRepository.saveAll(existing);
     jpaRolePermissionRepository.saveAll(
-      permissions.stream().map(this::toEntity).collect(Collectors.toList()));
+        permissions.stream().map(this::toEntity).collect(Collectors.toList()));
   }
 
   @Override
   public List<UUID> findActiveUserIdsByRoleIds(Set<UUID> roleIds) {
     return roleIds == null || roleIds.isEmpty()
-      ? List.of()
-      : jpaRoleRepository.findActiveUserIdsByRoleIds(roleIds);
+        ? List.of()
+        : jpaRoleRepository.findActiveUserIdsByRoleIds(roleIds);
   }
 
   @Override
@@ -94,36 +94,36 @@ public class RolePersistenceAdapter implements RoleRepositoryPort {
   }
 
   private Role toDomain(
-    com.vandunxg.file_processing.auth.adapter.out.persistence.entity.RoleEntity entity) {
+      com.vandunxg.file_processing.auth.adapter.out.persistence.entity.RoleEntity entity) {
     return toDomains(List.of(entity)).getFirst();
   }
 
   private List<Role> toDomains(
-    List<com.vandunxg.file_processing.auth.adapter.out.persistence.entity.RoleEntity> entities) {
+      List<com.vandunxg.file_processing.auth.adapter.out.persistence.entity.RoleEntity> entities) {
     List<Role> roles = rolePersistenceMapper.toDomain(entities);
     if (roles.isEmpty()) {
       return roles;
     }
     Map<UUID, Set<RolePermission>> permissionsByRole =
-      jpaRolePermissionRepository
-        .findByRoleIdInAndDeletedAtIsNull(
-          roles.stream().map(Role::getId).collect(Collectors.toSet()))
-        .stream()
-        .map(this::toDomain)
-        .collect(Collectors.groupingBy(RolePermission::getRoleId, Collectors.toSet()));
+        jpaRolePermissionRepository
+            .findByRoleIdInAndDeletedAtIsNull(
+                roles.stream().map(Role::getId).collect(Collectors.toSet()))
+            .stream()
+            .map(this::toDomain)
+            .collect(Collectors.groupingBy(RolePermission::getRoleId, Collectors.toSet()));
     roles.forEach(role -> role.enrichPermissions(permissionsByRole.get(role.getId())));
     return roles;
   }
 
   private RolePermission toDomain(RolePermissionEntity entity) {
     return RolePermission.builder()
-      .id(entity.getId())
-      .roleId(entity.getRoleId())
-      .resourceCode(entity.getResourceCode())
-      .action(entity.getAction())
-      .resourceGroup(entity.getResourceGroup())
-      .deletedAt(entity.getDeletedAt())
-      .build();
+        .id(entity.getId())
+        .roleId(entity.getRoleId())
+        .resourceCode(entity.getResourceCode())
+        .action(entity.getAction())
+        .resourceGroup(entity.getResourceGroup())
+        .deletedAt(entity.getDeletedAt())
+        .build();
   }
 
   private RolePermissionEntity toEntity(RolePermission permission) {

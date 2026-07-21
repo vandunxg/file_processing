@@ -43,6 +43,8 @@ class RolePersistenceAdapterIT extends AuthIntegrationTestBase {
             .build();
 
     assertThat(roleRepositoryPort.count(query)).isEqualTo(1);
-    assertThat(roleRepositoryPort.search(query)).extracting(Role::getId).containsExactly(live.getId());
+    assertThat(roleRepositoryPort.search(query))
+        .extracting(Role::getId)
+        .containsExactly(live.getId());
   }
 }
