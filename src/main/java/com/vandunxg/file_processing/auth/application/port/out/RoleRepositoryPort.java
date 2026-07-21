@@ -1,14 +1,11 @@
 package com.vandunxg.file_processing.auth.application.port.out;
 
-import java.time.Instant;
-import java.util.Collection;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-
+import com.vandunxg.file_processing.auth.application.query.RoleSearchQuery;
 import com.vandunxg.file_processing.auth.domain.model.Role;
 import com.vandunxg.file_processing.auth.domain.model.RolePermission;
+
+import java.time.Instant;
+import java.util.*;
 
 public interface RoleRepositoryPort {
 
@@ -27,4 +24,8 @@ public interface RoleRepositoryPort {
   void replacePermissions(UUID roleId, Collection<RolePermission> permissions, Instant now);
 
   List<UUID> findActiveUserIdsByRoleIds(Set<UUID> roleIds);
+
+  Long count(RoleSearchQuery query);
+
+  List<Role> search(RoleSearchQuery query);
 }

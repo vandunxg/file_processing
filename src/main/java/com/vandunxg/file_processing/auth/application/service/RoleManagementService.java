@@ -1,5 +1,20 @@
 package com.vandunxg.file_processing.auth.application.service;
 
+import com.vandunxg.common.models.dto.PageDTO;
+import com.vandunxg.common.models.enums.Action;
+import com.vandunxg.common.utils.IdUtils;
+import com.vandunxg.file_processing.auth.application.port.in.SearchRolesUseCase;
+import com.vandunxg.file_processing.auth.application.port.out.*;
+import com.vandunxg.file_processing.auth.application.query.RoleSearchQuery;
+import com.vandunxg.file_processing.auth.domain.exception.AuthDomainException;
+import com.vandunxg.file_processing.auth.domain.exception.AuthErrorCode;
+import com.vandunxg.file_processing.auth.domain.model.*;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
 import java.time.Clock;
 import java.time.Instant;
 import java.util.HashSet;
@@ -9,31 +24,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import com.vandunxg.common.models.enums.Action;
-import com.vandunxg.common.utils.IdUtils;
-import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
-import com.vandunxg.file_processing.auth.application.port.out.CredentialVersionCachePort;
-import com.vandunxg.file_processing.auth.application.port.out.RoleRepositoryPort;
-import com.vandunxg.file_processing.auth.application.port.out.SessionRepositoryPort;
-import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
-import com.vandunxg.file_processing.auth.domain.exception.AuthDomainException;
-import com.vandunxg.file_processing.auth.domain.exception.AuthErrorCode;
-import com.vandunxg.file_processing.auth.domain.model.AuditLog;
-import com.vandunxg.file_processing.auth.domain.model.AuditLogDomain;
-import com.vandunxg.file_processing.auth.domain.model.OperationType;
-import com.vandunxg.file_processing.auth.domain.model.ResourceCode;
-import com.vandunxg.file_processing.auth.domain.model.RevocationReason;
-import com.vandunxg.file_processing.auth.domain.model.Role;
-import com.vandunxg.file_processing.auth.domain.model.RolePermission;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
-
 @Service
 @RequiredArgsConstructor
-public class RoleManagementService {
+public class RoleManagementService implements SearchRolesUseCase {
 
   private final RoleRepositoryPort roleRepositoryPort;
   private final UserRepositoryPort userRepositoryPort;
@@ -42,21 +35,29 @@ public class RoleManagementService {
   private final AuditLogEventPublisherPort auditLogEventPublisherPort;
   private final Clock clock;
 
+  @Override
   @Transactional(readOnly = true)
-  public List<Role> list() {
-    return roleRepositoryPort.findAll();
+  public PageDTO<Role> search(RoleSearchQuery query) {
+    long count = roleRepositoryPort.count(query);
+
+    if (count == 0) {
+      return PageDTO.of(List.of(), query.getPageIndex(), query.getPageSize(), 0);
+    }
+
+    return PageDTO.of(
+      roleRepositoryPort.search(query), query.getPageIndex(), query.getPageSize(), count);
   }
 
   @Transactional(readOnly = true)
   public Role detail(UUID roleId) {
     return roleRepositoryPort
-        .findById(roleId)
-        .orElseThrow(() -> new AuthDomainException(AuthErrorCode.ROLE_NOT_FOUND));
+      .findById(roleId)
+      .orElseThrow(() -> new AuthDomainException(AuthErrorCode.ROLE_NOT_FOUND));
   }
 
   @Transactional
   public Role create(
-      UUID actorId, String code, String name, String description, Set<PermissionSpec> permissions) {
+    UUID actorId, String code, String name, String description, Set<PermissionSpec> permissions) {
     String normalizedCode = code == null ? null : code.trim().toUpperCase(java.util.Locale.ROOT);
     if (normalizedCode == null || normalizedCode.isBlank()) {
       throw new IllegalArgumentException("Role code is required");
@@ -67,28 +68,28 @@ public class RoleManagementService {
     Instant now = Instant.now(clock);
     Role saved = roleRepositoryPort.save(Role.create(normalizedCode, name, description, now));
     roleRepositoryPort.replacePermissions(
-        saved.getId(), permissionsFor(saved.getId(), permissions), now);
+      saved.getId(), permissionsFor(saved.getId(), permissions), now);
     publishAfterCommit(audit(actorId, saved.getId(), OperationType.CREATE, now));
     return detail(saved.getId());
   }
 
   @Transactional
   public Role update(
-      UUID actorId,
-      UUID roleId,
-      String code,
-      String name,
-      String description,
-      Set<PermissionSpec> permissions) {
+    UUID actorId,
+    UUID roleId,
+    String code,
+    String name,
+    String description,
+    Set<PermissionSpec> permissions) {
     Role role = detail(roleId);
     String normalizedCode = code == null ? null : code.trim().toUpperCase(java.util.Locale.ROOT);
     roleRepositoryPort
-        .findByCode(normalizedCode)
-        .filter(existing -> !existing.getId().equals(roleId))
-        .ifPresent(
-            existing -> {
-              throw new AuthDomainException(AuthErrorCode.ROLE_CODE_ALREADY_EXISTS);
-            });
+      .findByCode(normalizedCode)
+      .filter(existing -> !existing.getId().equals(roleId))
+      .ifPresent(
+        existing -> {
+          throw new AuthDomainException(AuthErrorCode.ROLE_CODE_ALREADY_EXISTS);
+        });
     try {
       role.update(normalizedCode, name, description);
     } catch (IllegalStateException exception) {
@@ -185,20 +186,20 @@ public class RoleManagementService {
       return Set.of();
     }
     return permissions.stream()
-        .filter(spec -> spec.resourceCode() != null && spec.actions() != null)
-        .flatMap(
-            spec ->
-                spec.actions().stream()
-                    .map(action -> RolePermission.grant(roleId, spec.resourceCode(), action)))
-        .collect(Collectors.toSet());
+      .filter(spec -> spec.resourceCode() != null && spec.actions() != null)
+      .flatMap(
+        spec ->
+          spec.actions().stream()
+            .map(action -> RolePermission.grant(roleId, spec.resourceCode(), action)))
+      .collect(Collectors.toSet());
   }
 
   private static boolean isAdminPermissionSet(Set<RolePermission> permissions) {
     return permissions.stream()
-        .anyMatch(
-            permission ->
-                permission.getResourceCode() == ResourceCode.ALL
-                    && permission.getAction() == Action.MANAGE);
+      .anyMatch(
+        permission ->
+          permission.getResourceCode() == ResourceCode.ALL
+            && permission.getAction() == Action.MANAGE);
   }
 
   private Set<UUID> roleAndDescendants(UUID roleId) {
@@ -208,46 +209,46 @@ public class RoleManagementService {
     boolean changed;
     do {
       changed =
-          roles.values().stream()
-              .filter(role -> affected.contains(role.getRoleInheritedId()))
-              .map(Role::getId)
-              .anyMatch(affected::add);
+        roles.values().stream()
+          .filter(role -> affected.contains(role.getRoleInheritedId()))
+          .map(Role::getId)
+          .anyMatch(affected::add);
     } while (changed);
     return affected;
   }
 
   private Map<UUID, Role> rolesById() {
     return roleRepositoryPort.findAll().stream()
-        .collect(Collectors.toMap(Role::getId, role -> role));
+      .collect(Collectors.toMap(Role::getId, role -> role));
   }
 
   private void invalidateUsersFor(Set<UUID> roleIds) {
     Instant now = Instant.now(clock);
     roleRepositoryPort.findActiveUserIdsByRoleIds(roleIds).stream()
-        .distinct()
-        .forEach(
-            userId ->
-                userRepositoryPort
-                    .findByIdForUpdate(userId)
-                    .ifPresent(
-                        user -> {
-                          user.invalidateCredentials();
-                          userRepositoryPort.save(user);
-                          sessionRepositoryPort.revokeAllForUser(
-                              userId, RevocationReason.ADMIN, now);
-                          afterCommit(() -> credentialVersionCachePort.invalidate(userId));
-                        }));
+      .distinct()
+      .forEach(
+        userId ->
+          userRepositoryPort
+            .findByIdForUpdate(userId)
+            .ifPresent(
+              user -> {
+                user.invalidateCredentials();
+                userRepositoryPort.save(user);
+                sessionRepositoryPort.revokeAllForUser(
+                  userId, RevocationReason.ADMIN, now);
+                afterCommit(() -> credentialVersionCachePort.invalidate(userId));
+              }));
   }
 
   private AuditLog audit(UUID actorId, UUID roleId, OperationType operation, Instant now) {
     return AuditLog.builder()
-        .id(IdUtils.nextId())
-        .domain(AuditLogDomain.ROLE)
-        .objectId(roleId)
-        .operation(operation)
-        .changedBy(actorId)
-        .changedAt(now)
-        .build();
+      .id(IdUtils.nextId())
+      .domain(AuditLogDomain.ROLE)
+      .objectId(roleId)
+      .operation(operation)
+      .changedBy(actorId)
+      .changedAt(now)
+      .build();
   }
 
   private void publishAfterCommit(AuditLog audit) {
@@ -259,13 +260,14 @@ public class RoleManagementService {
       return;
     }
     TransactionSynchronizationManager.registerSynchronization(
-        new TransactionSynchronization() {
-          @Override
-          public void afterCommit() {
-            action.run();
-          }
-        });
+      new TransactionSynchronization() {
+        @Override
+        public void afterCommit() {
+          action.run();
+        }
+      });
   }
 
-  public record PermissionSpec(ResourceCode resourceCode, Set<Action> actions) {}
+  public record PermissionSpec(ResourceCode resourceCode, Set<Action> actions) {
+  }
 }

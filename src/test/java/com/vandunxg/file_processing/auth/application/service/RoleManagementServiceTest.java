@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,11 +14,13 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
+import com.vandunxg.common.models.dto.PageDTO;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.CredentialVersionCachePort;
 import com.vandunxg.file_processing.auth.application.port.out.RoleRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.SessionRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
+import com.vandunxg.file_processing.auth.application.query.RoleSearchQuery;
 import com.vandunxg.file_processing.auth.domain.exception.AuthDomainException;
 import com.vandunxg.file_processing.auth.domain.exception.AuthErrorCode;
 import com.vandunxg.file_processing.auth.domain.model.ActiveStatus;
@@ -39,6 +42,35 @@ class RoleManagementServiceTest {
   @Mock private SessionRepositoryPort sessionRepositoryPort;
   @Mock private CredentialVersionCachePort credentialVersionCachePort;
   @Mock private AuditLogEventPublisherPort auditLogEventPublisherPort;
+
+  @Test
+  void searchReturnsDomainRolesWithTheRequestedPageMetadata() {
+    RoleSearchQuery query = RoleSearchQuery.builder().pageIndex(2).pageSize(10).build();
+    Role role = role(UUID.randomUUID(), "AUDITOR", null);
+    when(roleRepositoryPort.count(query)).thenReturn(11L);
+    when(roleRepositoryPort.search(query)).thenReturn(List.of(role));
+
+    PageDTO<Role> result = newService().search(query);
+
+    assertThat(result.getData()).containsExactly(role);
+    assertThat(result.getPage().getPageIndex()).isEqualTo(2);
+    assertThat(result.getPage().getPageSize()).isEqualTo(10);
+    assertThat(result.getPage().getTotal()).isEqualTo(11);
+  }
+
+  @Test
+  void searchPreservesRequestedMetadataWhenNoRoleMatches() {
+    RoleSearchQuery query = RoleSearchQuery.builder().pageIndex(4).pageSize(15).build();
+    when(roleRepositoryPort.count(query)).thenReturn(0L);
+
+    PageDTO<Role> result = newService().search(query);
+
+    assertThat(result.getData()).isEmpty();
+    assertThat(result.getPage().getPageIndex()).isEqualTo(4);
+    assertThat(result.getPage().getPageSize()).isEqualTo(15);
+    assertThat(result.getPage().getTotal()).isZero();
+    verify(roleRepositoryPort, never()).search(query);
+  }
 
   @Test
   void setInheritanceRejectsAParentThatIsAlreadyAChild() {
