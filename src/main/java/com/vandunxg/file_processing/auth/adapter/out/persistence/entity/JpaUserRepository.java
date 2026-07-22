@@ -4,13 +4,14 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.vandunxg.file_processing.auth.adapter.out.persistence.entity.custom.JpaUserRepositoryCustom;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface JpaUserRepository extends JpaRepository<UserEntity, UUID> {
+public interface JpaUserRepository extends JpaRepository<UserEntity, UUID>, JpaUserRepositoryCustom {
 
   boolean existsByNormalizedUsernameAndDeletedAtIsNull(String normalizedUsername);
 

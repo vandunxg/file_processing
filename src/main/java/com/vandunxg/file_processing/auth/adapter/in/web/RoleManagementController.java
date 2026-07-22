@@ -2,6 +2,7 @@ package com.vandunxg.file_processing.auth.adapter.in.web;
 
 import com.vandunxg.common.models.dto.response.PagingResponse;
 import com.vandunxg.common.models.dto.response.Response;
+import com.vandunxg.common.models.dto.PageDTO;
 import com.vandunxg.common.models.validator.ValidatePaging;
 import com.vandunxg.common.web.support.SecurityUtils;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.RoleInheritanceRequest;
@@ -16,6 +17,7 @@ import com.vandunxg.file_processing.auth.application.port.in.PermissionCatalogUs
 import com.vandunxg.file_processing.auth.application.port.in.RoleManagementUseCase;
 import com.vandunxg.file_processing.auth.application.port.in.SearchRolesUseCase;
 import com.vandunxg.file_processing.auth.application.query.RoleSearchQuery;
+import com.vandunxg.file_processing.auth.domain.model.Role;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -46,9 +48,10 @@ public class RoleManagementController {
   public PagingResponse<RoleResponse> list(
     @ValidatePaging(sortModel = RoleEntity.class) RoleSearchRequest request) {
 
-    RoleSearchQuery query = roleWebMapper.toQuery(request);
+    RoleSearchQuery searchQuery = roleWebMapper.toQuery(request);
+    PageDTO<Role> resultPage = searchRolesUseCase.search(searchQuery);
 
-    return new PagingResponse<>(searchRolesUseCase.search(query), roleWebMapper::toResponse);
+    return new PagingResponse<>(resultPage, roleWebMapper::toResponse);
   }
 
   @Operation(

@@ -5,6 +5,7 @@ import java.util.List;
 import com.vandunxg.file_processing.auth.adapter.out.persistence.entity.JpaAuditLogRepository;
 import com.vandunxg.file_processing.auth.adapter.out.persistence.mapper.AuditLogPersistenceMapper;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogPort;
+import com.vandunxg.file_processing.auth.application.query.AuditLogSearchQuery;
 import com.vandunxg.file_processing.auth.domain.model.AuditLog;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,5 +34,15 @@ public class AuditLogPersistenceAdapter implements AuditLogPort {
   public List<AuditLog> findAll() {
     return auditLogPersistenceMapper.toDomain(
         jpaAuditLogRepository.findAllByOrderByChangedAtDesc());
+  }
+
+  @Override
+  public Long count(AuditLogSearchQuery query) {
+    return jpaAuditLogRepository.count(query);
+  }
+
+  @Override
+  public List<AuditLog> search(AuditLogSearchQuery query) {
+    return auditLogPersistenceMapper.toDomain(jpaAuditLogRepository.search(query));
   }
 }

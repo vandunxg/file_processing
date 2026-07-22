@@ -1,6 +1,8 @@
 package com.vandunxg.file_processing.auth.adapter.in.web;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.nio.charset.StandardCharsets;
@@ -11,11 +13,16 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.vandunxg.common.utils.HashUtils;
+import com.vandunxg.common.utils.IdUtils;
 import com.vandunxg.file_processing.auth.application.port.out.JwtIssuerPort;
+import com.vandunxg.file_processing.auth.application.port.out.AuditLogPort;
 import com.vandunxg.file_processing.auth.application.port.out.RoleRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.SessionRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRoleRepositoryPort;
+import com.vandunxg.file_processing.auth.domain.model.AuditLog;
+import com.vandunxg.file_processing.auth.domain.model.AuditLogDomain;
+import com.vandunxg.file_processing.auth.domain.model.OperationType;
 import com.vandunxg.file_processing.auth.domain.model.Role;
 import com.vandunxg.file_processing.auth.domain.model.Session;
 import com.vandunxg.file_processing.auth.domain.model.User;
@@ -39,6 +46,7 @@ class AdminManagementControllerIT extends AuthIntegrationTestBase {
   @Autowired private UserRoleRepositoryPort userRoleRepositoryPort;
   @Autowired private SessionRepositoryPort sessionRepositoryPort;
   @Autowired private JwtIssuerPort jwtIssuerPort;
+  @Autowired private AuditLogPort auditLogPort;
 
   @Test
   void createUserRequiresTheUserCreatePermission() throws Exception {
@@ -69,6 +77,86 @@ class AdminManagementControllerIT extends AuthIntegrationTestBase {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(payload))
         .andExpect(status().isCreated());
+  }
+
+  @Test
+  void listUsersReturnsPagedSearchResults() throws Exception {
+    Role operator = roleRepositoryPort.findByCode("OPERATOR").orElseThrow();
+    Instant now = Instant.now();
+    String suffix = UUID.randomUUID().toString().substring(0, 8);
+    User first =
+        userRepositoryPort.save(
+            User.adminCreate(
+                "paged-a-" + suffix,
+                "paged-a-" + suffix + "@example.com",
+                "Paged Alpha",
+                "{bcrypt}$2a$stubhash",
+                Set.of(operator),
+                true,
+                now));
+    User second =
+        userRepositoryPort.save(
+            User.adminCreate(
+                "paged-z-" + suffix,
+                "paged-z-" + suffix + "@example.com",
+                "Paged Zulu",
+                "{bcrypt}$2a$stubhash",
+                Set.of(operator),
+                true,
+                now));
+    userRoleRepositoryPort.replaceRoles(first.getId(), Set.of(operator.getId()), now);
+    userRoleRepositoryPort.replaceRoles(second.getId(), Set.of(operator.getId()), now);
+
+    mockMvc
+        .perform(
+            get("/api/v1/users")
+                .header("Authorization", "Bearer " + accessToken("ADMIN", List.of("user:read")))
+                .queryParam("keyword", "paged-")
+                .queryParam("pageIndex", "2")
+                .queryParam("pageSize", "1")
+                .queryParam("sortBy", "username.asc"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.page.pageIndex").value(2))
+        .andExpect(jsonPath("$.page.pageSize").value(1))
+        .andExpect(jsonPath("$.page.total").value(2))
+        .andExpect(jsonPath("$.data[0].username").value(second.getUsername()));
+  }
+
+  @Test
+  void listAuditLogsReturnsPagedSearchResults() throws Exception {
+    Instant newer = Instant.parse("2099-01-01T00:00:00Z");
+    auditLogPort.record(
+        AuditLog.builder()
+            .id(IdUtils.nextId())
+            .domain(AuditLogDomain.AUTH)
+            .objectId(UUID.randomUUID())
+            .operation(OperationType.LOGIN_SUCCEEDED)
+            .changedBy(UUID.randomUUID())
+            .changedAt(newer.minusSeconds(1))
+            .build());
+    auditLogPort.record(
+        AuditLog.builder()
+            .id(IdUtils.nextId())
+            .domain(AuditLogDomain.AUTH)
+            .objectId(UUID.randomUUID())
+            .operation(OperationType.LOGIN_FAILED)
+            .changedBy(UUID.randomUUID())
+            .changedAt(newer)
+            .build());
+
+    mockMvc
+        .perform(
+            get("/api/v1/admin/audit-logs")
+                .header("Authorization", "Bearer " + accessToken("ADMIN", List.of("audit:read")))
+                .queryParam("pageIndex", "1")
+                .queryParam("pageSize", "1")
+                .queryParam("keyword", "LOGIN_FAILED")
+                .queryParam("sortBy", "changedAt.desc"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.page.pageIndex").value(1))
+        .andExpect(jsonPath("$.page.pageSize").value(1))
+        .andExpect(jsonPath("$.page.total").value(1))
+        .andExpect(jsonPath("$.data[0].operation").value("LOGIN_FAILED"));
   }
 
   private String accessToken(String roleCode, List<String> permissions) {

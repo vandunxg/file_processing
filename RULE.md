@@ -691,6 +691,13 @@ Controllers adapt HTTP to an application use case.
 - Public error messages resolve through i18n.
 - Use a configured API prefix and version.
 - Enforce bounded pagination at the request boundary.
+- Unbounded list, search, and completion endpoints **MUST** follow the common
+  paging convention: a request DTO extends `PagingRequest`, the controller
+  parameter uses `@ValidatePaging(sortModel = Entity.class)`, the application
+  query extends `PagingQuery`, the repository exposes `count(query)` and
+  `search(query)`, and the controller returns `PagingResponse<T>`.
+- Do not force paging onto bounded catalogs, enum lists, JWKS, `/me`, or
+  current-user scoped lists unless product behavior explicitly requires it.
 - Do not trust proxy forwarding headers unless the deployment config defines
   trusted proxies.
 

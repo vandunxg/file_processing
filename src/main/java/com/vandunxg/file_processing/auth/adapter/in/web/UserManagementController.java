@@ -1,8 +1,14 @@
 package com.vandunxg.file_processing.auth.adapter.in.web;
 
+import com.vandunxg.common.models.dto.PageDTO;
+import com.vandunxg.common.models.dto.response.PagingResponse;
 import com.vandunxg.common.models.dto.response.Response;
+import com.vandunxg.common.models.validator.ValidatePaging;
+import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.UserSearchRequest;
+import com.vandunxg.file_processing.auth.adapter.in.web.mapper.UserWebMapper;
+import com.vandunxg.file_processing.auth.adapter.out.persistence.entity.UserEntity;
+import com.vandunxg.file_processing.auth.application.query.UserSearchQuery;
 import com.vandunxg.file_processing.auth.application.service.AdminUserService;
-import com.vandunxg.file_processing.auth.domain.model.Role;
 import com.vandunxg.file_processing.auth.domain.model.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -33,6 +39,7 @@ import java.util.UUID;
 public class UserManagementController {
 
   private final AdminUserService adminUserService;
+  private final UserWebMapper userWebMapper;
 
   @Operation(
     summary = "Create a user with a temporary password",
@@ -43,7 +50,7 @@ public class UserManagementController {
   public Response<UserResponse> create(
     @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody CreateUserRequest request) {
     return Response.of(
-      UserResponse.from(
+      userWebMapper.toResponse(
         adminUserService.create(
           subject(jwt),
           request.username(),
@@ -57,15 +64,20 @@ public class UserManagementController {
   @Operation(summary = "List managed users", description = "Requires `user:read`.")
   @GetMapping
   @PreAuthorize("hasPermission(null, 'user:read')")
-  public Response<List<UserResponse>> list() {
-    return Response.of(adminUserService.list().stream().map(UserResponse::from).toList());
+  public PagingResponse<UserResponse> list(
+      @ValidatePaging(sortModel = UserEntity.class) UserSearchRequest request) {
+
+    UserSearchQuery searchQuery = userWebMapper.toQuery(request);
+    PageDTO<User> resultPage = adminUserService.search(searchQuery);
+
+    return new PagingResponse<>(resultPage, userWebMapper::toResponse);
   }
 
   @Operation(summary = "Read a managed user", description = "Requires `user:read`.")
   @GetMapping("/{userId}")
   @PreAuthorize("hasPermission(null, 'user:read')")
   public Response<UserResponse> detail(@PathVariable UUID userId) {
-    return Response.of(UserResponse.from(adminUserService.detail(userId)));
+    return Response.of(userWebMapper.toResponse(adminUserService.detail(userId)));
   }
 
   @Operation(summary = "Update a user's profile and roles", description = "Requires `user:update`.")
@@ -76,7 +88,7 @@ public class UserManagementController {
     @PathVariable UUID userId,
     @Valid @RequestBody UpdateUserRequest request) {
     return Response.of(
-      UserResponse.from(
+      userWebMapper.toResponse(
         adminUserService.update(
           subject(jwt), userId, request.email(), request.displayName(), request.roleIds())));
   }
@@ -88,7 +100,7 @@ public class UserManagementController {
   @PreAuthorize("hasPermission(null, 'user:update')")
   public Response<UserResponse> disable(
     @AuthenticationPrincipal Jwt jwt, @PathVariable UUID userId) {
-    return Response.of(UserResponse.from(adminUserService.disable(subject(jwt), userId)));
+    return Response.of(userWebMapper.toResponse(adminUserService.disable(subject(jwt), userId)));
   }
 
   @Operation(summary = "Enable a disabled user", description = "Requires `user:update`.")
@@ -96,7 +108,7 @@ public class UserManagementController {
   @PreAuthorize("hasPermission(null, 'user:update')")
   public Response<UserResponse> enable(
     @AuthenticationPrincipal Jwt jwt, @PathVariable UUID userId) {
-    return Response.of(UserResponse.from(adminUserService.enable(subject(jwt), userId)));
+    return Response.of(userWebMapper.toResponse(adminUserService.enable(subject(jwt), userId)));
   }
 
   @Operation(summary = "Clear a user's failed-login lock", description = "Requires `user:update`.")
@@ -104,7 +116,7 @@ public class UserManagementController {
   @PreAuthorize("hasPermission(null, 'user:update')")
   public Response<UserResponse> unlock(
     @AuthenticationPrincipal Jwt jwt, @PathVariable UUID userId) {
-    return Response.of(UserResponse.from(adminUserService.unlock(subject(jwt), userId)));
+    return Response.of(userWebMapper.toResponse(adminUserService.unlock(subject(jwt), userId)));
   }
 
   @Operation(
@@ -152,16 +164,5 @@ public class UserManagementController {
     boolean mustChangePassword,
     int credentialVersion,
     List<String> roles) {
-    private static UserResponse from(User user) {
-      return new UserResponse(
-        user.getId(),
-        user.getUsername(),
-        user.getEmail(),
-        user.getDisplayName(),
-        user.getStatus().name(),
-        user.isMustChangePassword(),
-        user.getCredentialVersion(),
-        user.getRoles().stream().map(Role::getCode).sorted().toList());
-    }
   }
 }

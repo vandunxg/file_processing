@@ -690,6 +690,13 @@ Controller chuyển HTTP request thành application use case.
 - User-facing error message phải qua i18n.
 - Dùng API prefix và version từ configuration.
 - Giới hạn pagination ngay tại request boundary.
+- Endpoint list, search và completion có dữ liệu không giới hạn **MUST** theo
+  convention paging chung: request DTO extends `PagingRequest`, controller
+  parameter dùng `@ValidatePaging(sortModel = Entity.class)`, application query
+  extends `PagingQuery`, repository có `count(query)` và `search(query)`, và
+  controller trả `PagingResponse<T>`.
+- Không ép paging cho bounded catalog, enum list, JWKS, `/me`, hoặc list chỉ
+  trong phạm vi current-user nếu product behavior chưa yêu cầu rõ.
 - Không tin proxy forwarding header nếu deployment chưa cấu hình trusted proxy.
 
 Ví dụ:

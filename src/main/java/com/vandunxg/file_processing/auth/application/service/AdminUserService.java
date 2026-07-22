@@ -7,6 +7,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.vandunxg.common.models.dto.PageDTO;
 import com.vandunxg.common.utils.IdUtils;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogEventPublisherPort;
 import com.vandunxg.file_processing.auth.application.port.out.CredentialVersionCachePort;
@@ -14,6 +15,7 @@ import com.vandunxg.file_processing.auth.application.port.out.PasswordHasherPort
 import com.vandunxg.file_processing.auth.application.port.out.RoleRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.SessionRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
+import com.vandunxg.file_processing.auth.application.query.UserSearchQuery;
 import com.vandunxg.file_processing.auth.application.port.out.UserRoleRepositoryPort;
 import com.vandunxg.file_processing.auth.domain.exception.AuthDomainException;
 import com.vandunxg.file_processing.auth.domain.exception.AuthErrorCode;
@@ -84,6 +86,16 @@ public class AdminUserService {
   @Transactional(readOnly = true)
   public List<User> list() {
     return userRepositoryPort.findAll();
+  }
+
+  @Transactional(readOnly = true)
+  public PageDTO<User> search(UserSearchQuery query) {
+    long count = userRepositoryPort.count(query);
+    if (count == 0) {
+      return PageDTO.of(List.of(), query.getPageIndex(), query.getPageSize(), 0);
+    }
+    return PageDTO.of(
+        userRepositoryPort.search(query), query.getPageIndex(), query.getPageSize(), count);
   }
 
   @Transactional(readOnly = true)

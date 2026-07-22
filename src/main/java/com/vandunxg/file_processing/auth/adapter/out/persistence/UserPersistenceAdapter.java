@@ -13,6 +13,7 @@ import com.vandunxg.file_processing.auth.adapter.out.persistence.entity.UserRole
 import com.vandunxg.file_processing.auth.adapter.out.persistence.mapper.RolePersistenceMapper;
 import com.vandunxg.file_processing.auth.adapter.out.persistence.mapper.UserPersistenceMapper;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
+import com.vandunxg.file_processing.auth.application.query.UserSearchQuery;
 import com.vandunxg.file_processing.auth.domain.model.Role;
 import com.vandunxg.file_processing.auth.domain.model.User;
 import lombok.RequiredArgsConstructor;
@@ -65,6 +66,16 @@ public class UserPersistenceAdapter implements UserRepositoryPort {
     return enrichAll(
         userPersistenceMapper.toDomain(
             jpaUserRepository.findAllByDeletedAtIsNullOrderByCreatedAtDesc()));
+  }
+
+  @Override
+  public Long count(UserSearchQuery query) {
+    return jpaUserRepository.count(query);
+  }
+
+  @Override
+  public List<User> search(UserSearchQuery query) {
+    return enrichAll(userPersistenceMapper.toDomain(jpaUserRepository.search(query)));
   }
 
   @Override

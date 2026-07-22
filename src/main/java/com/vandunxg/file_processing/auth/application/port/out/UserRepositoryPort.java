@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.vandunxg.file_processing.auth.application.query.UserSearchQuery;
 import com.vandunxg.file_processing.auth.domain.model.User;
 
 public interface UserRepositoryPort {
@@ -21,6 +22,10 @@ public interface UserRepositoryPort {
   Optional<User> findByIdForUpdate(UUID id);
 
   List<User> findAll();
+
+  Long count(UserSearchQuery query);
+
+  List<User> search(UserSearchQuery query);
 
   long countActiveAdmins();
 
