@@ -51,6 +51,5 @@ public class AuditLogController {
       String operation,
       UUID changedBy,
       Instant changedAt,
-      Map<String, Object> data) {
-  }
+      Map<String, Object> data) {}
 }

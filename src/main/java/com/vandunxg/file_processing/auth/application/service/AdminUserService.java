@@ -15,8 +15,8 @@ import com.vandunxg.file_processing.auth.application.port.out.PasswordHasherPort
 import com.vandunxg.file_processing.auth.application.port.out.RoleRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.SessionRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
-import com.vandunxg.file_processing.auth.application.query.UserSearchQuery;
 import com.vandunxg.file_processing.auth.application.port.out.UserRoleRepositoryPort;
+import com.vandunxg.file_processing.auth.application.query.UserSearchQuery;
 import com.vandunxg.file_processing.auth.domain.exception.AuthDomainException;
 import com.vandunxg.file_processing.auth.domain.exception.AuthErrorCode;
 import com.vandunxg.file_processing.auth.domain.model.AuditLog;

@@ -1,5 +1,7 @@
 package com.vandunxg.file_processing.auth.application.service;
 
+import java.util.List;
+
 import com.vandunxg.common.models.dto.PageDTO;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogPort;
 import com.vandunxg.file_processing.auth.application.query.AuditLogSearchQuery;
@@ -7,8 +9,6 @@ import com.vandunxg.file_processing.auth.domain.model.AuditLog;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
