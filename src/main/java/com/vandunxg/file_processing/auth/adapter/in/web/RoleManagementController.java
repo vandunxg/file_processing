@@ -2,6 +2,7 @@ package com.vandunxg.file_processing.auth.adapter.in.web;
 
 import com.vandunxg.common.models.dto.response.PagingResponse;
 import com.vandunxg.common.models.dto.response.Response;
+import com.vandunxg.common.models.validator.ValidatePaging;
 import com.vandunxg.common.web.support.SecurityUtils;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.RoleInheritanceRequest;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.RoleRequest;
@@ -9,6 +10,7 @@ import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.RoleSearchRe
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.ResourcePermissionResponse;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.RoleResponse;
 import com.vandunxg.file_processing.auth.adapter.in.web.mapper.RoleWebMapper;
+import com.vandunxg.file_processing.auth.adapter.out.persistence.entity.RoleEntity;
 import com.vandunxg.file_processing.auth.application.command.RoleActionCommand;
 import com.vandunxg.file_processing.auth.application.port.in.PermissionCatalogUseCase;
 import com.vandunxg.file_processing.auth.application.port.in.RoleManagementUseCase;
@@ -41,7 +43,8 @@ public class RoleManagementController {
   @Operation(summary = "List roles", description = "Requires `role:read` or `user:read`.")
   @GetMapping
   @PreAuthorize("hasPermission(null, 'role:read') or hasPermission(null, 'user:read')")
-  public PagingResponse<RoleResponse> list(@Valid RoleSearchRequest request) {
+  public PagingResponse<RoleResponse> list(
+    @ValidatePaging(sortModel = RoleEntity.class) RoleSearchRequest request) {
 
     RoleSearchQuery query = roleWebMapper.toQuery(request);
 
