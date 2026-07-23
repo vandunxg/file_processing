@@ -281,12 +281,14 @@ app:
     amqp:
       exchange: ${AUTH_AMQP_EXCHANGE:auth.events}
       routing-key:
+        action-log: ${AUTH_AMQP_ROUTING_ACTION_LOG:auth.action-log.recorded}
         audit-log: ${AUTH_AMQP_ROUTING_AUDIT_LOG:auth.audit-log.recorded}
         verification-email: ${AUTH_AMQP_ROUTING_VERIFY_EMAIL:auth.email.verification-requested}
         session-persist: ${AUTH_AMQP_ROUTING_SESSION_PERSIST:auth.session.persist}
         session-update: ${AUTH_AMQP_ROUTING_SESSION_UPDATE:auth.session.update}
         session-revoke: ${AUTH_AMQP_ROUTING_SESSION_REVOKE:auth.session.revoke}
       queue:
+        action-log: ${AUTH_AMQP_QUEUE_ACTION_LOG:auth.action-log.queue}
         audit-log: ${AUTH_AMQP_QUEUE_AUDIT_LOG:auth.audit-log.queue}
         verification-email: ${AUTH_AMQP_QUEUE_VERIFY_EMAIL:auth.email-verification.queue}
         session-persist: ${AUTH_AMQP_QUEUE_SESSION_PERSIST:auth.session-persist.queue}

@@ -92,12 +92,14 @@ app:
     amqp:
       exchange: "test.auth.events"
       routing-key:
+        action-log: "test.auth.action-log.recorded"
         audit-log: "test.auth.audit-log.recorded"
         verification-email: "test.auth.email.verification-requested"
         session-persist: "test.auth.session.persist"
         session-update: "test.auth.session.update"
         session-revoke: "test.auth.session.revoke"
       queue:
+        action-log: "test.auth.action-log.queue"
         audit-log: "test.auth.audit-log.queue"
         verification-email: "test.auth.email-verification.queue"
         session-persist: "test.auth.session-persist.queue"

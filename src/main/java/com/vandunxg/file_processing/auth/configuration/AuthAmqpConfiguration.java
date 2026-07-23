@@ -36,6 +36,20 @@ public class AuthAmqpConfiguration {
   }
 
   @Bean
+  Queue actionLogQueue() {
+    return QueueBuilder.durable(authProperties.amqp().queue().actionLog())
+        .withArgument(QueueOptions.DEAD_LETTER_EXCHANGE, authProperties.amqp().exchange() + ".dlx")
+        .withArgument(
+            QueueOptions.DEAD_LETTER_ROUTING_KEY, authProperties.amqp().routingKey().actionLog())
+        .build();
+  }
+
+  @Bean
+  Queue actionLogDeadLetterQueue() {
+    return QueueBuilder.durable(authProperties.amqp().queue().actionLog() + ".dlq").build();
+  }
+
+  @Bean
   Queue auditLogQueue() {
     return QueueBuilder.durable(authProperties.amqp().queue().auditLog())
         .withArgument(QueueOptions.DEAD_LETTER_EXCHANGE, authProperties.amqp().exchange() + ".dlx")
@@ -62,6 +76,20 @@ public class AuthAmqpConfiguration {
   @Bean
   Queue verificationEmailDeadLetterQueue() {
     return QueueBuilder.durable(authProperties.amqp().queue().verificationEmail() + ".dlq").build();
+  }
+
+  @Bean
+  Binding actionLogBinding() {
+    return BindingBuilder.bind(actionLogQueue())
+        .to(authEventsExchange())
+        .with(authProperties.amqp().routingKey().actionLog());
+  }
+
+  @Bean
+  Binding actionLogDeadLetterBinding() {
+    return BindingBuilder.bind(actionLogDeadLetterQueue())
+        .to(authEventsDeadLetterExchange())
+        .with(authProperties.amqp().routingKey().actionLog());
   }
 
   @Bean
