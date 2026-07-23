@@ -6,11 +6,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.convert.converter.Converter;
 import org.springframework.data.domain.AuditorAware;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.access.expression.method.DefaultMethodSecurityExpressionHandler;
 import org.springframework.security.access.expression.method.MethodSecurityExpressionHandler;
-import org.springframework.security.config.Customizer;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -19,6 +20,8 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationProvider;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
@@ -37,12 +40,19 @@ public class SecurityConfiguration {
     "/api/v1/auth/register",
     "/api/v1/auth/verify-email",
     "/api/v1/auth/resend-verification",
+    "/api/v1/auth/forgot-password",
+    "/api/v1/auth/reset-password",
+    "/api/v1/auth/complete-password-change",
     "/api/v1/auth/login",
     "/api/v1/auth/refresh",
-    "/api/certificate/.well-known/jwks.json",
+    "/api/v1/certificate/.well-known/jwks.json",
   };
 
   private static final String[] AUTHENTICATED_URLS = {"/api/**"};
+
+  private static final String[] ACTUATOR_PROBE_URLS = {
+    "/actuator/health/liveness", "/actuator/health/readiness"
+  };
 
   private static final String[] IGNORE_URLS = {
     "/js/*.js",
@@ -57,9 +67,15 @@ public class SecurityConfiguration {
   };
 
   private final RegexPermissionEvaluator customPermissionEvaluator;
+  private final Converter<org.springframework.security.oauth2.jwt.Jwt, AbstractAuthenticationToken>
+      jwtAuthenticationConverter;
+  private final JwtDecoder jwtDecoder;
 
   @Bean
   public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    JwtAuthenticationProvider jwtAuthenticationProvider = new JwtAuthenticationProvider(jwtDecoder);
+    jwtAuthenticationProvider.setJwtAuthenticationConverter(jwtAuthenticationConverter);
+
     http.csrf(AbstractHttpConfigurer::disable)
         .sessionManagement(
             sessionAuthenticationStrategy ->
@@ -74,9 +90,18 @@ public class SecurityConfiguration {
                     .permitAll()
                     .requestMatchers(PUBLIC_URLS)
                     .permitAll()
+                    .requestMatchers(ACTUATOR_PROBE_URLS)
+                    .permitAll()
+                    .requestMatchers("/actuator/prometheus")
+                    .hasAuthority("all:manage")
+                    .requestMatchers("/actuator/**")
+                    .denyAll()
                     .requestMatchers(AUTHENTICATED_URLS)
                     .authenticated())
-        .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
+        .oauth2ResourceServer(
+            oauth2 ->
+                oauth2.authenticationManagerResolver(
+                    request -> jwtAuthenticationProvider::authenticate));
     //            .exceptionHandling(
     //                exHandling ->
     // exHandling.authenticationEntryPoint(this.customAuthenticationEntryPoint));

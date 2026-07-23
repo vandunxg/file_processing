@@ -1,989 +1,972 @@
-# Quy tắc lập trình — file_processing
+# Quy tắc lập trình — `file_processing`
 
-> **File này là contract code cho mọi AI agent (Claude, Gemini, Cursor,
-> Copilot, …) và mọi người tham gia repo.**
-> Business behaviour nằm ở [`AGENTS.md`](./AGENTS.md).
-> Danh mục base class / util tái sử dụng nằm ở [`LIBRARY.md`](./LIBRARY.md).
-> Bản tiếng Anh: [`RULE.md`](./RULE.md).
+> Đây là hợp đồng lập trình áp dụng cho mọi AI agent và mọi thành viên đóng góp
+> vào repository. Nghiệp vụ nằm trong [`AGENTS.md`](./AGENTS.md). Các thành phần
+> dùng chung nằm trong [`LIBRARY.md`](./LIBRARY.md). Bản tiếng Anh là
+> [`RULE.md`](./RULE.md).
 
-Thứ tự ưu tiên khi rule mâu thuẫn: `AGENTS.md` (business) > file này (how to
-code) > thói quen cá nhân. Không được diễn giải lại rule một cách âm thầm.
-Nếu thấy rule sai, mở change request.
+Khi các quy tắc xung đột, áp dụng thứ tự ưu tiên sau:
 
----
+1. `AGENTS.md` quyết định hành vi nghiệp vụ và yêu cầu sản phẩm.
+2. File này quyết định cách thiết kế và triển khai code.
+3. `LIBRARY.md` mô tả API dùng chung hiện có.
+4. Thói quen hoặc sở thích cá nhân.
 
-## 1. Đọc codebase trước (workflow bắt buộc)
-
-Trước khi viết, sửa, hoặc lên kế hoạch code, làm theo đúng thứ tự sau.
-
-1. **CodeGraph** (nhanh, dùng index). Repo này đã index tại `.codegraph/`.
-  - MCP tools: gọi `codegraph_explore` trước — 1 call trả source verbatim của
-    các symbol liên quan + đường call giữa chúng. Fallback qua `codegraph_node`
-    để đọc cả file hoặc 1 symbol kèm caller.
-  - Shell fallback: `codegraph explore "<câu hỏi hoặc symbol>"` và
-    `codegraph node <symbol-hoặc-file>`.
-2. **`LIBRARY.md`** — scan xem base class / util cần dùng đã có trong common
-   lib chưa. Có rồi thì reuse.
-3. **`AGENTS.md`** — đọc section business tương ứng trước khi đổi hành vi.
-4. Chỉ dùng `grep`, `find`, `Read` khi CodeGraph không đủ chi tiết.
-
-✅ Nên: `codegraph_explore "LoginService AuthController User"` trước khi động
-vào code auth.
-❌ Không nên: mở đại vài file rồi đoán flow, hoặc viết lại 1 util đã có trong
-`com.vandunxg.common.utils.*`.
+Không được tự diễn giải lại quy tắc trong im lặng. Hãy tạo change request khi
+một quy tắc không còn phù hợp với codebase.
 
 ---
 
-## 2. Tech baseline (không đổi)
+## 1. Mức độ bắt buộc
 
-| Layer       | Công nghệ                                                          |
-|-------------|--------------------------------------------------------------------|
-| Ngôn ngữ    | Java 21                                                            |
-| Framework   | Spring Boot 4.1.x (đã pin trong `pom.xml`)                         |
-| Build       | Maven (wrapper `./mvnw`)                                           |
-| Persistence | PostgreSQL + Spring Data JPA + Hibernate                           |
-| Migration   | Flyway (`src/main/resources/db/migration`)                         |
-| Security    | Spring Security + JWT (access + rotating refresh)                  |
-| Cache       | `com.vandunxg.common:common-cache` (Redis)                         |
-| Messaging   | `com.vandunxg.common:common-amqp` (chỉ khi spec yêu cầu)           |
-| Mapping     | MapStruct (compile-time). ModelMapper **không** dùng cho code mới. |
-| Logging     | SLF4J 2.0.17 qua Lombok `@Slf4j`                                   |
-| Format      | Spotless + Google Java Format 1.27.0                               |
-| i18n        | Spring `MessageSource` tại `classpath:i18n/messages`               |
-| Test        | JUnit 5 + Mockito + AssertJ + Testcontainers                       |
-| API docs    | Springdoc OpenAPI (`springdoc-openapi-starter-webmvc-ui`)          |
+Tài liệu sử dụng ba mức độ yêu cầu.
 
-**Không tự ý thêm** framework, messaging, hay ORM mới nếu chưa có change
-request. Cấm Kafka, CQRS framework, Event Sourcing, native image, viết lại
-không dùng Lombok. Xem thêm `AGENTS.md` phần "Patterns to reject".
+- **MUST — bắt buộc** bảo vệ tính đúng, bảo mật, ranh giới kiến trúc hoặc độ ổn
+  định production. Không được merge code vi phạm nếu chưa có ngoại lệ được phê
+  duyệt.
+- **SHOULD — nên dùng** là cách triển khai mặc định. Có thể chọn cách khác nếu
+  pull request giải thích rõ vì sao cách đó dễ hiểu hoặc an toàn hơn.
+- **MAY — tùy chọn** là hướng dẫn có thể áp dụng khi phù hợp.
+
+Luôn chọn thiết kế nhỏ nhất nhưng vẫn bảo vệ được ranh giới cần thiết. Không tạo
+thêm abstraction, interface, package, framework hoặc hạ tầng chỉ cho một yêu cầu
+có thể xuất hiện trong tương lai.
 
 ---
 
-## 3. Cấu trúc package (Hexagonal, theo module)
+## 2. Đọc codebase trước khi thay đổi
 
-Mỗi business module đặt ở
-`src/main/java/com/vandunxg/file_processing/<module>/`. Module `auth` là layout
-tham chiếu — copy nguyên shape cho module mới.
+Trước khi lên kế hoạch hoặc sửa code, phải xác định hành vi hiện tại và kiểm tra
+khả năng tái sử dụng.
 
+1. Dùng CodeGraph trước đối với thay đổi chưa quen, xuyên nhiều layer hoặc liên
+   quan nhiều file.
+
+- MCP: gọi `codegraph_explore` trước, sau đó dùng `codegraph_node` khi cần
+  đọc toàn bộ source hoặc caller.
+- Shell fallback: `codegraph explore "<question or symbols>"` và
+  `codegraph node <symbol-or-file>`.
+
+2. Đọc phần nghiệp vụ liên quan trong `AGENTS.md` trước khi thay đổi behavior.
+3. Tìm trong `LIBRARY.md` trước khi tạo utility, base class, mapper, DTO,
+   repository helper hoặc configuration dùng chung.
+4. Đọc trực tiếp source và test bị ảnh hưởng. Source và test hiện tại là nguồn
+   đúng nếu index sinh tự động đã cũ.
+5. Dùng `grep`, `find` hoặc đọc file trực tiếp cho các chi tiết CodeGraph chưa
+   trả về.
+
+Đối với thay đổi cục bộ, rõ ràng và chỉ nằm trong một file, đọc trực tiếp source
+là đủ. Không cần chạy discovery toàn repository chỉ để sửa typo hoặc hằng số cục
+bộ.
+
+---
+
+## 3. Công nghệ nền tảng
+
+Nền tảng của dự án được giữ nhỏ và ổn định.
+
+| Khu vực     | Tiêu chuẩn                                                 |
+|-------------|------------------------------------------------------------|
+| Ngôn ngữ    | Java 21                                                    |
+| Framework   | Spring Boot 4.1.x, version được pin bởi parent POM         |
+| Build       | Maven wrapper, `./mvnw`                                    |
+| Persistence | PostgreSQL, Spring Data JPA, Hibernate                     |
+| Migration   | Flyway trong `src/main/resources/db/migration`             |
+| Security    | Spring Security, JWT access token, rotating refresh token  |
+| Cache       | `com.vandunxg.common:common-cache`                         |
+| Messaging   | `com.vandunxg.common:common-amqp`, chỉ dùng khi có yêu cầu |
+| Mapping     | MapStruct cho mapping không đơn giản                       |
+| Logging     | SLF4J, version do Spring Boot BOM quản lý                  |
+| Format      | Spotless và Google Java Format                             |
+| i18n        | Spring `MessageSource` tại `classpath:i18n/messages`       |
+| Testing     | JUnit 5, Mockito, AssertJ, Testcontainers                  |
+| API docs    | Springdoc OpenAPI 3.x cho Spring Boot 4                    |
+
+**MUST NOT — không được** thêm ORM, messaging platform, mapping framework,
+CQRS framework, event-sourcing framework, feature-flag platform hoặc runtime
+dependency lớn mới nếu chưa có change request rõ ràng.
+
+Không override version dependency đã được Spring Boot BOM quản lý trừ khi có lý
+do tương thích hoặc bảo mật đã được kiểm chứng.
+
+---
+
+## 4. Cấu trúc module và hướng dependency
+
+Business module nằm dưới:
+
+```text
+src/main/java/com/vandunxg/file_processing/<module>/
 ```
+
+Cấu trúc dưới đây là ranh giới dependency, không phải danh sách package bắt buộc.
+Chỉ tạo package và type mà module thực sự cần.
+
+```text
 <module>/
 ├── adapter/
-│   ├── in/
-│   │   └── web/
-│   │       ├── <Xxx>Controller.java          # REST controller mỏng
-│   │       ├── dto/
-│   │       │   ├── request/  <Xxx>Request.java
-│   │       │   └── response/ <Xxx>Response.java
-│   │       └── mapper/       <Xxx>WebMapper.java
-│   ├── out/
-│   │   └── persistence/
-│   │       ├── entity/       <Xxx>Entity.java, Jpa<Xxx>Repository.java
-│   │       ├── mapper/       <Xxx>PersistenceMapper.java
-│   │       └── <Xxx>PersistenceAdapter.java  # implements *RepositoryPort
-│   └── shared/                                # helper riêng của module
+│   ├── in/web/
+│   │   ├── <Xxx>Controller.java
+│   │   ├── dto/request/
+│   │   ├── dto/response/
+│   │   └── mapper/
+│   └── out/
+│       ├── persistence/
+│       │   ├── entity/
+│       │   ├── mapper/
+│       │   └── <Xxx>PersistenceAdapter.java
+│       └── client/
 ├── application/
-│   ├── port/
-│   │   ├── in/               <Xxx>UseCase.java   (interface)
-│   │   └── out/              <Xxx>RepositoryPort.java, <Xxx>...Port.java
-│   ├── service/              <Xxx>Service.java   (@Service, implements UseCase)
-│   ├── command/              <Xxx>Command.java   (input write-side)
-│   └── query/                <Xxx>Query.java     (input read-side, extends PagingQuery)
+│   ├── port/in/
+│   ├── port/out/
+│   ├── service/
+│   ├── command/
+│   ├── query/
+│   ├── result/
+│   └── exception/
 ├── domain/
-│   ├── model/                <Xxx>.java   (extends AuditableDomain, KHÔNG Spring/JPA)
-│   └── exception/            <Xxx>ErrorCode.java (implements ResponseError)
-└── configuration/            <Xxx>Configuration.java (@Configuration bean)
+│   ├── model/
+│   ├── service/
+│   └── exception/
+└── configuration/
 ```
 
-Rule dependency (hexagonal):
+### 4.1 Quy tắc dependency
 
-- `domain/` chỉ phụ thuộc: `com.vandunxg.common.models.domain`, `.exception`,
-  `.error`, `common.utils`, và `java.*`. Không gì khác.
-- `application/` phụ thuộc `domain/` + common models. **Không** phụ thuộc
-  adapter, Spring Web, hay JPA annotation.
-- `adapter/` phụ thuộc `application/` + `domain/`. Adapter là chỗ duy nhất
-  được viết `@RestController`, `@Entity`, `@Repository`, `RestClient`, v.v.
-- `configuration/` chỉ wire bean, giữ mỏng.
+- `domain` **không được** import Spring, JPA, Jackson, servlet, HTTP hoặc class
+  thuộc adapter.
+- `application` **có thể** dùng annotation transaction và component của Spring,
+  nhưng **không được** phụ thuộc controller, JPA entity, Spring Data repository,
+  HTTP client hoặc adapter khác.
+- `adapter` triển khai inbound/outbound boundary và có thể phụ thuộc
+  `application`, `domain`.
+- `configuration` dùng để wire infrastructure và cross-cutting bean. Giữ lớp
+  này mỏng.
+- Một business module **không được** truy cập trực tiếp adapter package của
+  module khác. Giao tiếp qua application port hoặc domain API được chia sẻ rõ
+  ràng.
 
-✅ Nên: đặt `AuthController` trong `auth/adapter/in/web/`.
-❌ Không nên: gắn annotation JPA lên class trong `domain/model`.
+### 4.2 Interface không gây ceremony
 
----
+Tạo interface khi nó bảo vệ một boundary có thật:
 
-## 4. Naming convention
+- inbound use case được gọi bởi một hoặc nhiều inbound adapter;
+- outbound dependency có thể có nhiều implementation hoặc cần thay thế trong
+  test;
+- boundary giữa module cần contract ổn định.
 
-| Khái niệm                    | Suffix / pattern                                          | Vị trí                                |
-|------------------------------|-----------------------------------------------------------|---------------------------------------|
-| Domain aggregate / entity    | `User`, `AuditLog`                                        | `domain/model/`                       |
-| Enum domain                  | `UserStatus`, `OperationType`                             | `domain/model/`                       |
-| Bảng mã lỗi của module       | `<Module>ErrorCode`                                       | `domain/exception/`                   |
-| Use case inbound (interface) | `<Xxx>UseCase`                                            | `application/port/in/`                |
-| Port outbound (interface)    | `<Xxx>RepositoryPort`, `<Xxx>NotifierPort`                | `application/port/out/`               |
-| Impl use case                | `<Xxx>Service` (`@Service`)                               | `application/service/`                |
-| Input write-side             | `<Xxx>Command`                                            | `application/command/`                |
-| Input read-side              | `<Xxx>Query` (extends `PagingQuery`)                      | `application/query/`                  |
-| REST controller              | `<Xxx>Controller`                                         | `adapter/in/web/`                     |
-| HTTP request DTO             | `<Xxx>Request` (extends `Request`)                        | `adapter/in/web/dto/request/`         |
-| HTTP response DTO            | `<Xxx>Response` (extends `BaseResponse` nếu có audit)     | `adapter/in/web/dto/response/`        |
-| Web mapper                   | `<Xxx>WebMapper`                                          | `adapter/in/web/mapper/`              |
-| JPA entity                   | `<Xxx>Entity` (extends `AuditableEntity`)                 | `adapter/out/persistence/entity/`     |
-| Spring Data repository       | `Jpa<Xxx>Repository`                                      | `adapter/out/persistence/entity/`     |
-| Persistence adapter          | `<Xxx>PersistenceAdapter`                                 | `adapter/out/persistence/`            |
-| Persistence mapper           | `<Xxx>PersistenceMapper` (implements `EntityMapper<D,E>`) | `adapter/out/persistence/mapper/`     |
-| Spring configuration         | `<Xxx>Configuration`                                      | `configuration/`                      |
-| Scheduled job                | `<Xxx>Scheduler` / vd `SystemGC`                          | `configuration/` hoặc feature package |
-| Test class                   | `<ClassName>Test` (unit) / `<ClassName>IT` (integration)  | `src/test/java` (mirror package)      |
+Không tạo một interface cho mọi class hoặc một use-case interface cho mỗi method
+nhỏ. Có thể nhóm các operation liên quan nếu contract vẫn dễ hiểu.
 
-Method name là `camelCase` (verb). Method trả boolean bắt đầu bằng `is` /
-`has` / `can`. Enum value viết `SCREAMING_SNAKE_CASE`. Constant khai
-`static final` và `SCREAMING_SNAKE_CASE`.
+Không tạo package rỗng hoặc placeholder class chỉ để giống sơ đồ tham chiếu.
 
 ---
 
-## 5. Rule cho domain model
+## 5. Naming và Java style
 
-Mọi aggregate cần persist đều kế thừa `AuditableDomain` từ
-`com.vandunxg.common.models.domain`. Combo Lombok cố định:
+Tên phải thể hiện ý nghĩa nghiệp vụ.
+
+| Khái niệm              | Quy ước                                   |
+|------------------------|-------------------------------------------|
+| Domain aggregate       | `User`, `Role`, `ProcessingJob`           |
+| Domain value object    | `EmailAddress`, `FileChecksum`            |
+| Domain enum            | `UserStatus`, `JobStatus`                 |
+| Inbound port           | `<Capability>UseCase`                     |
+| Outbound port          | `<Xxx>RepositoryPort`, `<Xxx>StoragePort` |
+| Application service    | `<Capability>Service`                     |
+| Input ghi              | `<Action>Command`                         |
+| Input đọc              | `<Action>Query`                           |
+| Output application     | `<Action>Result`                          |
+| Controller             | `<Xxx>Controller`                         |
+| Request DTO            | `<Xxx>Request`                            |
+| Response DTO           | `<Xxx>Response`                           |
+| JPA entity             | `<Xxx>Entity`                             |
+| Spring Data repository | `Jpa<Xxx>Repository`                      |
+| Persistence adapter    | `<Xxx>PersistenceAdapter`                 |
+| Configuration          | `<Xxx>Configuration`                      |
+| Unit test              | `<ClassName>Test`                         |
+| Integration test       | `<ClassName>IT`                           |
+
+Quy ước bổ sung:
+
+- Method dùng động từ camel-case.
+- Boolean method bắt đầu bằng `is`, `has` hoặc `can`.
+- Enum constant và constant dùng `SCREAMING_SNAKE_CASE`.
+- Tránh viết tắt nếu đó không phải thuật ngữ domain đã thống nhất.
+- Method tập trung vào một mục đích. Ưu tiên early return thay vì lồng nhiều cấp.
+- Ưu tiên record cho command, query, result và value object bất biến.
+- Không dùng `Optional` làm field, DTO field, entity field hoặc parameter.
+- Trả collection rỗng thay vì `null`.
+- Chỉ query có phân trang mới extends `PagingQuery`. Point lookup dùng record
+  bình thường hoặc identifier trực tiếp.
+
+---
+
+## 6. Domain model
+
+Domain object biểu diễn trạng thái và behavior nghiệp vụ. Nó không phải model
+persistence hoặc HTTP.
+
+### 6.1 Khởi tạo và invariant
+
+- Aggregate **phải** bảo vệ invariant qua constructor, factory và behavior
+  method rõ ràng.
+- Không bắt buộc một bộ Lombok annotation cố định cho mọi domain class.
+- Không thêm no-argument constructor chỉ để tiện. Constructor phục vụ JPA nằm
+  trên JPA entity, không nằm trên domain model.
+- Builder **có thể** dùng trong test hoặc khi khởi tạo phức tạp, nhưng **không
+  được** bỏ qua invariant bắt buộc.
+- Equality **phải** theo identity của domain. Không generate equality từ mutable
+  field nếu chưa xem xét hậu quả.
+- Thay đổi trạng thái qua method nghiệp vụ như `activate()`, `delete()`,
+  `changeName()`, không dùng public setter.
+
+Ví dụ:
 
 ```java
-package com.vandunxg.file_processing.auth.domain.model;
-
-import java.time.Instant;
-import java.util.UUID;
-
-import com.vandunxg.common.models.domain.AuditableDomain;
-import lombok.*;
-import lombok.experimental.SuperBuilder;
 
 @Getter
-@SuperBuilder
-@NoArgsConstructor
-@AllArgsConstructor
-@Setter(AccessLevel.PRIVATE)
-@EqualsAndHashCode(callSuper = false)
-public class User extends AuditableDomain {
+public final class Role extends AuditableDomain {
 
-  private UUID id;
-  private String username;
-  private String password;
-  private String email;
-  private Instant deletedAt;
+  private final UUID id;
+  private String name;
+  private RoleStatus status;
+  private Instant deleteAt;
+
+  private Role(UUID id, String name) {
+    this.id = Objects.requireNonNull(id);
+    this.name = requireValidName(name);
+    this.status = RoleStatus.ACTIVE;
+  }
+
+  public static Role create(String name) {
+    return new Role(IdUtils.nextId(), name);
+  }
+
+  public void rename(String newName) {
+    this.name = requireValidName(newName);
+  }
+
+  public void delete(Instant now) {
+    if (status == RoleStatus.ACTIVE) {
+      throw new RoleRuleViolation(RoleRule.ROLE_MUST_BE_INACTIVE);
+    }
+    if (deleteAt == null) {
+      deleteAt = Objects.requireNonNull(now);
+    }
+  }
+
+  public boolean isDeleted() {
+    return deleteAt != null;
+  }
 }
 ```
 
-Quy tắc:
+Pure domain exception **không được** chứa HTTP status hoặc biết response format.
+Application exception chịu trách nhiệm chuyển domain failure sang response
+contract chuẩn.
 
-- `@Setter(AccessLevel.PRIVATE)` — muốn mutate phải qua method behaviour trong
-  chính domain, không set từ ngoài.
-- `@SuperBuilder` vì kế thừa `AuditableDomain`.
-- ID là `UUID`, sinh bằng `IdUtils.nextId()` (xem `LIBRARY.md`).
-- Soft-delete dùng `deletedAt` (`Instant`), không dùng boolean flag.
+### 6.2 Thời gian
 
-✅ Nên: thêm method behaviour (vd `user.deactivate()`) ngay trên aggregate.
-❌ Không nên: import `jakarta.persistence.*`, `org.springframework.*`, hay
-`javax.validation.*` trong `domain/`.
+- Lưu timestamp bằng `Instant`.
+- Inject `Clock` vào application code có behavior phụ thuộc thời gian.
+- Không gọi trực tiếp `Instant.now()` trong business logic cần test xác định.
+- Chỉ chuyển sang timezone người dùng tại API hoặc presentation boundary.
 
 ---
 
-## 6. Xử lý exception và error ⭐
+## 7. Application error và i18n
 
-Common lib đã cung cấp full pipeline. **Không viết lại.**
+Common web library sở hữu format error response cuối cùng. Mỗi module sở hữu
+error catalog và message đa ngôn ngữ của mình.
 
-### 6.1 Bộ HTTP status code được duyệt
+### 7.1 Error name có prefix module
 
-Mọi entry trong `<Module>ErrorCode` (và mọi response ở controller) chỉ được
-dùng **đúng** các code dưới đây. Không dùng `405`, `410`, `422`, hay bất kỳ
-code nào khác — map tình huống về code được duyệt gần nhất thay vào đó. Đây
-là ràng buộc chung toàn project, không phải lựa chọn riêng của từng module.
+Mọi enum constant của application error **phải** bắt đầu bằng prefix module viết
+hoa:
 
-**Nhóm thành công**
+```text
+<MODULE>_<ERROR_NAME>
+```
 
-| HTTP code      | Khi sử dụng                              |
-|----------------|------------------------------------------|
-| 200 OK         | Request thành công và có response body   |
-| 201 Created    | Tạo resource mới hoàn tất                |
-| 202 Accepted   | Đã nhận request nhưng xử lý bất đồng bộ  |
-| 204 No Content | Thành công nhưng không cần response body |
+Ví dụ:
 
-**Nhóm lỗi client**
+```text
+AUTH_INVALID_CREDENTIALS
+ROLE_IS_ACTIVE
+FILE_UNSUPPORTED_MEDIA_TYPE
+PROCESSING_JOB_NOT_FOUND
+```
 
-| HTTP code                  | Khi sử dụng                                                                  |
-|----------------------------|------------------------------------------------------------------------------|
-| 400 Bad Request            | Request sai format hoặc validation thất bại (thay cho `422`/`410` trước đây) |
-| 401 Unauthorized           | Chưa đăng nhập hoặc token không hợp lệ                                       |
-| 403 Forbidden              | Đã đăng nhập nhưng không đủ role                                             |
-| 404 Not Found              | Resource không tồn tại hoặc user không được biết nó tồn tại                  |
-| 409 Conflict               | Request hợp lệ nhưng xung đột trạng thái/dữ liệu                             |
-| 413 Content Too Large      | File vượt giới hạn                                                           |
-| 415 Unsupported Media Type | Sai loại file/content type                                                   |
+Prefix là bắt buộc vì `ResponseError.getName()` đồng thời là i18n key toàn cục.
+Không được dùng tên chung chung như `NOT_FOUND`, `INVALID_STATUS` hoặc
+`ACCESS_DENIED`.
 
-**Nhóm lỗi server**
+### 7.2 Error enum
 
-| HTTP code                 | Khi sử dụng                                                                                                                                                                  |
-|---------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 500 Internal Server Error | Lỗi không dự kiến trong code, hoặc một invariant bắt buộc của hệ thống bị vỡ (vd: role seed sẵn mà không tìm thấy trong DB) — đây là lỗi data/ops, không phải lỗi của client |
-| 503 Service Unavailable   | PostgreSQL, Redis, MinIO hoặc dependency tạm thời unavailable                                                                                                                |
-
-**Ngoại lệ duy nhất:** `429 Too Many Requests` cũng được duyệt, chỉ dành
-riêng cho rate limiting (xem `AuthErrorCode.AUTH_RATE_LIMITED`). Không được
-thêm code nào khác ngoài bảng này mà không cập nhật rule này trước.
-
-### 6.2 Định nghĩa bảng mã lỗi của module
-
-Mỗi module có đúng 1 enum implements
-`com.vandunxg.common.models.error.ResponseError`. Enum đặt ở
-`<module>/domain/exception/`. Mọi status dùng phải nằm trong bảng §6.1.
+Mỗi module sở hữu một error enum trong `application/exception` và implements
+`ResponseError`.
 
 ```java
-package com.vandunxg.file_processing.auth.domain.exception;
-
-import com.vandunxg.common.models.error.ResponseError;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 
 @Getter
 @RequiredArgsConstructor
-public enum AuthErrorCode implements ResponseError {
+public enum RoleErrorCode implements ResponseError {
 
-  INVALID_CREDENTIALS(40101, "Invalid username or password", 401),
-  ACCOUNT_LOCKED(40301, "Account is locked", 403),
-  USER_NOT_FOUND(40401, "User not found", 404),
-  REFRESH_TOKEN_REUSED(40102, "Refresh token was reused", 401);
+  ROLE_NOT_FOUND(40411, "Role not found", 404),
+  ROLE_IS_ACTIVE(40913, "Role must be inactive before deletion", 409);
 
-  private final Integer code;   // business code trả client
-  private final String message; // text fallback nếu không có entry i18n khớp (xem §6.5)
-  private final int status;     // phải là 1 trong các code ở §6.1
+  private final Integer code;
+  private final String message;
+  private final int status;
 
   @Override
   public String getName() {
     return name();
   }
-
-  @Override
-  public String getMessage() {
-    return message;
-  }
-
-  @Override
-  public int getStatus() {
-    return status;
-  }
-
-  @Override
-  public Integer getCode() {
-    return code;
-  }
 }
 ```
 
-Quy tắc mã code: `{httpStatus}{2 chữ số thứ tự trong nhóm status đó, bắt đầu
-từ 01}` — chỉ tăng số thứ tự khi 2 mã lỗi trong cùng module trùng HTTP status.
-Dành `xx000` cho lỗi "chưa phân loại".
+Quy tắc:
 
-### 6.3 Log context **trước khi** throw
+- Tên enum constant **phải** chứa prefix module.
+- i18n key **phải** giống chính xác tên enum constant.
+- Numeric business code **phải** unique trên toàn repository.
+- Giữ format integer hiện tại: `{httpStatus}{2-digit sequence}`.
+- Sequence là toàn repository theo HTTP status; không reset sequence cho từng
+  module nếu việc đó tạo code trùng.
+- Numeric code đã public **không được** đổi số nếu chưa có quyết định tương thích
+  API.
+- Fallback message viết bằng tiếng Anh và **không được** chứa secret hoặc PII.
+- Dùng HTTP status chuẩn gần đúng nhất về semantic.
 
-Mọi `throw` mà kết thúc 1 request đều phải có 1 dòng log ngay trước đó, ghi
-lại đầy đủ context nghiệp vụ. Không có dòng log này thì lúc trace sau này
-phải chạy lại request mới hiểu. Rule này áp dụng ở **cả** domain và
-application layer.
+Thêm unit test scan toàn bộ enum implements `ResponseError` và fail khi numeric
+code, enum name hoặc i18n key bắt buộc bị trùng hoặc thiếu.
 
-- **Level:** `warn` cho lỗi nghiệp vụ (sai mật khẩu, không đủ quyền, không
-  tìm thấy resource), `error` cho lỗi hệ thống thực sự đi kèm throw.
-- **Format** theo §8.2: `[methodName] <cái gì fail> key=value key=value`.
-  Kèm ID cần thiết để trace (user id, resource id, số lần retry, IP client,
-  trace id nếu chưa có trong MDC). Không log password, token, row khách hàng.
-- Không log lại **cùng 1 lỗi** ở mọi layer khi re-throw — 1 log ở điểm quyết
-  định là đủ. Layer trên có thể log thêm context nó biết (vd controller log
-  thêm request path).
+### 7.3 File i18n
 
-```java
-// application/service/LoginService.java
-public LoginResult login(LoginCommand cmd) {
-  var user = userRepository.findByUsername(cmd.getUsername()).orElse(null);
-  if (user == null) {
-    log.warn("[login] user not found username={} ip={}", cmd.getUsername(), cmd.getIpAddress());
-    throw new AuthDomainException(AuthErrorCode.INVALID_CREDENTIALS);
-  }
-  if (!passwordEncoder.matches(cmd.getPassword(), user.getPassword())) {
-    log.warn("[login] invalid password userId={} ip={}", user.getId(), cmd.getIpAddress());
-    throw new AuthDomainException(AuthErrorCode.INVALID_CREDENTIALS);
-  }
-  if (user.getStatus() == UserStatus.INACTIVE) {
-    log.warn("[login] inactive account userId={} status={}", user.getId(), user.getStatus());
-    throw new AuthDomainException(AuthErrorCode.ACCOUNT_LOCKED, user.getId());
-  }
-  ...
-}
+Mọi error name **phải** tồn tại trong cả hai file:
+
+```text
+src/main/resources/i18n/messages.properties
+src/main/resources/i18n/messages_vi.properties
 ```
 
-**Cũng log breadcrumb quanh code dễ bug** — gọi HTTP ngoài, I/O MinIO / S3,
-điểm race DB, vòng retry, biên parser. Log input state *trước* call rủi ro
-ở level `info` / `debug`, log kết quả (`success` / `retry` / `failed`) *sau*.
-Nếu code chỗ đó chết, đọc log phải dựng lại được flow.
+Ví dụ:
 
-```java
-log.debug("[claimJob] attempting atomic claim jobId={} workerId={}", jobId, workerId);
-int updated = jobRepository.tryClaim(jobId, workerId);
-if (updated == 0) {
-  log.warn("[claimJob] already taken by another worker jobId={}", jobId);
-  throw new JobDomainException(JobErrorCode.CONCURRENT_CLAIM);
-}
-log.info("[claimJob] claimed jobId={} workerId={}", jobId, workerId);
+```properties
+# messages.properties
+ROLE_NOT_FOUND=Role not found
+ROLE_IS_ACTIVE=Role must be inactive before deletion
 ```
 
-### 6.4 Domain exception thuộc về domain
+```properties
+# messages_vi.properties
+ROLE_NOT_FOUND=Không tìm thấy vai trò
+ROLE_IS_ACTIVE=Vai trò phải ở trạng thái không hoạt động trước khi xóa
+```
 
-Layer `domain/` không được depend vào symbol của
-`com.vandunxg.common.models.exception` với tên gốc. Mỗi module có 1 **exception
-class riêng thuộc domain**, extend `ResponseException` để cùng format
-wire-level với `ExceptionHandleAdvice`, nhưng đọc trong code domain lại là
-1 khái niệm domain.
+Không dùng dotted key khi common exception handler resolve bằng
+`error.getName()`.
+
+### 7.4 Exception theo từng layer
+
+- Domain code chỉ throw pure domain rule violation khi chính domain object enforce
+  rule đó.
+- Application service chuyển domain violation hoặc application failure thành
+  module-specific exception extends `ResponseException`.
+- Adapter chuyển infrastructure exception thành application/module error có ý
+  nghĩa khi caller có thể xử lý. Phải giữ original cause.
+- Controller thông thường không tạo hoặc translate business exception.
+- Không throw `IllegalArgumentException`, `RuntimeException` hoặc
+  `NullPointerException` để biểu diễn business failure.
+
+Ví dụ:
 
 ```java
-// auth/domain/exception/AuthDomainException.java
-package com.vandunxg.file_processing.auth.domain.exception;
+public final class RoleException extends ResponseException {
 
-import com.vandunxg.common.models.error.ResponseError;
-import com.vandunxg.common.models.exception.ResponseException;
-
-public class AuthDomainException extends ResponseException {
-
-  public AuthDomainException(ResponseError error) {
-    super(error);
-  }
-
-  public AuthDomainException(ResponseError error, Object... params) {
+  public RoleException(RoleErrorCode error, Object... params) {
     super(error, params);
   }
 
-  public AuthDomainException(String message, Throwable cause, ResponseError error,
-                             Object... params) {
+  public RoleException(
+    String message, Throwable cause, RoleErrorCode error, Object... params) {
     super(message, cause, error, params);
   }
 }
 ```
 
-Phân bổ throw theo layer:
+### 7.5 HTTP status
 
-| Layer          | Throw cái gì                                                                                                                                                                 |
-|----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `domain/`      | `<Module>DomainException(<Module>ErrorCode.XXX, …)` — dùng đúng từ vựng domain.                                                                                              |
-| `application/` | Cũng dùng domain exception khi lỗi thuộc domain rule. Dùng `ResponseException` common lib khi lỗi cross-cutting không thuộc domain nào (vd `BadRequestError.INVALID_INPUT`). |
-| `adapter/`     | Không tự throw `ResponseException`; hoặc để domain throw, hoặc wrap lỗi upstream rồi throw lại bằng domain exception của module.                                             |
+Các status ưu tiên cho application-defined error:
 
-Vì `AuthDomainException extends ResponseException`, `ExceptionHandleAdvice`
-đang có sẵn tự bắt qua parent type — **không cần viết advice mới** và format
-`ErrorResponse` trên dây giữ nguyên. Đó chính là ý "cùng 1 chuẩn format".
+- `200`, `201`, `202`, `204` cho success;
+- `400`, `401`, `403`, `404`, `409`, `413`, `415`, `429` cho client failure;
+- `500`, `502`, `503`, `504` cho server hoặc dependency failure.
 
-Nếu 1 module có 2 catalog lỗi tách biệt (vd `file-import` chia thành
-`ImportFileErrorCode` và `ProcessingJobErrorCode`), có thể thêm domain
-exception thứ 2 (`ImportFileDomainException`, `ProcessingJobDomainException`)
-— cả 2 vẫn extend `ResponseException`.
-
-### 6.5 Message i18n
-
-**Key để lookup là `name()` của enum, không phải field `message`.**
-`ExceptionHandleAdvice` resolve chuỗi đã localize bằng cách gọi
-`localeStringService.getMessage(error.getName(), error.getMessage(), params)`
-— nó tìm property key theo `getName()` (vd `INVALID_CREDENTIALS`), chỉ dùng
-text trong `getMessage()` làm fallback khi locale hiện tại không có key đó.
-Làm ngược lại (key trong file properties là chuỗi dotted như
-`auth.error.invalid_credentials` thay vì tên enum) khiến mọi lookup miss âm
-thầm và text fallback bị lộ ra ở mọi response — bug này đã xảy ra thật rồi,
-đừng lặp lại.
-
-Tên của mỗi mã lỗi phải tồn tại như 1 key ở **cả** `messages.properties`
-(English) và `messages_vi.properties` (Việt):
-
-```properties
-# src/main/resources/i18n/messages.properties
-INVALID_CREDENTIALS=Invalid username or password
-ACCOUNT_LOCKED=Account is locked
-```
-
-```properties
-# src/main/resources/i18n/message_vi.properties
-INVALID_CREDENTIALS=Sai tên đăng nhập hoặc mật khẩu
-ACCOUNT_LOCKED=Tài khoản đang bị khoá
-```
-
-### 6.6 Quy tắc
-
-✅ Nên:
-
-- Định nghĩa 1 `<Module>ErrorCode implements ResponseError` cho mỗi module.
-- Định nghĩa 1 `<Module>DomainException extends ResponseException` cho mỗi
-  module.
-- **Log context ở `warn`/`error` ngay trước `throw`** — 1 dòng cho mỗi điểm
-  quyết định, đủ ID để trace sau này.
-- Thêm breadcrumb log ở `info`/`debug` quanh code path dễ bug (I/O ngoài,
-  retry, race point) để lỗi có thể dựng lại chỉ từ log.
-- Mỗi mã lỗi mới đưa vào enum của **chính module đó**, không nhét sang module
-  khác.
-- Để `ExceptionHandleAdvice` (auto-config bởi `common-web`) format response.
-
-❌ Không nên:
-
-- Throw thẳng `ResponseException` từ `domain/` — dùng `<Module>DomainException`.
-- Throw `IllegalArgumentException`, `RuntimeException`, `NullPointerException`
-  để báo lỗi nghiệp vụ.
-- `throw new AuthDomainException(...)` **mà không có dòng log ngay trước đó**.
-- Log lại cùng lỗi ở mỗi layer khi re-throw — 1 log ở điểm quyết định là đủ.
-- Viết `@RestControllerAdvice` riêng nếu chưa extend `ExceptionHandleAdvice`.
-- Catch `Exception e` trong service để `return null` hoặc giá trị sentinel.
-- Chỉ dựa vào field `message` của enum để localize — đó là text fallback,
-  không thay thế được việc thêm key `name()` vào cả 2 file
-  `messages.properties` (§6.5).
-- Dùng HTTP status nằm ngoài bảng §6.1.
-- Truyền token / password / row khách hàng vào error params hoặc log.
+Status chuẩn do framework sinh như `405`, `406` vẫn hợp lệ. Khi dùng status khác
+phải giải thích rõ semantic trong review; không được ép một tình huống vào status
+sai chỉ để khớp allowlist.
 
 ---
 
-## 7. Convention MapStruct (mapping)
+## 8. Logging và observability
 
-**Dùng MapStruct. Không dùng ModelMapper, BeanUtils, hay reflection.** MapStruct
-sinh code mapper tại compile time nên không có reflection runtime, sai lệch
-field lộ ngay lúc compile, và code generated đọc được ở
-`target/generated-sources/annotations/`.
+Log phục vụ điều tra sự cố. Log không phải error transport thứ hai và không được
+trở thành nguồn lộ dữ liệu nhạy cảm.
 
-### 7.1 Cấu hình Maven
+### 8.1 Khai báo và format
 
-Thêm MapStruct song song Lombok trong `pom.xml`. Vì cả 2 đều là annotation
-processor, phải khai báo cùng lúc trong `annotationProcessorPaths` **đúng
-thứ tự** (`lombok-mapstruct-binding` là cầu nối).
-
-```xml
-<properties>
-  <mapstruct.version>1.6.3</mapstruct.version>
-  <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
-</properties>
-
-<dependencies>
-  <dependency>
-    <groupId>org.mapstruct</groupId>
-    <artifactId>mapstruct</artifactId>
-    <version>${mapstruct.version}</version>
-  </dependency>
-</dependencies>
-
-<!-- trong maven-compiler-plugin executions/default-compile/configuration -->
-<annotationProcessorPaths>
-  <path>
-    <groupId>org.projectlombok</groupId>
-    <artifactId>lombok</artifactId>
-  </path>
-  <path>
-    <groupId>org.projectlombok</groupId>
-    <artifactId>lombok-mapstruct-binding</artifactId>
-    <version>${lombok-mapstruct-binding.version}</version>
-  </path>
-  <path>
-    <groupId>org.mapstruct</groupId>
-    <artifactId>mapstruct-processor</artifactId>
-    <version>${mapstruct.version}</version>
-  </path>
-</annotationProcessorPaths>
-```
-
-Cùng commit này bỏ dependency `org.modelmapper:modelmapper` và property
-`modelmapper.version`.
-
-### 7.2 Shape của mapper
-
-Mọi mapper là 1 **interface** annotate `@Mapper(componentModel = "spring")`
-— MapStruct sinh impl là Spring bean; inject interface ở chỗ cần dùng.
-
-Mapper domain ↔ JPA entity implement `EntityMapper<D, E>` từ `common-models`
-để 4 method chuẩn thống nhất toàn codebase:
+Class cần log dùng SLF4J, thông thường qua Lombok:
 
 ```java
-// adapter/out/persistence/mapper/UserPersistenceMapper.java
-package com.vandunxg.file_processing.auth.adapter.out.persistence.mapper;
 
-import java.util.List;
-
-import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
-import org.mapstruct.MappingConstants;
-import org.mapstruct.ReportingPolicy;
-
-import com.vandunxg.common.models.mapper.EntityMapper;
-import com.vandunxg.file_processing.auth.adapter.out.persistence.entity.UserEntity;
-import com.vandunxg.file_processing.auth.domain.model.User;
-
-@Mapper(
-    componentModel = MappingConstants.ComponentModel.SPRING,
-    unmappedTargetPolicy = ReportingPolicy.ERROR,
-    unmappedSourcePolicy = ReportingPolicy.WARN)
-public interface UserPersistenceMapper extends EntityMapper<User, UserEntity> {
-
-  @Override User toDomain(UserEntity entity);
-
-  @Override
-  @Mapping(target = "createdAt",  ignore = true)   // audit do JPA lifecycle set
-  @Mapping(target = "lastModifiedAt", ignore = true)
-  UserEntity toEntity(User domain);
-
-  @Override List<User> toDomain(List<UserEntity> entities);
-  @Override List<UserEntity> toEntity(List<User> domains);
-}
-```
-
-Web mapper (DTO ↔ command / response) là interface `@Mapper` bình thường —
-không cần implement `EntityMapper` vì không dính entity:
-
-```java
-// adapter/in/web/mapper/AuthWebMapper.java
-@Mapper(componentModel = MappingConstants.ComponentModel.SPRING,
-        unmappedTargetPolicy = ReportingPolicy.ERROR)
-public interface AuthWebMapper {
-
-  @Mapping(target = "ipAddress", source = "ipAddress")
-  LoginCommand toCommand(LoginRequest request, String ipAddress);
-
-  LoginResponse toResponse(LoginResult result);
-}
-```
-
-### 7.3 Quy tắc
-
-✅ Nên:
-
-- 1 mapper interface / phía adapter: `<Xxx>PersistenceMapper` trong
-  `adapter/out/persistence/mapper/`, `<Xxx>WebMapper` trong
-  `adapter/in/web/mapper/`.
-- Luôn `componentModel = "spring"`.
-- Đặt `unmappedTargetPolicy = ReportingPolicy.ERROR` để quên field là build
-  fail, không phải prod fail.
-- Implement `EntityMapper<D, E>` cho mapper domain↔entity.
-- Nếu 2 class Lombok cần map lẫn nhau, giữ processor path
-  `lombok-mapstruct-binding`.
-
-❌ Không nên:
-
-- `new ModelMapper()`, bean `ModelMapper`, hay config `TypeMap` — xoá dần khi
-  đụng tới file.
-- `BeanUtils.copyProperties`, `Apache BeanUtils`, hay tự viết reflection.
-- Nói chung: mapping library dùng reflection lúc runtime.
-- Copy field bằng tay trong service (`domain.setX(entity.getX())`) — dồn vào
-  mapper.
-- Khởi tạo mapper bằng `new` — luôn inject Spring bean.
-
----
-
-## 8. Logging (SLF4J)
-
-### 8.1 Khai báo
-
-Mọi class có log dùng Lombok:
-
-```java
-@Slf4j(topic = "AUTH-LOGIN")   // UPPER-KEBAB-CASE, mô tả class/feature
+@Slf4j(topic = "ROLE-SERVICE")
 @Service
-public class LoginService implements LoginUseCase {
-  ...
+public class RoleService implements RoleManagementUseCase {
+  // ...
 }
 ```
 
-Topic đang có trong repo: `SYSTEM-UTIL`, `SYSTEM-GC`. Pattern:
-`<MODULE>[-<FEATURE>]`. Một class một topic, giữ ổn định.
+Topic ổn định, dùng `UPPER-KEBAB-CASE`, thông thường theo
+`<MODULE>-<FEATURE>`.
 
-### 8.2 Format message — **`[methodName] description key={} key={}`**
+Message dùng format:
 
-Luôn mở đầu message bằng `[methodName]` (tên method Java đang log). Description
-tiếng Anh lowercase, tham số kiểu `key={}` với placeholder `{}`. Giá trị đưa
-vào varargs cuối.
+```text
+[methodName] lowercase description key={} key={}
+```
+
+Ví dụ:
 
 ```java
-public void runSystemGC() {
-  log.info("[runSystemGC] starting gc trigger");
-  long start = System.currentTimeMillis();
-  SystemUtil.gc();
-  log.info("[runSystemGC] finished gc trigger durationMs={}", System.currentTimeMillis() - start);
-}
+log.info("[deactivate] role deactivated roleId={}",roleId);
+log.
 
-public LoginResponse login(LoginCommand cmd) {
-  log.info("[login] attempt username={}", cmd.getUsername());
-  var user = userRepository.findByUsername(cmd.getUsername())
-    .orElseThrow(() -> new ResponseException(AuthErrorCode.INVALID_CREDENTIALS));
-  ...
-  log.info("[login] success userId={} ip={}", user.getId(), cmd.getIpAddress());
-  return response;
-}
+error("[store] object storage write failed fileId={}",fileId, exception);
 ```
 
-### 8.3 Level
+### 8.2 Chỉ log một lần tại boundary có đủ context
 
-| Level   | Dùng khi                                                       |
-|---------|----------------------------------------------------------------|
-| `error` | Lỗi hệ thống bất thường cần vận hành xử lý; kèm cause.         |
-| `warn`  | Bất thường có thể recover, retry, cancel hợp tác.              |
-| `info`  | Sự kiện nghiệp vụ nhìn thấy được (login success, job started). |
-| `debug` | Flow chi tiết dùng khi debug. Mặc định tắt ở prod.             |
-| `trace` | Chỉ dùng local; tuyệt đối không sinh volume log ở prod.        |
+- Không bắt buộc log trước mọi `throw`.
+- Domain model **không được** log.
+- Validation, not-found và business conflict dự kiến trước không bắt buộc log
+  mặc định.
+- Unexpected technical failure được log một lần tại layer có đủ operational
+  context.
+- Không log cùng một exception ở mọi layer khi chỉ rethrow.
+- Security-sensitive event có thể dùng audit event hoặc metric riêng thay vì
+  application warning log.
+- Boundary dễ lỗi như external HTTP, object storage, retry, parser hoặc atomic
+  claim **nên** có breadcrumb ngắn ở thời điểm bắt đầu và kết thúc bằng `debug`,
+  `info` hoặc `warn` tùy giá trị vận hành.
+
+### 8.3 Log level
+
+| Level   | Khi sử dụng                                                          |
+|---------|----------------------------------------------------------------------|
+| `error` | Lỗi hệ thống bất ngờ cần operator xử lý; phải có cause               |
+| `warn`  | Bất thường có thể phục hồi, retry, conflict hoặc dependency degraded |
+| `info`  | Lifecycle event nghiệp vụ có giá trị vận hành                        |
+| `debug` | Chi tiết điều tra, mặc định tắt ở production                         |
+| `trace` | Chỉ dùng khi debug local                                             |
 
 ### 8.4 Dữ liệu nhạy cảm
 
-**Không bao giờ** log: JWT, password, refresh token, storage credential, full
-row khách hàng, email đầy đủ, phone đầy đủ, body của request upload.
-**Luôn mask**: email `a***@domain`, phone `+84********99`. UUID có thể log
-đầy đủ vì opaque.
+Không bao giờ log:
 
-### 8.5 Quy tắc
+- password, password hash, JWT, refresh token, reset token;
+- storage credential, secret, authorization header;
+- toàn bộ customer record, request body hoặc nội dung file;
+- email đầy đủ hoặc số điện thoại đầy đủ.
 
-✅ Nên: `log.error("[claimJob] failed to claim jobId={} attempt={}", jobId, attempt, e);`
-❌ Không nên:
+Phải mask email và phone. UUID có thể log đầy đủ nếu đó là internal identifier
+opaque.
 
-- `System.out.println(...)`
-- `e.printStackTrace()`
-- `log.info("something happened: " + var)` (nối chuỗi thay `{}`)
-- `log.info("user: {}", user)` khi `toString()` lộ password
+Không dùng `System.out.println`, `printStackTrace`, nối chuỗi trong log hoặc
+`log.info("entity={}", entity)` khi `toString()` có thể làm lộ dữ liệu.
 
 ---
 
-## 9. Format code — Spotless (bắt buộc trước khi commit)
+## 9. Mapping
 
-Spotless đã bind vào `mvn verify`. Nếu 1 file lệch format, build fail.
+MapStruct là lựa chọn mặc định cho mapping đi qua layer boundary và có nhiều
+field hoặc transformation rule.
 
-```
-mvn spotless:apply    # reformat toàn bộ Java
-mvn spotless:check    # chỉ verify (CI chạy cái này)
-```
+### 9.1 Khi nào cần mapper
 
-Rule đã cấu hình trong `pom.xml`:
+Dùng mapper riêng khi:
 
-- Google Java Format 1.27.0
-- Thứ tự import: `java, javax, jakarta, org, com`
-- Xoá import không dùng
-- Trim trailing whitespace
-- Kết file bằng newline
+- mapping giữa domain và JPA entity;
+- mapping có nhiều field, nested value, conversion hoặc ignored field;
+- mapping được tái sử dụng;
+- API model và application model cần thay đổi độc lập.
 
-Toàn repo (`.editorconfig`): UTF-8, LF, indent 4 space cho `.java`, 2 space
-cho YAML.
+Controller có thể tạo trực tiếp command chỉ có một hoặc hai field khi mapping rõ
+ràng và không chứa business transformation. Không tạo mapper chỉ để copy một
+UUID.
 
-✅ Nên: chạy `mvn spotless:apply` trước `git add`.
-❌ Không nên: commit với `--no-verify`. Nếu không đồng ý format là change
-request lên `pom.xml`, không được exempt từng file.
-
----
-
-## 10. Reuse từ common library
-
-**Trước khi tự viết util, base class, mapper, DTO, config mới: grep
-[`LIBRARY.md`](./LIBRARY.md).** Nếu capability đã có trong
-`com.vandunxg.common:2.0.5`, dùng lại. Nếu thật sự thiếu, đề xuất bump version
-common lib chứ đừng duplicate ở module.
-
-Danh sách bắt buộc reuse (chưa đầy đủ):
-
-| Nhu cầu                       | Dùng cái này                                                                                      |
-|-------------------------------|---------------------------------------------------------------------------------------------------|
-| Auditable domain aggregate    | extend `com.vandunxg.common.models.domain.AuditableDomain`                                        |
-| Auditable JPA entity          | extend `com.vandunxg.common.models.entities.AuditableEntity`                                      |
-| Base HTTP request             | extend `com.vandunxg.common.models.dto.request.Request`                                           |
-| Paged HTTP request            | extend `com.vandunxg.common.models.dto.request.PagingRequest`                                     |
-| Response wrapper              | trả `com.vandunxg.common.models.dto.response.Response<T>` / `PagingResponse<T>`                   |
-| Response body có audit        | extend `com.vandunxg.common.models.dto.response.BaseResponse`                                     |
-| Page result                   | `com.vandunxg.common.models.dto.PageDTO<T>`                                                       |
-| Domain↔entity mapper contract | implement `com.vandunxg.common.models.mapper.EntityMapper<D, E>`                                  |
-| Search/paging query base      | extend `com.vandunxg.common.persistence.query.PagingQuery`                                        |
-| Base custom JPA repository    | extend `com.vandunxg.common.persistence.repository.custom.BaseEntityRepositoryCustom`             |
-| Lỗi nghiệp vụ                 | throw `com.vandunxg.common.models.exception.ResponseException` + enum `ResponseError`             |
-| User hiện tại                 | `com.vandunxg.common.web.support.SecurityUtils.getCurrentUserLoginId()`                           |
-| i18n lookup                   | `com.vandunxg.common.web.i18n.LocaleStringService.getMessage(...)`                                |
-| Sinh UUID                     | `com.vandunxg.common.utils.IdUtils.nextId()`                                                      |
-| Hash SHA-256                  | `com.vandunxg.common.utils.HashUtils.sha256(...)`                                                 |
-| Format/parse date             | `com.vandunxg.common.utils.DateUtils`                                                             |
-| String / email / phone helper | `com.vandunxg.common.utils.StrUtils`                                                              |
-| Jackson mapper                | `com.vandunxg.common.utils.MapperFactoryUtils.jacksonMapper()`                                    |
-| Cache                         | inject `com.vandunxg.common.cache.service.CacheService` hoặc dùng `@CacheAction` / `@CacheUpdate` |
-| AMQP publisher                | `com.vandunxg.common.amqp.publisher.AmqpEventPublisher`                                           |
-
-Xem [`LIBRARY.md`](./LIBRARY.md) để có danh mục đầy đủ kèm signature.
-
----
-
-## 11. Config và property
-
-- Mọi giá trị cấu hình đặt trong `application.yaml` (hoặc profile file), đọc
-  qua `${ENV_VAR:default}`.
-- Namespace: `app.<module>.<key>` — vd `app.security.jwt.secret`,
-  `app.gc.cron-time`.
-- Không commit secret thật. `.env.example` liệt kê biến cần có.
-- Feature toggle dùng property thường (`app.<module>.<feature>.enabled`),
-  không dùng framework flag phức tạp.
-
-Bind property qua `@ConfigurationProperties` record đặt trong `configuration/`
-— không rải `@Value` khắp service.
+### 9.2 Quy ước mapper
 
 ```java
+
+@Mapper(
+  componentModel = MappingConstants.ComponentModel.SPRING,
+  unmappedTargetPolicy = ReportingPolicy.ERROR,
+  unmappedSourcePolicy = ReportingPolicy.WARN)
+public interface RolePersistenceMapper {
+
+  Role toDomain(RoleEntity entity);
+
+  @Mapping(target = "createdAt", ignore = true)
+  @Mapping(target = "lastModifiedAt", ignore = true)
+  RoleEntity toNewEntity(Role domain);
+
+  @Mapping(target = "id", ignore = true)
+  @Mapping(target = "createdAt", ignore = true)
+  @Mapping(target = "lastModifiedAt", ignore = true)
+  void updateEntity(Role domain, @MappingTarget RoleEntity entity);
+}
+```
+
+Quy tắc:
+
+- Dùng `componentModel = SPRING`.
+- Dùng `unmappedTargetPolicy = ERROR`.
+- Dùng `toNewEntity` cho insert và `@MappingTarget` cho update.
+- Không thay thế managed JPA entity chỉ để apply update.
+- Inject mapper interface, không khởi tạo bằng `new`.
+- Giữ `lombok-mapstruct-binding` khi Lombok và MapStruct xử lý cùng class.
+
+Không dùng ModelMapper, BeanUtils, Dozer, Orika, reflection mapping hoặc copy
+field thủ công bên trong application service.
+
+---
+
+## 10. Configuration và secret
+
+Configuration phải typed, được validate và fail-fast.
+
+- Dùng record `@ConfigurationProperties` trong `configuration`.
+- Thêm `@Validated` và Jakarta Validation constraint cho giá trị bắt buộc.
+- Không rải `@Value` trong service.
+- Dùng namespace `app.<module>.<key>`.
+- Externalize giá trị phụ thuộc môi trường hoặc cần điều chỉnh khi vận hành.
+  Không biến mọi constant thành configuration nếu không có lý do.
+- Secret **không được** có default không an toàn.
+- `.env.example` mô tả biến bắt buộc nhưng không chứa secret thật.
+- Feature toggle dùng typed property đơn giản trừ khi có yêu cầu thật về flag
+  platform.
+
+Ví dụ:
+
+```java
+
+@Validated
 @ConfigurationProperties(prefix = "app.security.jwt")
-public record JwtProperties(String issuer, String audience, String secret,
-                            Duration accessTokenExpiration,
-                            Duration refreshTokenExpiration,
-                            Duration clockSkew) {}
+public record JwtProperties(
+  @NotBlank String issuer,
+  @NotBlank String audience,
+  @NotBlank String secret,
+  @NotNull Duration accessTokenExpiration,
+  @NotNull Duration refreshTokenExpiration) {
+}
+```
+
+```yaml
+app:
+  security:
+    jwt:
+      secret: ${JWT_SECRET}
+      issuer: ${JWT_ISSUER:file-processing}
 ```
 
 ---
 
-## 12. Persistence
+## 11. Persistence và transaction
 
-- JPA entity là class **tách riêng** khỏi domain model, đặt ở
-  `adapter/out/persistence/entity/`, extend `AuditableEntity`.
-- Tên bảng / cột dùng `snake_case`.
-- Dùng `@Version` cho aggregate có nguy cơ race (optimistic locking).
-- `application.yaml` đặt Hibernate `ddl-auto: validate` — **mọi** thay đổi
-  schema đều đi qua Flyway migration.
-- Tên file migration: `V{yyyyMMddHHmm}__{snake_case_description}.sql` trong
-  `src/main/resources/db/migration/`. Prefix timestamp giúp tránh conflict
-  version giữa dev.
-- Migration append-only; không sửa migration đã merge. Có sai thì viết file
-  `V…__` mới.
-- Ưu tiên constraint DB (`UNIQUE`, `NOT NULL`, `CHECK`, foreign key) làm
-  correctness boundary; validation và lock chỉ là tối ưu.
+Persistence adapter chuyển đổi giữa domain model và database model.
 
-✅ Nên: `V202607170930__create_users_table.sql`.
-❌ Không nên: sửa `V202607170900__…sql` sau khi đã apply.
+### 11.1 Quy tắc entity
+
+- Mọi JPA entity tách riêng khỏi domain model.
+- Mọi JPA entity extends `AuditableEntity` khi common base phù hợp.
+- Mọi JPA entity **bắt buộc** kế thừa hoặc khai báo trạng thái soft delete
+  bằng `Instant deleteAt`, map tới cột SQL `delete_at`.
+- Nếu `AuditableEntity` đã khai báo `deleteAt`, không được khai báo lại field
+  này trong entity con.
+- Tên Java chuẩn là `deleteAt`; tên cột SQL là `delete_at`.
+- Không dùng `deleted`, `isDeleted`, `deletedAt` hoặc boolean deletion column.
+- Tên bảng và cột dùng `snake_case`.
+- Dùng `@Version` cho aggregate có thể bị concurrent update.
+- Database constraint là boundary cuối cùng bảo vệ tính đúng. Dùng `NOT NULL`,
+  `UNIQUE`, `CHECK`, foreign key khi phù hợp.
+
+### 11.2 Soft delete bắt buộc
+
+Mọi thao tác delete thông thường của application đều là soft delete.
+
+- Gán `deleteAt` bằng `Instant` hiện tại từ `Clock` đã inject.
+- Delete lại object đã bị delete thông thường phải idempotent.
+- Mọi business read và existence check **phải** có
+  `delete_at IS NULL`.
+- Mọi uniqueness rule chỉ áp dụng cho dữ liệu đang sống **phải** dùng partial
+  unique index.
+- Repository thông thường **không được** expose `delete`, `deleteById` hoặc bulk
+  hard delete cho application service.
+- Physical delete chỉ được thực hiện trong retention/maintenance job rõ ràng sau
+  khi hết retention period.
+- Khi hỗ trợ restore, gán `deleteAt` về `null` và kiểm tra lại uniqueness cùng
+  business invariant.
+
+Ví dụ migration:
+
+```sql
+CREATE TABLE roles
+(
+  id               UUID PRIMARY KEY,
+  code             VARCHAR(100) NOT NULL,
+  name             VARCHAR(255) NOT NULL,
+  status           VARCHAR(30)  NOT NULL,
+  version          BIGINT       NOT NULL DEFAULT 0,
+  created_at       TIMESTAMPTZ  NOT NULL,
+  last_modified_at TIMESTAMPTZ  NOT NULL,
+  delete_at        TIMESTAMPTZ NULL
+);
+
+CREATE UNIQUE INDEX roles_active_code_uidx
+  ON roles (code) WHERE delete_at IS NULL;
+
+CREATE INDEX roles_delete_at_idx
+  ON roles (delete_at) WHERE delete_at IS NOT NULL;
+```
+
+### 11.3 Flyway
+
+- `spring.jpa.hibernate.ddl-auto` **phải** là `validate`.
+- Mọi schema change phải có Flyway migration.
+- Tên migration dùng
+  `V{yyyyMMddHHmm}__{snake_case_description}.sql`.
+- Migration là append-only. Không sửa migration sau khi đã merge hoặc đã apply
+  ngoài local disposable database.
+- Sửa lỗi bằng migration mới.
+
+### 11.4 Transaction boundary
+
+- Đặt transaction boundary trên application service method, không đặt trên
+  controller.
+- Dùng `@Transactional(readOnly = true)` cho read-only use case.
+- Transaction phải ngắn.
+- Không gọi HTTP, email, object storage hoặc message broker bên trong database
+  transaction trừ khi có consistency requirement rõ ràng.
+- Publish sau commit hoặc dùng outbox khi cần atomic consistency giữa database
+  và message.
+- Map optimistic-lock conflict thành error `409 Conflict` có ý nghĩa.
+- Không retry mù một transaction không idempotent.
+
+### 11.5 Hiệu năng JPA
+
+- Association mặc định là `LAZY`.
+- Không dùng `EAGER` để sửa `LazyInitializationException`.
+- Tắt Open Session in View.
+- Giải quyết N+1 rõ ràng bằng fetch join, `EntityGraph`, projection hoặc batch
+  fetching.
+- Mọi list endpoint có page size giới hạn và sort xác định.
+- Chỉ thêm index cho query pattern đã được xác minh, không index mọi column.
+- Review generated SQL cho repository change không đơn giản.
 
 ---
 
-## 13. Tầng API + i18n
+## 12. API layer
 
-Controller **mỏng**: nhận `Request`, build `Command`/`Query`, gọi use case,
-bọc kết quả trong `Response<T>`.
+Controller chuyển HTTP request thành application use case.
+
+- Controller chỉ chứa request validation, mapping, gọi use case và tạo response.
+- Business decision và transaction boundary không nằm trong controller.
+- Request/response contract dùng DTO, không dùng JPA entity hoặc domain
+  aggregate.
+- Wrap response bằng common `Response<T>` hoặc `PagingResponse<T>`.
+- User-facing error message phải qua i18n.
+- Dùng API prefix và version từ configuration.
+- Giới hạn pagination ngay tại request boundary.
+- Endpoint list, search và completion có dữ liệu không giới hạn **MUST** theo
+  convention paging chung: request DTO extends `PagingRequest`, controller
+  parameter dùng `@ValidatePaging(sortModel = Entity.class)`, application query
+  extends `PagingQuery`, repository có `count(query)` và `search(query)`, và
+  controller trả `PagingResponse<T>`.
+- Không ép paging cho bounded catalog, enum list, JWKS, `/me`, hoặc list chỉ
+  trong phạm vi current-user nếu product behavior chưa yêu cầu rõ.
+- Không tin proxy forwarding header nếu deployment chưa cấu hình trusted proxy.
+
+Ví dụ:
 
 ```java
+
 @RestController
-@RequestMapping("${app.api.prefix}/${app.api.version}/auth")
+@RequestMapping("${app.api.prefix}/${app.api.version}/roles")
 @RequiredArgsConstructor
-@Slf4j(topic = "AUTH-CONTROLLER")
-public class AuthController {
+public class RoleController {
 
-  private final LoginUseCase loginUseCase;
-  private final AuthWebMapper webMapper;
+  private final RoleManagementUseCase roleManagementUseCase;
+  private final RoleWebMapper roleWebMapper;
 
-  @PostMapping("/login")
-  public Response<LoginResponse> login(@Valid @RequestBody LoginRequest request,
-                                       HttpServletRequest http) {
-    log.info("[login] username={} ip={}", request.getUsername(), http.getRemoteAddr());
-    var command = webMapper.toCommand(request, http.getRemoteAddr());
-    var result  = loginUseCase.login(command);
-    return Response.of(webMapper.toResponse(result));
+  @DeleteMapping("/{roleId}")
+  public Response<Void> delete(@PathVariable UUID roleId) {
+    roleManagementUseCase.delete(roleId);
+    return Response.noContent();
   }
 }
 ```
 
-Rule:
-
-- Không đặt business logic trong controller. Chỉ annotation validation.
-- Base path lấy từ config `app.api.prefix` + `app.api.version`.
-- Message người dùng thấy đều resolve qua `i18n/messages*.properties`. Key
-  là tên hằng số của error enum (vd `INVALID_CREDENTIALS`) — xem §6.5,
-  không phải chuỗi dotted.
-- Response body luôn là `Response<T>` (hoặc `PagingResponse<T>`) — không trả
-  raw domain / entity.
+Dùng `201 Created` kèm `Location` header khi common response contract hỗ trợ.
+Chỉ dùng `202 Accepted` khi xử lý tiếp tục bất đồng bộ sau khi response đã trả.
 
 ---
 
-## 14. OpenAPI / Springdoc + Schema DTO
+## 13. OpenAPI
 
-### 14.1 Một class config trung tâm
+OpenAPI mô tả contract thật; nó không thay thế runtime validation.
 
-Thêm `springdoc-openapi-starter-webmvc-ui` vào `pom.xml`. Mọi metadata OpenAPI
-global và security scheme đặt trong **duy nhất 1** `@Configuration` bean,
-không rải trên controller.
+- Metadata và security scheme toàn cục nằm trong một
+  `OpenApiConfiguration`.
+- Dùng Springdoc OpenAPI 3.x với Spring Boot 4.
+- Public endpoint phải opt out rõ ràng khỏi bearer requirement toàn cục.
+- Dùng `@Schema` cho description và example.
+- Dùng Jakarta Validation cho required field, size, range và format.
+- Không expose entity, internal cause, secret hoặc implementation detail trong
+  schema.
+- Tái sử dụng bearer scheme constant đã cấu hình thay vì lặp string literal.
 
-```java
-// configuration/OpenApiConfiguration.java
-@Configuration
-@OpenAPIDefinition(
-    info = @Info(title = "File Processing API", version = "v1"),
-    security = { @SecurityRequirement(name = OpenApiConfiguration.BEARER_AUTH) }
-)
-@SecurityScheme(
-    name = OpenApiConfiguration.BEARER_AUTH,
-    type = SecuritySchemeType.HTTP,
-    scheme = "bearer",
-    bearerFormat = "JWT"
-)
-public class OpenApiConfiguration {
-  public static final String BEARER_AUTH = "bearerAuth";
-}
+---
+
+## 14. File processing và công việc bất đồng bộ
+
+File operation phải bounded, streaming, idempotent khi cần và có observability.
+
+### 14.1 File I/O
+
+- Stream upload và download. Không dùng `MultipartFile.getBytes()`,
+  `Files.readAllBytes()` hoặc load toàn file không giới hạn vào memory.
+- Enforce maximum file size trước bước xử lý tốn tài nguyên.
+- Validate content bằng parser hoặc signature tin cậy; không chỉ tin extension
+  hoặc media type do client gửi.
+- Tạo storage name phía server. Không dùng raw user filename làm object key hoặc
+  filesystem path.
+- Normalize và validate path để chống path traversal.
+- Tính checksum trong lúc stream khi cần integrity hoặc deduplication.
+- Xóa temporary file trong `finally` hoặc managed lifecycle.
+
+### 14.2 Executor và job
+
+- Không tạo unbounded executor hoặc queue.
+- Tính concurrency theo CPU, memory, database và downstream limit.
+- Persist job state nếu công việc phải sống qua process restart.
+- Định nghĩa legal state transition và test đầy đủ.
+- Operation có thể bị external retry phải idempotent bằng idempotency key,
+  unique constraint hoặc atomic claim.
+- Mọi external call phải có timeout.
+- Chỉ retry transient failure, số lần hữu hạn và có backoff.
+- Không retry validation failure, authorization failure hoặc permanent `4xx`.
+- Chống retry storm bằng backoff, jitter, circuit breaker và concurrency limit
+  khi phù hợp.
+
+---
+
+## 15. Security
+
+Security rule là MUST requirement.
+
+- Deny mặc định và chỉ cấp permission tối thiểu cần thiết.
+- Enforce authorization tại application/security boundary, không chỉ ẩn action
+  trên UI.
+- Kiểm tra ownership và tenant boundary cho mọi resource access.
+- Không tin role hoặc permission từ request payload.
+- JWT role/permission mapping phải rõ ràng và có test.
+- Refresh-token rotation phải phát hiện token reuse và revoke cả token family.
+- Password dùng adaptive password hash được Spring Security hỗ trợ.
+- Không làm lộ username/email có tồn tại nếu gây account enumeration.
+- File name, media type, archive entry và parser input đều là dữ liệu không tin
+  cậy.
+- Dùng rate limiting cho authentication và endpoint dễ bị abuse.
+- Security event cần audit trail hoặc metric với identifier đã mask.
+- Không commit secret hoặc log authentication material.
+
+---
+
+## 16. Tái sử dụng common library
+
+Tái sử dụng các thành phần cross-cutting ổn định từ common library.
+
+Các thành phần thường bắt buộc tái sử dụng:
+
+| Nhu cầu               | Thành phần dùng chung                          |
+|-----------------------|------------------------------------------------|
+| Auditable domain base | `AuditableDomain`                              |
+| Auditable JPA base    | `AuditableEntity`                              |
+| Response wrapper      | `Response<T>`, `PagingResponse<T>`             |
+| Page result           | `PageDTO<T>`                                   |
+| Paging query          | `PagingQuery`                                  |
+| Current user          | `SecurityUtils`                                |
+| Sinh UUID             | `IdUtils.nextId()`                             |
+| Hashing               | `HashUtils`                                    |
+| Date helper           | `DateUtils`                                    |
+| String helper         | `StrUtils`                                     |
+| Jackson configuration | `MapperFactoryUtils.jacksonMapper()`           |
+| Cache                 | `CacheService`, `@CacheAction`, `@CacheUpdate` |
+| AMQP publishing       | `AmqpEventPublisher`                           |
+
+Trước khi dùng shared API, kiểm tra signature hiện tại trong `LIBRARY.md` hoặc
+source. Không được đoán API.
+
+Helper riêng của module nên để local. Chỉ đưa code vào common library khi có ít
+nhất hai consumer thật cần cùng một abstraction ổn định. Không bump common
+library chỉ để chia sẻ một helper mang tính dự đoán.
+
+---
+
+## 17. Testing
+
+Test bảo vệ behavior quan sát được và rủi ro production.
+
+### 17.1 Test level
+
+- JUnit 5, Mockito, AssertJ thuần cho application/domain unit test.
+- `@WebMvcTest` cho MVC controller slice khi hữu ích.
+- `@DataJpaTest` hoặc Testcontainers test tập trung cho repository behavior.
+- Chỉ dùng `@SpringBootTest` cho behavior cần toàn bộ application context.
+- Dùng PostgreSQL Testcontainers cho SQL, migration, locking, index và JPA
+  behavior khác in-memory database.
+
+### 17.2 Khu vực bắt buộc test
+
+Behavior mới hoặc thay đổi **phải** test các path quan trọng, đặc biệt:
+
+- authorization và ownership;
+- state transition;
+- soft delete và loại bỏ row đã delete;
+- partial uniqueness sau soft delete;
+- idempotency và duplicate delivery;
+- optimistic locking và atomic claim;
+- file limit, malformed input và cleanup;
+- transaction rollback và after-commit behavior;
+- timeout, retry classification và fallback;
+- error-code uniqueness và i18n key completeness.
+
+Refactor không thay đổi observable behavior không cần tạo test giả tạo. Coverage
+là diagnostic metric, không phải acceptance criterion chính. Không viết test vô
+nghĩa chỉ để đạt một con số.
+
+Tên test mô tả scenario:
+
+```text
+delete_throwsRoleIsActive_whenRoleIsStillActive()
+delete_setsDeletedAt_whenRoleIsInactive()
+findById_returnsEmpty_whenRoleWasSoftDeleted()
 ```
 
-### 14.2 Annotation trên endpoint
+Test phải deterministic. Không dùng hidden sleep. Inject `Clock`, kiểm soát
+executor completion và chờ trên observable condition.
 
-Vì `@OpenAPIDefinition` phía trên đã đặt Bearer auth làm default, những
-endpoint **public** (login, refresh, health) opt-out bằng
-`@SecurityRequirements` rỗng:
+---
 
-```java
-@Operation(summary = "Đăng nhập bằng username và password")
-@SecurityRequirements                     // public — không cần bearer
-@PostMapping("/login")
-public Response<LoginResponse> login(@Valid @RequestBody LoginRequest req) { ... }
+## 18. Formatting, build và Git
 
-@Operation(
-    summary = "Lấy thông tin người dùng hiện tại",
-    security = @SecurityRequirement(name = OpenApiConfiguration.BEARER_AUTH))
-@GetMapping("/me")
-public Response<UserResponse> me() { ... }
+Spotless là bắt buộc.
+
+```bash
+./mvnw spotless:apply
+./mvnw spotless:check
+./mvnw verify
 ```
 
-Luôn dùng hằng `OpenApiConfiguration.BEARER_AUTH`, không viết lại string
-literal trong controller.
+Trước khi commit, chạy:
 
-### 14.3 DTO tự mô tả schema
-
-Validation thật vẫn dùng Jakarta Validation (`@NotBlank`, `@Size`, `@Email`,
-`@Min`, `@Max`, …). `@Schema` **chỉ** thêm mô tả và example — không phải
-validator.
-
-```java
-public record LoginRequest(
-
-    @Schema(description = "Tên đăng nhập", example = "operator01",
-            minLength = 4, maxLength = 100)
-    @NotBlank
-    @Size(min = 4, max = 100)
-    String username,
-
-    @Schema(description = "Mật khẩu", example = "StrongPassword@123",
-            format = "password")
-    @NotBlank
-    String password) {}
+```bash
+./mvnw spotless:apply && ./mvnw verify
 ```
 
-Nếu DTO cần kế thừa các field audit / correlation dùng chung, dùng class
-extends `com.vandunxg.common.models.dto.request.Request` thay vì record —
-cùng bộ annotation.
+Không bypass hook bằng `--no-verify` nếu user hoặc repository maintainer chưa
+phê duyệt rõ ràng.
 
-### 14.4 Quy tắc
+Dùng Conventional Commits:
 
-✅ Nên:
+```text
+type(scope): imperative lowercase subject
+```
 
-- Đặt `@OpenAPIDefinition` / `@SecurityScheme` trên **1 Spring-managed bean**
-  duy nhất.
-- Dùng `@Schema` chỉ để mô tả + example; ràng buộc thực tế dùng Jakarta
-  Validation.
-- Trả `Response<XxxResponse>` (DTO) để schema ổn định.
+Các type thường dùng: `feat`, `fix`, `refactor`, `perf`, `docs`, `test`,
+`chore`, `style`, `ci`, `build`.
 
-❌ Không nên:
+Subject dưới 72 ký tự, không có dấu chấm cuối và mô tả intent. Body giải thích
+lý do khi lý do không hiển nhiên.
 
-- Rải `@SecurityScheme` trên nhiều controller.
-- Dùng `@Schema(required = true)` **thay thế** `@NotNull` / `@NotBlank` —
-  Springdoc tự suy `required` từ validation annotation.
-- Expose JPA `@Entity` làm OpenAPI response type. Nó lộ column, lazy proxy,
-  và field audit không nên public.
+Không amend hoặc force-push shared branch nếu chưa được phê duyệt.
 
 ---
 
-## 15. Testing
+## 19. Pattern bị từ chối
 
-- Framework: JUnit 5, Mockito, AssertJ. Integration: Testcontainers PostgreSQL.
-- Vị trí mirror production:
-  `src/test/java/.../auth/application/service/LoginServiceTest.java`.
-- Naming:
-  - `LoginServiceTest` — unit test, không cần Spring context.
-  - `LoginServiceIT` — integration test, có Spring context + Testcontainers.
-- Tên method mô tả scenario:
-  `login_returnsAccessToken_whenCredentialsValid()`,
-  `login_throwsInvalidCredentials_whenPasswordWrong()`.
-- Mỗi behaviour mới đi kèm test. Refactor thuần không đổi behaviour thì không
-  cần test mới; format-only tuyệt đối không cần.
-- Dùng fixture / builder, tránh JSON file trừ khi chính test đó verify parse.
+Reject hoặc sửa mọi change có các pattern sau nếu chưa có ngoại lệ được ghi rõ:
 
-Ngưỡng coverage khuyến nghị theo module: 80% dòng, 100% cho state machine và
-nhánh phân quyền. Con số là guidance, không phải hard gate — reviewer quyết.
-
----
-
-## 16. Convention commit git
-
-Theo Conventional Commits: `type(scope): subject`.
-
-| Type       | Dùng cho                                                   |
-|------------|------------------------------------------------------------|
-| `feat`     | Chức năng mới nhìn thấy được từ ngoài                      |
-| `fix`      | Sửa bug                                                    |
-| `refactor` | Đổi code mà không đổi behaviour                            |
-| `perf`     | Tối ưu hiệu năng                                           |
-| `docs`     | Chỉ tài liệu (file này, `AGENTS.md`, `LIBRARY.md`, README) |
-| `test`     | Thêm hoặc sửa test                                         |
-| `chore`    | Build config, bump dependency, tooling                     |
-| `style`    | Chỉ format (thường là `spotless apply`)                    |
-| `ci`       | Cấu hình CI                                                |
-| `build`    | Maven, Docker, packaging                                   |
-
-- Subject dạng imperative, viết thường, không dấu chấm cuối. < 72 ký tự.
-- Scope không bắt buộc nhưng có ích: `feat(auth): add refresh token rotation`.
-- Body giải thích **vì sao**, không phải "làm cái gì". Tham chiếu requirement
-  ID trong `AGENTS.md` khi áp dụng.
-- Trước mọi commit: `mvn spotless:apply && mvn verify`. Chỉ skip khi user chỉ
-  định rõ.
-- Không amend hay force-push nhánh đã share mà chưa hỏi.
+1. Business logic hoặc transaction trong controller.
+2. Một interface cho mọi class hoặc một interface cho mỗi method nhỏ.
+3. Package rỗng hoặc placeholder type chỉ để giống sơ đồ.
+4. Domain code import Spring, JPA, Jackson, servlet hoặc HTTP type.
+5. Domain exception chứa HTTP status hoặc response-format detail.
+6. Controller advice mới trùng chức năng common exception handler.
+7. Business failure dùng bare runtime exception.
+8. Log trước mọi `throw` hoặc log cùng exception ở mọi layer.
+9. Nuốt exception rồi trả `null` hoặc sentinel value.
+10. ModelMapper, BeanUtils, Dozer, Orika hoặc reflection field copy.
+11. Thay managed JPA entity thay vì update có chủ đích.
+12. Field injection bằng `@Autowired`.
+13. `System.out.println`, `printStackTrace` hoặc log nối chuỗi.
+14. Log token, password, secret, full PII, request body hoặc file data.
+15. User-facing message hard-code ngoài i18n.
+16. Error enum name không có prefix module.
+17. Numeric business error code bị trùng.
+18. Thiếu error key ở file tiếng Anh hoặc tiếng Việt.
+19. Controller trả JPA entity hoặc domain aggregate.
+20. Sửa Flyway migration đã apply.
+21. `ddl-auto` đặt thành `create`, `update`, `create-drop` ngoài local experiment
+    có thể xóa bỏ.
+22. JPA entity không có `deleteAt` và `delete_at`.
+23. Business read không loại row soft-deleted.
+24. Application service gọi repository hard-delete method.
+25. Dùng `EAGER` để che N+1 hoặc session-boundary problem.
+26. Gọi network hoặc object storage trong database transaction dài.
+27. Page size, executor, queue, retry hoặc file memory load không giới hạn.
+28. `MultipartFile.getBytes()`, `Files.readAllBytes()` hoặc tương đương trên
+    content không giới hạn.
+29. Secret có default configuration không an toàn.
+30. Thêm framework hoặc infrastructure mới khi chưa có requirement được duyệt.
 
 ---
 
-## 17. Anti-pattern (review sẽ reject)
+## 20. Checklist trước commit
 
-Từ chối hoặc yêu cầu sửa lại mọi PR có 1 trong các pattern sau, trừ khi PR
-description ghi rõ lý do được duyệt.
-
-1. Business logic trong controller.
-2. Interface cho mọi class (xem `AGENTS.md` — "do not create an interface for
-   every class").
-3. Domain model import Spring / JPA / Jackson annotation.
-4. `@RestControllerAdvice` riêng duplicate `ExceptionHandleAdvice`.
-5. Throw `IllegalArgumentException` / `RuntimeException` / `NullPointerException`
-   để báo lỗi nghiệp vụ.
-6. `catch (Exception e) { log.error(...); return null; }` — nuốt lỗi.
-7. `BeanUtils.copyProperties(...)`, tự viết copy reflection, hoặc bất kỳ
-   library mapping runtime-reflection nào (`ModelMapper`, Dozer, Orika).
-8. Mapper viết dạng class `@Component` thay vì interface MapStruct
-   `@Mapper(componentModel = "spring")`.
-9. `@Autowired` trên field. Dùng constructor injection
-   (`@RequiredArgsConstructor`).
-10. `System.out.println` / `e.printStackTrace()`.
-11. Nối chuỗi trong log message (`"user " + id`), lộ PII, hoặc log full JWT /
-    password / row khách hàng.
-12. Hard-code string tiếng Anh trả về client — phải đi qua i18n.
-13. Duplicate util đã có trong `com.vandunxg.common.utils.*` — reuse hoặc
-    bump version common lib.
-14. Sửa Flyway migration đã merge.
-15. Đặt `spring.jpa.hibernate.ddl-auto` khác `validate`.
-16. Commit với `--no-verify` hoặc skip Spotless.
-17. Dùng `@Schema(required = true)` thay cho `@NotNull` / `@NotBlank`.
-18. Trả JPA `@Entity` trực tiếp từ controller.
-19. Đặt `@OpenAPIDefinition` hoặc `@SecurityScheme` trên controller thay vì
-    `OpenApiConfiguration`.
-20. `MultipartFile.getBytes()`, `Files.readAllBytes()`, `readAllLines()`,
-    executor không bound, và các pattern đã liệt kê ở `AGENTS.md` phần
-    "Patterns to reject".
-
----
-
-## Checklist nhanh trước khi commit
-
-- [ ] Đã tra `codegraph_explore` / `LIBRARY.md` — không duplicate.
-- [ ] Package layout đúng §3 cho mọi class mới.
-- [ ] Domain không có Spring/JPA import.
-- [ ] Lỗi mới → `<Module>ErrorCode` chỉ dùng HTTP status được duyệt ở §6.1,
-  throw qua `<Module>DomainException` (từ domain) hoặc `ResponseException`
-  (từ application cross-cutting), tên enum đã có làm key ở cả
-  `messages.properties` và `messages_vi.properties`.
-- [ ] Có 1 dòng `log.warn` / `log.error` **ngay trước** mỗi `throw` mới mà
-  kết thúc request, đủ ID để trace.
-- [ ] Code dễ bug (I/O ngoài, retry, race point) có breadcrumb log trước
-  và sau call rủi ro.
-- [ ] `@Slf4j(topic = "…")` trên class; message log bắt đầu bằng `[methodName]`
-  và dùng `{}` placeholder; không lộ PII / token.
-- [ ] Mapper là interface MapStruct `@Mapper(componentModel = "spring")`;
-  không `ModelMapper`, `BeanUtils`, hay reflection.
-- [ ] DTO có Jakarta Validation + `@Schema`. Không trả JPA entity làm
-  response.
-- [ ] Endpoint mới: security default (bearer) hoặc opt-out bằng
-  `@SecurityRequirements` cho endpoint public.
-- [ ] Schema đổi → Flyway migration mới `V{yyyyMMddHHmm}__*.sql`.
-- [ ] Behaviour mới có test.
-- [ ] `mvn spotless:apply && mvn verify` xanh.
-- [ ] Commit theo `type(scope): subject`.
+- [ ] Đã đọc source, test, `AGENTS.md`, `LIBRARY.md` liên quan.
+- [ ] Change dùng thiết kế nhỏ nhất nhưng vẫn bảo vệ boundary có thật.
+- [ ] Domain code không phụ thuộc Spring, JPA, Jackson, servlet hoặc HTTP.
+- [ ] Interface mới đại diện cho inbound/outbound boundary có thật.
+- [ ] Mọi entity mới kế thừa hoặc khai báo `deleteAt` map tới `delete_at`.
+- [ ] Business read dùng `delete_at IS NULL`, trừ màn hình thùng rác rõ ràng.
+- [ ] Uniqueness của live data dùng partial unique index phù hợp.
+- [ ] Schema change dùng Flyway migration mới, append-only.
+- [ ] Transaction ngắn và nằm trên application service.
+- [ ] External call có timeout và nằm ngoài DB transaction nếu không có lý do
+  rõ ràng.
+- [ ] JPA list query đã kiểm tra N+1, pagination giới hạn và sort ổn định.
+- [ ] Error enum name bắt đầu bằng prefix module.
+- [ ] Numeric business error code là unique.
+- [ ] i18n key tiếng Anh và tiếng Việt giống chính xác error enum name.
+- [ ] Error chỉ được log một lần tại boundary phù hợp và không có dữ liệu nhạy
+  cảm.
+- [ ] Mapping không đơn giản qua boundary dùng MapStruct; update dùng
+  `@MappingTarget`.
+- [ ] Secret không có default không an toàn.
+- [ ] File và async operation bounded, streaming và idempotent khi cần.
+- [ ] Behavior mới có deterministic test theo mức rủi ro.
+- [ ] `./mvnw spotless:apply && ./mvnw verify` chạy thành công.
+- [ ] Commit tuân theo Conventional Commits.

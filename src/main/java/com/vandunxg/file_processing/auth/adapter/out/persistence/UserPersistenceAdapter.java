@@ -13,6 +13,7 @@ import com.vandunxg.file_processing.auth.adapter.out.persistence.entity.UserRole
 import com.vandunxg.file_processing.auth.adapter.out.persistence.mapper.RolePersistenceMapper;
 import com.vandunxg.file_processing.auth.adapter.out.persistence.mapper.UserPersistenceMapper;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
+import com.vandunxg.file_processing.auth.application.query.UserSearchQuery;
 import com.vandunxg.file_processing.auth.domain.model.Role;
 import com.vandunxg.file_processing.auth.domain.model.User;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,11 @@ public class UserPersistenceAdapter implements UserRepositoryPort {
   private final RolePersistenceMapper rolePersistenceMapper;
 
   @Override
+  public boolean existsAny() {
+    return jpaUserRepository.count() > 0;
+  }
+
+  @Override
   public boolean existsByNormalizedUsername(String normalizedUsername) {
     return jpaUserRepository.existsByNormalizedUsernameAndDeletedAtIsNull(normalizedUsername);
   }
@@ -45,6 +51,36 @@ public class UserPersistenceAdapter implements UserRepositoryPort {
         .findByIdAndDeletedAtIsNull(id)
         .map(userPersistenceMapper::toDomain)
         .map(this::enrich);
+  }
+
+  @Override
+  public Optional<User> findByIdForUpdate(UUID id) {
+    return jpaUserRepository
+        .findWithLockByIdAndDeletedAtIsNull(id)
+        .map(userPersistenceMapper::toDomain)
+        .map(this::enrich);
+  }
+
+  @Override
+  public List<User> findAll() {
+    return enrichAll(
+        userPersistenceMapper.toDomain(
+            jpaUserRepository.findAllByDeletedAtIsNullOrderByCreatedAtDesc()));
+  }
+
+  @Override
+  public Long count(UserSearchQuery query) {
+    return jpaUserRepository.count(query);
+  }
+
+  @Override
+  public List<User> search(UserSearchQuery query) {
+    return enrichAll(userPersistenceMapper.toDomain(jpaUserRepository.search(query)));
+  }
+
+  @Override
+  public long countActiveAdmins() {
+    return jpaUserRepository.countActiveAdmins();
   }
 
   @Override

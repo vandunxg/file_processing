@@ -5,6 +5,7 @@ import java.util.List;
 import com.vandunxg.common.models.mapper.EntityMapper;
 import com.vandunxg.file_processing.auth.adapter.out.persistence.entity.SessionEntity;
 import com.vandunxg.file_processing.auth.domain.model.Session;
+import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingConstants;
@@ -20,6 +21,7 @@ public interface SessionPersistenceMapper extends EntityMapper<Session, SessionE
   Session toDomain(SessionEntity entity);
 
   @Override
+  @BeanMapping(ignoreUnmappedSourceProperties = {"createdBy", "lastModifiedBy", "lastModifiedAt"})
   @Mapping(target = "createdBy", ignore = true)
   @Mapping(target = "lastModifiedBy", ignore = true)
   @Mapping(target = "lastModifiedAt", ignore = true)

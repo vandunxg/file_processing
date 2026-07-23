@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Verifies the 7 Flyway migrations (V202607170900 - V202607170906) apply cleanly against a real
@@ -82,6 +83,7 @@ class MigrationAndSeedIT extends AuthIntegrationTestBase {
   }
 
   @Test
+  @Transactional
   void migrations_enforceUniqueTokenHash_onAuthEmailVerificationTokens() {
     UUID userId = UUID.randomUUID();
     Instant now = Instant.now();
@@ -122,5 +124,28 @@ class MigrationAndSeedIT extends AuthIntegrationTestBase {
                     Timestamp.from(now),
                     Timestamp.from(now.plusSeconds(3600))))
         .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  @Test
+  void migrations_indexBoundedCleanupWithoutIncludingActiveRefreshSessions() {
+    List<String> indexes =
+        jdbcTemplate.queryForList(
+            "SELECT indexname FROM pg_indexes WHERE schemaname = 'public'"
+                + " AND indexname IN ('auth_password_reset_tokens_expiry_cleanup_idx',"
+                + " 'auth_refresh_sessions_revoked_cleanup_idx')",
+            String.class);
+
+    assertThat(indexes)
+        .containsExactlyInAnyOrder(
+            "auth_password_reset_tokens_expiry_cleanup_idx",
+            "auth_refresh_sessions_revoked_cleanup_idx");
+    String predicate =
+        jdbcTemplate.queryForObject(
+            "SELECT pg_get_expr(i.indpred, i.indrelid) FROM pg_index i"
+                + " JOIN pg_class c ON c.oid = i.indexrelid"
+                + " WHERE c.relname = 'auth_refresh_sessions_revoked_cleanup_idx'",
+            String.class);
+
+    assertThat(predicate).contains("deleted_at IS NULL", "revoked_at IS NOT NULL");
   }
 }

@@ -221,6 +221,7 @@ app:
 
     refresh:
       token-ttl: ${AUTH_REFRESH_TOKEN_TTL:PT168H}
+      cookie-secure: ${AUTH_REFRESH_COOKIE_SECURE:true}
 
     session:
       credential-version-cache-ttl: ${AUTH_SESSION_CV_CACHE_TTL:PT5M}
@@ -247,6 +248,17 @@ app:
       token-ttl: ${AUTH_EMAIL_VERIFICATION_TOKEN_TTL:PT24H}
       base-url: ${AUTH_EMAIL_VERIFICATION_BASE_URL:http://localhost:5173/verify-email}
       resend-max-attempts-per-hour: ${AUTH_EMAIL_VERIFICATION_RESEND_MAX_PER_HOUR:10}
+
+    password-reset:
+      token-ttl: ${AUTH_PASSWORD_RESET_TOKEN_TTL:PT15M}
+      base-url: ${AUTH_PASSWORD_RESET_BASE_URL:http://localhost:5173/reset-password}
+      ip-max-attempts-per-hour: ${AUTH_PASSWORD_RESET_IP_MAX_PER_HOUR:20}
+      identifier-max-attempts-per-window: ${AUTH_PASSWORD_RESET_IDENTIFIER_MAX_PER_WINDOW:5}
+      identifier-window: ${AUTH_PASSWORD_RESET_IDENTIFIER_WINDOW:PT15M}
+
+    cleanup:
+      cadence: ${AUTH_CLEANUP_CADENCE:PT1H}
+      batch-size: ${AUTH_CLEANUP_BATCH_SIZE:100}
 
     redis:
       throttle:

@@ -8,6 +8,7 @@ import java.util.List;
 
 import com.vandunxg.common.utils.HashUtils;
 import com.vandunxg.common.utils.IdUtils;
+import com.vandunxg.file_processing.auth.adapter.out.metrics.AuthMetrics;
 import com.vandunxg.file_processing.auth.application.command.LoginCommand;
 import com.vandunxg.file_processing.auth.application.port.in.LoginUseCase;
 import com.vandunxg.file_processing.auth.application.port.out.*;
@@ -39,8 +40,10 @@ public class LoginService implements LoginUseCase {
   private final RefreshTokenGeneratorPort refreshTokenGeneratorPort;
   private final SessionRepositoryPort sessionRepositoryPort;
   private final JwtIssuerPort jwtIssuerPort;
+  private final AuthorityService authorityService;
   private final CredentialVersionCachePort credentialVersionCachePort;
   private final AuditLogEventPublisherPort auditLogEventPublisherPort;
+  private final AuthMetrics authMetrics;
   private final AuthProperties authProperties;
   private final Clock clock;
 
@@ -52,6 +55,7 @@ public class LoginService implements LoginUseCase {
 
     if (!throttlePort.tryConsume(
         IP_THROTTLE_PREFIX + ipHash, authProperties.login().ipMaxPerHour(), IP_WINDOW)) {
+      authMetrics.loginRateLimited();
       log.warn("[login] rate limited by ip");
       throw new AuthDomainException(AuthErrorCode.AUTH_RATE_LIMITED);
     }
@@ -59,6 +63,7 @@ public class LoginService implements LoginUseCase {
         USER_THROTTLE_PREFIX + normalizedUsername,
         authProperties.login().usernameMaxPerWindow(),
         authProperties.login().usernameWindow())) {
+      authMetrics.loginRateLimited();
       log.warn("[login] rate limited by username");
       throw new AuthDomainException(AuthErrorCode.AUTH_RATE_LIMITED);
     }
@@ -68,6 +73,7 @@ public class LoginService implements LoginUseCase {
             .findByNormalizedIdentifier(normalizedUsername)
             .orElseThrow(
                 () -> {
+                  authMetrics.loginInvalidCredentials();
                   log.warn("[login] user not found username={}", normalizedUsername);
                   return new AuthDomainException(AuthErrorCode.INVALID_CREDENTIALS);
                 });
@@ -75,47 +81,29 @@ public class LoginService implements LoginUseCase {
     Instant now = Instant.now(clock);
 
     if (user.isLocked(now)) {
+      authMetrics.loginLocked();
       log.warn("[login] account locked userId={}", user.getId());
       throw new AuthDomainException(AuthErrorCode.ACCOUNT_LOCKED);
     }
     if (!passwordHasherPort.matches(command.getPassword(), user.getPasswordHash())) {
       recordFailedLogin(user, now, ipHash);
+      authMetrics.loginInvalidCredentials();
       log.warn("[login] invalid password userId={}", user.getId());
       throw new AuthDomainException(AuthErrorCode.INVALID_CREDENTIALS);
     }
     if (user.isPendingVerify()) {
+      authMetrics.loginPendingVerification();
       log.warn("[login] account not verified userId={}", user.getId());
       throw new AuthDomainException(AuthErrorCode.EMAIL_VERIFICATION_REQUIRED);
     }
     if (!user.isActive()) {
+      authMetrics.loginDisabled();
       log.warn("[login] account not active userId={} status={}", user.getId(), user.getStatus());
       throw new AuthDomainException(AuthErrorCode.INVALID_CREDENTIALS);
     }
 
     user.resetFailedLogin();
     User saved = userRepositoryPort.save(user);
-
-    String rawRefresh = refreshTokenGeneratorPort.generate();
-    String refreshHash = HashUtils.sha256(rawRefresh.getBytes(StandardCharsets.UTF_8));
-
-    Session session =
-        Session.issue(
-            IdUtils.nextId(),
-            saved.getId(),
-            saved.getCredentialVersion(),
-            refreshHash,
-            command.getUserAgent(),
-            ipHash,
-            now,
-            authProperties.refresh().tokenTtl());
-    sessionRepositoryPort.save(session);
-    credentialVersionCachePort.put(saved.getId(), saved.getCredentialVersion());
-
-    List<String> roleCodes = saved.getRoles().stream().map(Role::getCode).toList();
-    JwtIssuerPort.IssuedAccessToken accessToken =
-        jwtIssuerPort.issue(
-            saved.getId(), session.getId(), saved.getCredentialVersion(), roleCodes, now);
-
     AuditLog auditLog =
         AuditLog.builder()
             .id(IdUtils.nextId())
@@ -127,9 +115,52 @@ public class LoginService implements LoginUseCase {
             .ipAddress(ipHash)
             .userAgent(command.getUserAgent())
             .build();
+
+    if (saved.isMustChangePassword()) {
+      JwtIssuerPort.IssuedPasswordChangeToken passwordChangeToken =
+          jwtIssuerPort.issuePasswordChange(saved.getId(), saved.getCredentialVersion(), now);
+      credentialVersionCachePort.put(saved.getId(), saved.getCredentialVersion());
+      publishAfterCommit(auditLog);
+      authMetrics.loginSucceeded();
+      return LoginResult.builder()
+          .status("PASSWORD_CHANGE_REQUIRED")
+          .passwordChangeToken(passwordChangeToken.token())
+          .expiresIn(
+              Duration.between(passwordChangeToken.issuedAt(), passwordChangeToken.expiresAt())
+                  .toSeconds())
+          .build();
+    }
+
+    String rawRefresh = refreshTokenGeneratorPort.generate();
+    String refreshHash = HashUtils.sha256(rawRefresh.getBytes(StandardCharsets.UTF_8));
+
+    Session session =
+        Session.issue(
+            IdUtils.nextId(),
+            saved.getId(),
+            saved.getCredentialVersion(),
+            command.getUserAgent(),
+            ipHash,
+            now,
+            authProperties.refresh().tokenTtl());
+    sessionRepositoryPort.save(session, refreshHash);
+    credentialVersionCachePort.put(saved.getId(), saved.getCredentialVersion());
+
+    List<String> roleCodes = saved.getRoles().stream().map(Role::getCode).toList();
+    List<String> permissions = authorityService.permissionsFor(saved);
+    JwtIssuerPort.IssuedAccessToken accessToken =
+        jwtIssuerPort.issue(
+            saved.getId(),
+            session.getId(),
+            saved.getCredentialVersion(),
+            roleCodes,
+            permissions,
+            now);
+
     publishAfterCommit(auditLog);
 
     log.info("[login] login succeeded userId={} sid={}", saved.getId(), session.getId());
+    authMetrics.loginSucceeded();
 
     return LoginResult.builder()
         .tokenType(TOKEN_TYPE)

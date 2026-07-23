@@ -24,7 +24,6 @@ public class Session extends AuditableDomain {
   private UUID id;
   private UUID userId;
   private int credentialVersion;
-  private String refreshTokenHash;
   private String userAgent;
   private String ipAddressHash;
   private Instant issuedAt;
@@ -39,7 +38,6 @@ public class Session extends AuditableDomain {
       UUID id,
       UUID userId,
       int credentialVersion,
-      String refreshTokenHash,
       String userAgent,
       String ipAddressHash,
       Instant now,
@@ -47,8 +45,6 @@ public class Session extends AuditableDomain {
     if (id == null
         || userId == null
         || now == null
-        || refreshTokenHash == null
-        || !refreshTokenHash.matches("[0-9a-f]{64}")
         || (ipAddressHash != null && ipAddressHash.isBlank())
         || ttl == null
         || ttl.isZero()
@@ -60,7 +56,6 @@ public class Session extends AuditableDomain {
         .id(id)
         .userId(userId)
         .credentialVersion(credentialVersion)
-        .refreshTokenHash(refreshTokenHash)
         .userAgent(userAgent)
         .ipAddressHash(ipAddressHash)
         .issuedAt(now)
@@ -71,17 +66,6 @@ public class Session extends AuditableDomain {
 
   public boolean isActive(Instant now) {
     return revokedAt == null && deletedAt == null && now.isBefore(expiresAt);
-  }
-
-  public void rotateRefresh(String newRefreshTokenHash, Instant now) {
-    if (newRefreshTokenHash == null || !newRefreshTokenHash.matches("[0-9a-f]{64}")) {
-      throw new IllegalArgumentException("Invalid new refresh token hash");
-    }
-    if (!isActive(now)) {
-      throw new IllegalStateException("Cannot rotate refresh of an inactive session");
-    }
-    this.refreshTokenHash = newRefreshTokenHash;
-    this.lastUsedAt = now;
   }
 
   public void revoke(RevocationReason reason, Instant now) {

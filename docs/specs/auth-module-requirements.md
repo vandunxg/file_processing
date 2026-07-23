@@ -170,14 +170,14 @@ mỗi Role có tập Permission, mỗi User có tập Role. Hai role mặc đị
 
 Người dùng chưa xác thực có thể gọi các endpoint public:
 
-- Đăng ký tài khoản: `POST /auth/register`.
-- Xác thực email: `POST /auth/verify-email`.
-- Gửi lại email xác thực: `POST /auth/resend-verification`.
-- Đăng nhập: `POST /auth/login`.
-- Làm mới access token: `POST /auth/refresh` (với cookie hợp lệ + CSRF).
-- Quên mật khẩu: `POST /auth/forgot-password`.
-- Reset mật khẩu bằng token: `POST /auth/reset-password`.
-- Liveness và readiness health check theo cấu hình cho phép.
+- Đăng ký tài khoản: `POST /api/v1/auth/register`.
+- Xác thực email: `POST /api/v1/auth/verify-email`.
+- Gửi lại email xác thực: `POST /api/v1/auth/resend-verification`.
+- Đăng nhập: `POST /api/v1/auth/login`.
+- Làm mới access token: `POST /api/v1/auth/refresh` (với cookie hợp lệ + CSRF).
+- Quên mật khẩu: `POST /api/v1/auth/forgot-password`.
+- Reset mật khẩu bằng token: `POST /api/v1/auth/reset-password`.
+- Probe: `GET /actuator/health/liveness` và `GET /actuator/health/readiness`.
 - JWKS: `GET /api/certificate/.well-known/jwks.json`.
 - OpenAPI công khai chỉ trong môi trường được cho phép.
 
@@ -1130,8 +1130,8 @@ stateDiagram-v2
 Auth API dùng JSON, UTF-8, version trong URI. Base path đề xuất:
 
 ```
-/api/v1/auth          — public + authenticated auth flows
-/api/v1/me            — self-service (session mgmt)
+/api/v1/auth          — credential flows
+/api/v1/me            — current-user profile plus session management
 /api/v1/users         — User mgmt (Admin) — kết hợp permission-based
 /api/v1/roles         — Role mgmt (Admin) + permission catalog read
 /api/v1/roles/permissions, /api/v1/roles/resources — Permission catalog
@@ -1146,7 +1146,7 @@ Auth API dùng JSON, UTF-8, version trong URI. Base path đề xuất:
 | `Authorization` | `Bearer <access-token>` cho API được bảo vệ      |
 | `Content-Type`  | `application/json`                               |
 | `Accept`        | `application/json`                               |
-| `X-CSRF-Token`  | Bắt buộc cho `POST /auth/refresh` khi dùng cookie|
+| `X-CSRF-Token`  | Bắt buộc cho `POST /api/v1/auth/refresh` khi dùng cookie|
 | `X-Request-Id`  | Tùy chọn; hệ thống tự sinh nếu thiếu             |
 
 ### 13.2 Error response
@@ -1514,7 +1514,7 @@ biệt username tồn tại hay không.
   1. Lock token family.
   2. Revoke toàn bộ family (`revocationReason = TOKEN_REUSE_DETECTED`).
   3. Ghi audit `TOKEN_REUSE_DETECTED`.
-  4. Tăng metric `auth_refresh_reuse_total`.
+   4. Tăng metric `auth_events_total{operation="refresh",outcome="reused"}`.
   5. Trả `401 REFRESH_TOKEN_REUSED`.
   6. Không phát hành token mới.
 
@@ -1554,7 +1554,7 @@ biệt username tồn tại hay không.
 
 ## 23. AUTH-UC-09 — Đăng xuất toàn bộ phiên
 
-**Endpoint:** `POST /api/v1/auth/logout-all`
+**Endpoint:** `POST /api/v1/me/sessions/revoke-all`
 
 **Luồng chính:**
 1. Lấy `userId` từ principal.
@@ -1572,7 +1572,7 @@ biệt username tồn tại hay không.
 
 ## 24. AUTH-UC-10 — Xem thông tin người dùng hiện tại
 
-**Endpoint:** `GET /api/v1/auth/me`
+**Endpoint:** `GET /api/v1/me`
 
 **Response:**
 ```json
@@ -1634,8 +1634,8 @@ hoặc security key.
 **Luồng chính:**
 1. Rate limit.
 2. Normalize identifier (username hoặc email).
-3. Tìm user; nếu không tồn tại hoặc `DISABLED` → trả `204` chung (chống
-   enumeration).
+3. Tìm user; nếu không tồn tại → trả `404 USER_NOT_FOUND`. User `DISABLED`
+   không nhận email reset và flow kết thúc với `204`.
 4. Vô hiệu hóa toàn bộ reset token cũ của user (`usedAt = now`).
 5. Tạo `PasswordResetToken` (opaque + hash, TTL 15 phút).
 6. `afterCommit`: gửi email chứa link
@@ -1645,7 +1645,8 @@ hoặc security key.
 
 **Acceptance criteria:**
 - AUTH-AC-12.1: User hợp lệ nhận email reset.
-- AUTH-AC-12.2: User không tồn tại nhận `204` chung.
+- AUTH-AC-12.2: User không tồn tại trả `404 USER_NOT_FOUND` (approved override
+  for this endpoint).
 - AUTH-AC-12.3: Rate limit trả `429`.
 - AUTH-AC-12.4: Token không xuất hiện trong log hoặc audit.
 
@@ -1727,7 +1728,7 @@ Không trả token hash hoặc IP đầy đủ.
 4. Trả `204`.
 
 **Lưu ý:** revoke session hiện tại không ép user logout ngay — access token
-vẫn còn hiệu lực trong TTL. Muốn revoke access token, dùng `logout-all` để
+vẫn còn hiệu lực trong TTL. Muốn revoke access token, dùng `POST /api/v1/me/sessions/revoke-all` để
 tăng credential version.
 
 **Acceptance criteria:**
@@ -2069,7 +2070,10 @@ http
     .authorizeHttpRequests(auth -> auth
         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
         .requestMatchers(PUBLIC_URLS).permitAll()
-        .anyRequest().authenticated())
+        .requestMatchers("/actuator/health/liveness", "/actuator/health/readiness").permitAll()
+        .requestMatchers("/actuator/prometheus").hasAuthority("all:manage")
+        .requestMatchers("/actuator/**").denyAll()
+        .requestMatchers(AUTHENTICATED_URLS).authenticated())
     .oauth2ResourceServer(oauth2 -> oauth2
         .jwt(jwt -> jwt
             .decoder(rsaJwtDecoder)
@@ -2088,9 +2092,12 @@ http
 - `/api/v1/auth/forgot-password`
 - `/api/v1/auth/reset-password`
 - `/api/v1/certificate/.well-known/jwks.json`
-- `/actuator/health/liveness`
 - `/v3/api-docs/**`
 - `/swagger-ui/**`
+
+Actuator không thuộc `PUBLIC_URLS`: chỉ `GET /actuator/health/liveness` và
+`GET /actuator/health/readiness` là public. `GET /actuator/prometheus` yêu cầu
+authority `all:manage`; mọi actuator endpoint khác bị từ chối.
 
 ### 38.2 JwtAuthenticationConverter
 
@@ -2219,7 +2226,7 @@ Nếu `current > limit` → trả 429 với `Retry-After = TTL(key)`.
 Redis unavailable:
 - Fallback in-memory Caffeine bucket per-instance (không đồng bộ giữa instances).
 - Bucket per (type, key), TTL matching window, capacity = limit.
-- Log warning và tăng metric `auth_rate_limit_fallback_total`.
+- Log warning. Không phát hành metric fallback riêng; metric hiện tại được liệt kê tại §46.2.
 - Không fail-open: nếu tất cả cơ chế hỏng, trả 503 `SERVICE_UNAVAILABLE`.
 
 ### 39.5 Reset
@@ -2620,13 +2627,16 @@ Convention: `{httpStatus}{2-digit-module=01}{2-digit-seq}`.
 
 ### 43.4 Chống enumeration
 
-Login, register, forgot-password, resend-verification phải có response chung
-và timing gần tương đương cho các case:
+Login, register, và resend-verification phải có response chung và timing gần
+tương đương cho các case:
 - Username/email không tồn tại.
 - Password sai.
 - User disabled.
 - User locked.
 - User đã verified (cho resend).
+
+`POST /api/v1/auth/forgot-password` là ngoại lệ được phê duyệt: identifier không
+tồn tại trả `404 USER_NOT_FOUND`.
 
 Admin endpoint được phép trả trạng thái vì đã bảo vệ bằng permission.
 
@@ -2739,31 +2749,19 @@ Cookie, private key.
 
 ### 46.2 Metric
 
-Counter:
-- `auth_login_total{result,reason}`
-- `auth_refresh_total{result}`
-- `auth_logout_total{scope,result}`
-- `auth_token_validation_total{result}`
-- `auth_account_lock_total{reason}`
-- `auth_admin_action_total{action,result}`
-- `auth_refresh_reuse_total`
-- `auth_rate_limit_total{dimension}`
-- `auth_rate_limit_fallback_total`
-- `auth_email_send_total{type,result}`
-- `auth_password_reset_total{result}`
-- `auth_email_verification_total{result}`
+Counter đang phát hành là `auth_events_total{operation,outcome}`. Cả hai tag chỉ
+dùng tập giá trị cố định, low-cardinality:
 
-Timer:
-- `auth_login_duration`
-- `auth_refresh_duration`
-- `auth_token_validation_duration`
-- `auth_password_hash_duration`
-- `auth_user_query_duration`
-- `auth_email_send_duration`
+| operation | outcome |
+|-----------|---------|
+| `login` | `success`, `invalid_credentials`, `locked`, `pending_verification`, `disabled`, `rate_limited` |
+| `forgot_password` | `rate_limited` |
+| `refresh` | `rate_limited`, `reused` |
+| `password_reset` | `requested`, `completed`, `rejected` |
+| `token_validation` | `failed` |
 
-Gauge:
-- Session active tổng.
-- Account đang lock tổng nếu query rẻ.
+`token_validation/failed` đếm mọi `JwtException`: gồm lỗi JWKS nhưng không chỉ
+đại diện cho lỗi JWKS. Không phân loại theo exception message.
 
 Không dùng userId, username, email, sessionId, tokenId, IP, error message làm
 metric label.
@@ -2772,6 +2770,10 @@ metric label.
 
 - Liveness: process sống, không depend DB/Redis/MinIO.
 - Readiness: DB + Redis (nếu cấu hình bắt buộc) + JWT key ring loaded.
+- Public probes: `GET /actuator/health/liveness` và
+  `GET /actuator/health/readiness`.
+- Prometheus scrape: `GET /actuator/prometheus` chỉ cho authority `all:manage`.
+  Không expose actuator endpoint khác qua public hoặc generic authenticated access.
 
 ## 47. Cấu hình
 
@@ -2822,6 +2824,9 @@ app:
     password-reset:
       token-ttl: PT15M
       base-url: ${AUTH_PASSWORD_RESET_BASE_URL:https://example.com/reset-password}
+    cleanup:
+      cadence: ${AUTH_CLEANUP_CADENCE:PT1H}
+      batch-size: ${AUTH_CLEANUP_BATCH_SIZE:100}
     bootstrap:
       admin:
         enabled: ${AUTH_BOOTSTRAP_ENABLED:true}
@@ -2838,6 +2843,43 @@ app:
 
 Secret không đặt trong `application.yml` commit vào Git.
 
+Cleanup chỉ dọn password-reset token và refresh session đã hết hạn hoặc bị revoke
+theo batch. Email verification vẫn dùng Redis TTL; không có scheduled Redis key
+scan cho verification token.
+
+### 47.1 Runbook bootstrap Admin
+
+- Chỉ cho lần triển khai đầu tiên: đặt `AUTH_BOOTSTRAP_ENABLED=true` cùng
+  `AUTH_BOOTSTRAP_ADMIN_USERNAME`, `AUTH_BOOTSTRAP_ADMIN_EMAIL`, và
+  `AUTH_BOOTSTRAP_ADMIN_PASSWORD`. Có thể đặt
+  `AUTH_BOOTSTRAP_ADMIN_DISPLAY_NAME`.
+- Khi `ApplicationReadyEvent` chạy, bootstrap chỉ tạo Admin nếu chưa có user;
+  nếu đã có user, flow bỏ qua an toàn. Không dùng lại biến bootstrap để thay đổi
+  Admin đã tồn tại.
+- Sau khi Admin đầu tiên đã đăng nhập được, đặt `AUTH_BOOTSTRAP_ENABLED=false`
+  và xóa secret bootstrap password khỏi deployment configuration.
+
+### 47.2 Runbook rotation khóa ký JWT
+
+1. Tạo cặp RSA mới và `kid` duy nhất. Private key mới phải khớp public key có
+   cùng `kid`.
+2. Trong secret/configuration deployment, đặt `AUTH_JWT_ACTIVE_KID`,
+   `AUTH_JWT_PRIVATE_KEY_PEM`, và public key active mới. Giữ public key cũ trong
+   `app.auth.jwt.public-keys` cùng public key mới trong suốt transition.
+3. Rolling restart service. Token mới dùng `active-kid`; JWKS chỉ công bố các
+   public key trong key ring.
+4. Chờ ít nhất `access-token-ttl + clock-skew`, sau đó xóa public key cũ khỏi
+   `public-keys` và restart lại. Không ghi key material vào log, audit, image,
+   hoặc repository.
+
+### 47.3 Cutover refresh cookie
+
+`POST /api/v1/auth/refresh` chỉ đọc cookie `fps_refresh` và yêu cầu cookie
+`fps_csrf` khớp header `X-CSRF-Token`; endpoint không nhận hoặc chuyển đổi
+legacy refresh token từ request body. Trước cutover, yêu cầu client đăng nhập
+lại một lần để nhận hai cookie mới. Sau đó client gửi credential cookie và
+`X-CSRF-Token` cho mỗi refresh; refresh thành công luôn rotate cả hai cookie.
+
 ## 48. API capability summary
 
 | Capability                       | Method | Path                                     | Quyền                      | Success |
@@ -2849,13 +2891,13 @@ Secret không đặt trong `application.yml` commit vào Git.
 | Complete password change         | POST   | `/api/v1/auth/complete-password-change`  | Password change token      | 204     |
 | Refresh                          | POST   | `/api/v1/auth/refresh`                   | Refresh cookie + CSRF      | 200     |
 | Logout                           | POST   | `/api/v1/auth/logout`                    | Authenticated              | 204     |
-| Logout all                       | POST   | `/api/v1/auth/logout-all`                | Authenticated              | 204     |
-| Current user                     | GET    | `/api/v1/auth/me`                        | Authenticated              | 200     |
+| Logout all                       | POST   | `/api/v1/me/sessions/revoke-all`         | `session:self_delete`      | 204     |
+| Current user                     | GET    | `/api/v1/me`                             | `user:self_read`           | 200     |
 | Change password                  | POST   | `/api/v1/auth/change-password`           | Authenticated              | 204     |
-| Forgot password                  | POST   | `/api/v1/auth/forgot-password`           | Public                     | 204     |
+| Forgot password                  | POST   | `/api/v1/auth/forgot-password`           | Public                     | 204; 404 `USER_NOT_FOUND` |
 | Reset password                   | POST   | `/api/v1/auth/reset-password`            | Public + token             | 204     |
-| List my sessions                 | GET    | `/api/v1/me/sessions`                    | Authenticated              | 200     |
-| Revoke my session                | DELETE | `/api/v1/me/sessions/{id}`               | Authenticated              | 204     |
+| List my sessions                 | GET    | `/api/v1/me/sessions`                    | `session:self_read`        | 200     |
+| Revoke my session                | DELETE | `/api/v1/me/sessions/{sessionId}`        | `session:self_delete`      | 204     |
 | Create user                      | POST   | `/api/v1/users`                          | `user:create`              | 201     |
 | List users                       | GET    | `/api/v1/users`                          | `user:read`                | 200     |
 | User detail                      | GET    | `/api/v1/users/{id}`                     | `user:read`                | 200     |
@@ -2989,7 +3031,7 @@ sequenceDiagram
 
 - Login success/failure/PENDING_VERIFY/mustChangePassword/DISABLED/locked.
 - Refresh success/reuse/expired/wrong-cv.
-- Logout/logout-all.
+- Logout và revoke toàn bộ session.
 - Register + verify email.
 - Forgot password + reset password.
 - Change password revoke session.
@@ -3166,7 +3208,7 @@ Triển khai theo 7 phase để giảm rủi ro.
 - Custom `JwtAuthenticationConverter` → `UserAuthentication`.
 - `CredentialVersionValidator`.
 - Spring Security filter chain (thay thế bản hiện có).
-- `/auth/me` endpoint.
+- `/api/v1/me` profile endpoint.
 - Bảo vệ endpoint test (health, ping).
 - JWT + authorization test.
 
@@ -3175,7 +3217,7 @@ Triển khai theo 7 phase để giảm rủi ro.
 - RefreshSession + RefreshToken persistence.
 - Refresh use case với rotation + reuse detection.
 - CSRF double-submit cookie.
-- Logout + logout-all + session mgmt (`/me/sessions`).
+- Logout tại `/api/v1/auth/logout` + session management tại `/api/v1/me/sessions`.
 - Concurrency test rotation.
 - Audit token events.
 

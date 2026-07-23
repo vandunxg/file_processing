@@ -8,16 +8,14 @@ import java.util.UUID;
 import com.vandunxg.file_processing.auth.domain.model.RevocationReason;
 import com.vandunxg.file_processing.auth.domain.model.Session;
 
-/**
- * Redis-backed session store. This is the authoritative view of "is a session currently valid?".
- * Postgres is a downstream archive (see {@link SessionArchivePort}) reached asynchronously through
- * RabbitMQ.
- */
+/** PostgreSQL-backed refresh-session and token-family store. */
 public interface SessionRepositoryPort {
 
-  void save(Session session);
+  void save(Session session, String initialRefreshTokenHash);
 
   Optional<Session> findActiveById(UUID sessionId, Instant now);
+
+  Optional<Session> findById(UUID sessionId);
 
   Optional<UUID> resolveSessionIdByRefreshHash(String refreshHash);
 
@@ -40,4 +38,6 @@ public interface SessionRepositoryPort {
   int revokeAllForUser(UUID userId, RevocationReason reason, Instant now);
 
   List<Session> listActiveByUser(UUID userId, Instant now);
+
+  int deleteExpiredOrRevoked(Instant now, int limit);
 }

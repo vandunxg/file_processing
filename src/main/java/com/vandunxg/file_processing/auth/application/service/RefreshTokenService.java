@@ -10,6 +10,7 @@ import java.util.UUID;
 
 import com.vandunxg.common.utils.HashUtils;
 import com.vandunxg.common.utils.IdUtils;
+import com.vandunxg.file_processing.auth.adapter.out.metrics.AuthMetrics;
 import com.vandunxg.file_processing.auth.application.command.RefreshTokenCommand;
 import com.vandunxg.file_processing.auth.application.port.in.RefreshTokenUseCase;
 import com.vandunxg.file_processing.auth.application.port.out.*;
@@ -39,7 +40,9 @@ public class RefreshTokenService implements RefreshTokenUseCase {
   private final CredentialVersionCachePort credentialVersionCachePort;
   private final RefreshTokenGeneratorPort refreshTokenGeneratorPort;
   private final JwtIssuerPort jwtIssuerPort;
+  private final AuthorityService authorityService;
   private final AuditLogEventPublisherPort auditLogEventPublisherPort;
+  private final AuthMetrics authMetrics;
   private final AuthProperties authProperties;
   private final Clock clock;
 
@@ -49,6 +52,7 @@ public class RefreshTokenService implements RefreshTokenUseCase {
     String ipHash = hashIp(command.getIpAddress());
     if (!throttlePort.tryConsume(
         IP_THROTTLE_PREFIX + ipHash, authProperties.login().refreshIpMaxPerHour(), IP_WINDOW)) {
+      authMetrics.refreshRateLimited();
       log.warn("[refresh] rate limited by ip");
       throw new AuthDomainException(AuthErrorCode.AUTH_RATE_LIMITED);
     }
@@ -100,6 +104,11 @@ public class RefreshTokenService implements RefreshTokenUseCase {
         sessionRepositoryPort.rotateRefresh(
             sid, incomingHash, newHash, now, session.getExpiresAt());
     if (!rotated) {
+      if (sessionRepositoryPort.resolveReusedSessionIdByHash(incomingHash).isPresent()) {
+        handleReuseCascade(sid, ipHash, now);
+        log.warn("[refresh] token reuse detected during rotation sid={}", sid);
+        throw new AuthDomainException(AuthErrorCode.REFRESH_TOKEN_REUSED);
+      }
       log.warn("[refresh] concurrent rotation detected sid={}", sid);
       throw new AuthDomainException(AuthErrorCode.REFRESH_TOKEN_INVALID);
     }
@@ -116,7 +125,8 @@ public class RefreshTokenService implements RefreshTokenUseCase {
         user.getRoles() == null ? List.of() : user.getRoles().stream().map(Role::getCode).toList();
 
     JwtIssuerPort.IssuedAccessToken accessToken =
-        jwtIssuerPort.issue(user.getId(), sid, currentCv, roleCodes, now);
+        jwtIssuerPort.issue(
+            user.getId(), sid, currentCv, roleCodes, authorityService.permissionsFor(user), now);
 
     publishAuditAfterCommit(
         AuditLog.builder()
@@ -146,15 +156,13 @@ public class RefreshTokenService implements RefreshTokenUseCase {
   }
 
   private void handleReuseCascade(UUID sessionId, String ipHash, Instant now) {
-    Optional<Session> maybe = sessionRepositoryPort.findActiveById(sessionId, now);
+    authMetrics.refreshTokenReused();
+    Optional<Session> maybe = sessionRepositoryPort.findById(sessionId);
     UUID userId = maybe.map(Session::getUserId).orElse(null);
+    sessionRepositoryPort.revoke(sessionId, RevocationReason.TOKEN_REUSE, now);
     if (userId == null) {
-      // The archived session tells us who the attacker impersonated; without Redis or a fallback
-      // we cannot fan-out. Revoke the single session and audit — do not error the caller.
-      sessionRepositoryPort.revoke(sessionId, RevocationReason.TOKEN_REUSE, now);
       return;
     }
-    sessionRepositoryPort.revokeAllForUser(userId, RevocationReason.TOKEN_REUSE, now);
     userRepositoryPort
         .findById(userId)
         .ifPresent(

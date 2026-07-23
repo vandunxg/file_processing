@@ -20,7 +20,7 @@ import lombok.Setter;
 import lombok.ToString;
 
 @Entity
-@Table(name = "auth_sessions")
+@Table(name = "auth_refresh_sessions")
 @Getter
 @Setter
 @ToString
@@ -38,9 +38,6 @@ public class SessionEntity extends AuditableEntity {
 
   @Column(name = "credential_version", nullable = false)
   private int credentialVersion;
-
-  @Column(name = "refresh_token_hash", nullable = false, length = 64)
-  private String refreshTokenHash;
 
   @Column(name = "user_agent", length = 255)
   private String userAgent;

@@ -1,18 +1,24 @@
 package com.vandunxg.file_processing.auth.adapter.in.web.mapper;
 
+import java.util.UUID;
+
+import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.ChangePasswordRequest;
+import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.ForgotPasswordRequest;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.LoginRequest;
-import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.RefreshTokenRequest;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.RegisterRequest;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.ResendVerificationRequest;
+import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.ResetPasswordRequest;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.request.VerifyEmailRequest;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.LoginResponse;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.MeResponse;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.RegisterResponse;
 import com.vandunxg.file_processing.auth.adapter.in.web.dto.response.SessionResponse;
+import com.vandunxg.file_processing.auth.application.command.ChangePasswordCommand;
+import com.vandunxg.file_processing.auth.application.command.ForgotPasswordCommand;
 import com.vandunxg.file_processing.auth.application.command.LoginCommand;
-import com.vandunxg.file_processing.auth.application.command.RefreshTokenCommand;
 import com.vandunxg.file_processing.auth.application.command.RegisterCommand;
 import com.vandunxg.file_processing.auth.application.command.ResendVerificationEmailCommand;
+import com.vandunxg.file_processing.auth.application.command.ResetPasswordCommand;
 import com.vandunxg.file_processing.auth.application.command.VerifyEmailCommand;
 import com.vandunxg.file_processing.auth.application.result.LoginResult;
 import com.vandunxg.file_processing.auth.application.result.MeResult;
@@ -37,12 +43,18 @@ public interface AuthWebMapper {
   ResendVerificationEmailCommand toCommand(ResendVerificationRequest request, String ipAddress);
 
   @Mapping(target = "ipAddress", source = "ipAddress")
-  @Mapping(target = "userAgent", source = "userAgent")
-  LoginCommand toCommand(LoginRequest request, String ipAddress, String userAgent);
+  ForgotPasswordCommand toCommand(ForgotPasswordRequest request, String ipAddress);
+
+  @Mapping(target = "ipAddress", source = "ipAddress")
+  ResetPasswordCommand toCommand(ResetPasswordRequest request, String ipAddress);
+
+  @Mapping(target = "userId", source = "userId")
+  @Mapping(target = "ipAddress", source = "ipAddress")
+  ChangePasswordCommand toCommand(ChangePasswordRequest request, UUID userId, String ipAddress);
 
   @Mapping(target = "ipAddress", source = "ipAddress")
   @Mapping(target = "userAgent", source = "userAgent")
-  RefreshTokenCommand toCommand(RefreshTokenRequest request, String ipAddress, String userAgent);
+  LoginCommand toCommand(LoginRequest request, String ipAddress, String userAgent);
 
   RegisterResponse toResponse(RegisterResult result);
 

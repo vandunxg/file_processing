@@ -7,7 +7,16 @@ import java.util.UUID;
 public interface JwtIssuerPort {
 
   IssuedAccessToken issue(
-      UUID userId, UUID sessionId, int credentialVersion, List<String> roles, Instant now);
+      UUID userId,
+      UUID sessionId,
+      int credentialVersion,
+      List<String> roles,
+      List<String> permissions,
+      Instant now);
+
+  IssuedPasswordChangeToken issuePasswordChange(UUID userId, int credentialVersion, Instant now);
 
   record IssuedAccessToken(String token, Instant issuedAt, Instant expiresAt) {}
+
+  record IssuedPasswordChangeToken(String token, Instant issuedAt, Instant expiresAt) {}
 }

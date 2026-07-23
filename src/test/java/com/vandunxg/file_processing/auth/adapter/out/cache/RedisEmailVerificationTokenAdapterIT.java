@@ -82,7 +82,7 @@ class RedisEmailVerificationTokenAdapterIT {
   @Test
   void save_thenFindByTokenHashForUpdate_roundTripsAndDeletesOnRead() {
     UUID userId = UUID.randomUUID();
-    String tokenHash = "hash-" + System.nanoTime();
+    String tokenHash = "a".repeat(64);
     Instant now = Instant.now();
     EmailVerificationToken token =
         EmailVerificationToken.issue(
@@ -107,7 +107,7 @@ class RedisEmailVerificationTokenAdapterIT {
   @Test
   void invalidateAllForUser_removesTheCurrentToken() {
     UUID userId = UUID.randomUUID();
-    String tokenHash = "hash-invalidate-" + System.nanoTime();
+    String tokenHash = "b".repeat(64);
     Instant now = Instant.now();
     EmailVerificationToken token =
         EmailVerificationToken.issue(
