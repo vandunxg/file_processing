@@ -2,6 +2,8 @@ package com.vandunxg.file_processing.configuration.security;
 
 import com.vandunxg.common.web.config.SpringSecurityAuditorAware;
 import com.vandunxg.common.web.security.RegexPermissionEvaluator;
+import com.vandunxg.common.web.support.CustomAuthenticationEntryPoint;
+import com.vandunxg.file_processing.auth.configuration.filter.ActionLoggingFilter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
@@ -22,6 +24,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationProvider;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
@@ -66,10 +69,14 @@ public class SecurityConfiguration {
     "/webjars/**"
   };
 
+  private static final String ALL_MANAGER_PERMISSION = "all:manager";
+
   private final RegexPermissionEvaluator customPermissionEvaluator;
   private final Converter<org.springframework.security.oauth2.jwt.Jwt, AbstractAuthenticationToken>
-      jwtAuthenticationConverter;
+    jwtAuthenticationConverter;
   private final JwtDecoder jwtDecoder;
+  private final ActionLoggingFilter actionLoggingFilter;
+  private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
 
   @Bean
   public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -77,34 +84,36 @@ public class SecurityConfiguration {
     jwtAuthenticationProvider.setJwtAuthenticationConverter(jwtAuthenticationConverter);
 
     http.csrf(AbstractHttpConfigurer::disable)
-        .sessionManagement(
-            sessionAuthenticationStrategy ->
-                sessionAuthenticationStrategy.sessionCreationPolicy(
-                    SessionCreationPolicy.STATELESS))
-        .authorizeHttpRequests(
-            authorize ->
-                authorize
-                    .requestMatchers(HttpMethod.OPTIONS, "/**")
-                    .permitAll()
-                    .requestMatchers(IGNORE_URLS)
-                    .permitAll()
-                    .requestMatchers(PUBLIC_URLS)
-                    .permitAll()
-                    .requestMatchers(ACTUATOR_PROBE_URLS)
-                    .permitAll()
-                    .requestMatchers("/actuator/prometheus")
-                    .hasAuthority("all:manage")
-                    .requestMatchers("/actuator/**")
-                    .denyAll()
-                    .requestMatchers(AUTHENTICATED_URLS)
-                    .authenticated())
-        .oauth2ResourceServer(
-            oauth2 ->
-                oauth2.authenticationManagerResolver(
-                    request -> jwtAuthenticationProvider::authenticate));
-    //            .exceptionHandling(
-    //                exHandling ->
-    // exHandling.authenticationEntryPoint(this.customAuthenticationEntryPoint));
+      .sessionManagement(
+        sessionAuthenticationStrategy ->
+          sessionAuthenticationStrategy.sessionCreationPolicy(
+            SessionCreationPolicy.STATELESS))
+      .authorizeHttpRequests(
+        authorize ->
+          authorize
+            .requestMatchers(HttpMethod.OPTIONS, "/**")
+            .permitAll()
+            .requestMatchers(IGNORE_URLS)
+            .permitAll()
+            .requestMatchers(PUBLIC_URLS)
+            .permitAll()
+            .requestMatchers(ACTUATOR_PROBE_URLS)
+            .permitAll()
+            .requestMatchers("/actuator/prometheus")
+            .hasAuthority(ALL_MANAGER_PERMISSION)
+            .requestMatchers("/actuator/**")
+            .denyAll()
+            .requestMatchers(AUTHENTICATED_URLS)
+            .authenticated())
+      .oauth2ResourceServer(
+        oauth2 ->
+          oauth2.authenticationManagerResolver(
+            request -> jwtAuthenticationProvider::authenticate))
+      .exceptionHandling(
+        exHandling ->
+          exHandling.authenticationEntryPoint(this.customAuthenticationEntryPoint));
+
+    http.addFilterBefore(actionLoggingFilter, BearerTokenAuthenticationFilter.class);
 
     return http.build();
   }
