@@ -5,6 +5,7 @@ import com.vandunxg.file_processing.auth.application.port.out.ActionLogPort;
 import com.vandunxg.file_processing.auth.domain.model.ActionLog;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.NonNull;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
@@ -16,7 +17,7 @@ public class ActionLogEventListener {
   private final ActionLogPort actionLogPort;
 
   @RabbitListener(queues = "${app.auth.amqp.queue.action-log}")
-  public void onActionLogEvent(MessageEnvelope<ActionLog> envelope) {
+  public void onActionLogEvent(MessageEnvelope<@NonNull ActionLog> envelope) {
     ActionLog actionLog = envelope.payload();
     log.debug(
         "[onActionLogEvent] received action log event path={} status={}",

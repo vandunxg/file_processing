@@ -1,5 +1,12 @@
 package com.vandunxg.file_processing.auth.configuration.filter;
 
+import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -30,13 +37,6 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.ContentCachingResponseWrapper;
 
-import java.io.IOException;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-
 @Component
 @Order(101)
 @WebFilter("/api/**")
@@ -46,21 +46,22 @@ import java.util.Optional;
 public class ActionLoggingFilter extends OncePerRequestFilter {
 
   private static final List<String> BLACKLIST =
-    List.of(
-      "\\/api\\/certificate\\/.well-known\\/jwks\\.json",
-      ".*\\/actuator\\/.*",
-      ".*\\/(audit|action)-logs.*",
-      "/swagger-ui.*",
-      "/swagger-resources.*",
-      "/v2/api-docs.*",
-      ".*\\/integrations\\/files\\/upload",
-      "/api/authenticate");
+      List.of(
+          "\\/api\\/certificate\\/.well-known\\/jwks\\.json",
+          ".*\\/actuator\\/.*",
+          ".*\\/(audit|action)-logs.*",
+          "/swagger-ui.*",
+          "/swagger-resources.*",
+          "/v2/api-docs.*",
+          ".*\\/integrations\\/files\\/upload",
+          "/api/authenticate");
 
   private static final List<String> BLACKLIST_MIME_TYPE =
-    List.of("multipart\\/form-data.*", "image\\/.*", "application\\/octet-stream.*");
+      List.of("multipart\\/form-data.*", "image\\/.*", "application\\/octet-stream.*");
 
   private static final List<String> MASK_FIELD_NAME =
-    List.of("password", "currentPassword", "newPassword", "clientSecret", "token", "refreshToken");
+      List.of(
+          "password", "currentPassword", "newPassword", "clientSecret", "token", "refreshToken");
 
   private static final String MASKED_VALUE = "********";
 
@@ -68,10 +69,10 @@ public class ActionLoggingFilter extends OncePerRequestFilter {
 
   @Override
   protected void doFilterInternal(
-    HttpServletRequest servletRequest,
-    HttpServletResponse servletResponse,
-    FilterChain filterChain)
-    throws IOException, ServletException {
+      HttpServletRequest servletRequest,
+      HttpServletResponse servletResponse,
+      FilterChain filterChain)
+      throws IOException, ServletException {
 
     Instant start = Instant.now();
 
@@ -80,11 +81,11 @@ public class ActionLoggingFilter extends OncePerRequestFilter {
     String requestContentType = httpServletRequest.getHeader(HttpHeaders.CONTENT_TYPE);
 
     boolean ignoredRequestBody =
-      Objects.nonNull(requestContentType)
-        && BLACKLIST_MIME_TYPE.stream().anyMatch(requestContentType::matches);
+        Objects.nonNull(requestContentType)
+            && BLACKLIST_MIME_TYPE.stream().anyMatch(requestContentType::matches);
 
     ContentCachingResponseWrapper cachedResponse =
-      new ContentCachingResponseWrapper(servletResponse);
+        new ContentCachingResponseWrapper(servletResponse);
     cachedResponse.setCharacterEncoding(StringPool.UTF8);
 
     if (!ignoredRequestBody) {
@@ -108,59 +109,59 @@ public class ActionLoggingFilter extends OncePerRequestFilter {
 
         if (shouldFilter(servletRequest)) {
           recordActionLog(
-            servletRequest,
-            httpServletRequest,
-            request,
-            remoteIp,
-            start,
-            finishRequest,
-            cachedResponse.getStatus(),
-            ignoredRequestBody);
+              servletRequest,
+              httpServletRequest,
+              request,
+              remoteIp,
+              start,
+              finishRequest,
+              cachedResponse.getStatus(),
+              ignoredRequestBody);
         }
       }
     }
   }
 
   private void recordActionLog(
-    HttpServletRequest servletRequest,
-    HttpServletRequest httpServletRequest,
-    RequestAttributes request,
-    String remoteIp,
-    Instant start,
-    Instant finishRequest,
-    int status,
-    boolean ignoredRequestBody) {
+      HttpServletRequest servletRequest,
+      HttpServletRequest httpServletRequest,
+      RequestAttributes request,
+      String remoteIp,
+      Instant start,
+      Instant finishRequest,
+      int status,
+      boolean ignoredRequestBody) {
 
     String body = StrUtils.EMPTY;
     if (httpServletRequest instanceof CachedHttpServletRequestWrapper cachedRequest
-      && !ignoredRequestBody) {
+        && !ignoredRequestBody) {
       body = cachedRequest.getBody();
     }
 
     try {
       actionLogEventPublisherPort.publish(
-        ActionLog.builder()
-          .id(IdUtils.nextId())
-          .userId(SecurityUtils.getCurrentUserLoginId().orElse(null))
-          .username(SecurityUtils.getCurrentUser().orElse(null))
-          .startTime(start)
-          .endTime(finishRequest)
-          .duration(Duration.between(start, finishRequest).toMillis())
-          .path(servletRequest.getServletPath())
-          .apiDoc(requestAttribute(request, Constants.API_DOC))
-          .requestMethod(servletRequest.getMethod())
-          .ipAddress(remoteIp)
-          .userAgent(servletRequest.getHeader(HttpHeaders.USER_AGENT))
-          .requestData(replaceRequestBody(body))
-          .requestParam(getRequestParams(servletRequest))
-          .statusCode(status)
-          .errorMessage(stackTrace(request))
-          .build());
+          ActionLog.builder()
+              .id(IdUtils.nextId())
+              .userId(SecurityUtils.getCurrentUserLoginId().orElse(null))
+              .username(SecurityUtils.getCurrentUser().orElse(null))
+              .startTime(start)
+              .endTime(finishRequest)
+              .duration(Duration.between(start, finishRequest).toMillis())
+              .path(servletRequest.getServletPath())
+              .apiDoc(requestAttribute(request, Constants.API_DOC))
+              .requestMethod(servletRequest.getMethod())
+              .ipAddress(remoteIp)
+              .userAgent(servletRequest.getHeader(HttpHeaders.USER_AGENT))
+              .requestData(replaceRequestBody(body))
+              .requestParam(getRequestParams(servletRequest))
+              .statusCode(status)
+              .errorMessage(stackTrace(request))
+              .build());
     } catch (Exception e) {
       log.warn(
-        "[recordActionLog] failed to persist action log path={}",
-        servletRequest.getServletPath(),
-        e);
+          "[recordActionLog] failed to persist action log path={}",
+          servletRequest.getServletPath(),
+          e);
     }
   }
 
@@ -171,7 +172,7 @@ public class ActionLoggingFilter extends OncePerRequestFilter {
 
   private static @Nullable String stackTrace(RequestAttributes request) {
     Object exceptionObj =
-      request.getAttribute(Constants.EXCEPTION_MESSAGE, RequestAttributes.SCOPE_REQUEST);
+        request.getAttribute(Constants.EXCEPTION_MESSAGE, RequestAttributes.SCOPE_REQUEST);
     if (exceptionObj instanceof Exception exception) {
       return ExceptionUtils.getStackTrace(exception);
     }
