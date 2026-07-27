@@ -103,7 +103,7 @@ class RoleManagementControllerIT extends AuthIntegrationTestBase {
                 .header("Authorization", "Bearer " + accessToken("ADMIN", List.of("role:read")))
                 .queryParam("sortBy", "deletedAt.desc"))
         .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.errors[0].field").value("sortBy"));
+        .andExpect(jsonPath("$.errors[0].field").value("request"));
   }
 
   @Test

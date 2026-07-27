@@ -1,9 +1,12 @@
 package com.vandunxg.file_processing.configuration.security;
 
 import com.vandunxg.common.web.config.SpringSecurityAuditorAware;
+import com.vandunxg.common.web.security.ForbiddenTokenFilter;
+import com.vandunxg.common.web.security.NoHandlerFoundFilter;
 import com.vandunxg.common.web.security.RegexPermissionEvaluator;
 import com.vandunxg.common.web.support.CustomAuthenticationEntryPoint;
 import com.vandunxg.file_processing.auth.configuration.filter.ActionLoggingFilter;
+import com.vandunxg.file_processing.auth.configuration.filter.CustomAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NullMarked;
@@ -71,14 +74,17 @@ public class SecurityConfiguration {
     "/webjars/**"
   };
 
-  private static final String ALL_MANAGER_PERMISSION = "all:manager";
+  private static final String ALL_MANAGER_PERMISSION = "all:manage";
 
   private final RegexPermissionEvaluator customPermissionEvaluator;
   private final Converter<org.springframework.security.oauth2.jwt.Jwt, AbstractAuthenticationToken>
       jwtAuthenticationConverter;
   private final JwtDecoder jwtDecoder;
   private final ActionLoggingFilter actionLoggingFilter;
+  private final CustomAuthenticationFilter customAuthenticationFilter;
   private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
+  private final NoHandlerFoundFilter noHandlerFoundFilter;
+  private final ForbiddenTokenFilter forbiddenTokenFilter;
 
   @Bean
   public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -114,7 +120,10 @@ public class SecurityConfiguration {
         .exceptionHandling(
             exHandling -> exHandling.authenticationEntryPoint(this.customAuthenticationEntryPoint));
 
-    http.addFilterBefore(actionLoggingFilter, BearerTokenAuthenticationFilter.class);
+    http.addFilterAfter(noHandlerFoundFilter, BearerTokenAuthenticationFilter.class);
+    http.addFilterAfter(forbiddenTokenFilter, BearerTokenAuthenticationFilter.class);
+    http.addFilterAfter(customAuthenticationFilter, BearerTokenAuthenticationFilter.class);
+    http.addFilterAfter(actionLoggingFilter, CustomAuthenticationFilter.class);
 
     return http.build();
   }

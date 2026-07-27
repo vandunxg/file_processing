@@ -8,12 +8,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.Setter;
-import lombok.ToString;
+import lombok.*;
 
 @Entity
 @Table(name = "action_logs")
@@ -70,4 +65,7 @@ public class ActionLogEntity extends AuditableEntity {
 
   @Column(name = "request_param", columnDefinition = "TEXT")
   private String requestParam;
+
+  @Column(name = "deleted_at")
+  private Instant deletedAt;
 }

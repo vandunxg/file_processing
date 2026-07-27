@@ -56,7 +56,6 @@ public class RoleEntity extends AuditableEntity {
   @Column(name = "status", nullable = false, length = 20)
   private ActiveStatus status;
 
-  @Column(name = "deleted_at")
   private Instant deletedAt;
 
   @Version

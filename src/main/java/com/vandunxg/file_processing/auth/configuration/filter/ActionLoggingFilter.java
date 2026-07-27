@@ -25,7 +25,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.springframework.core.annotation.Order;
@@ -143,7 +142,7 @@ public class ActionLoggingFilter extends OncePerRequestFilter {
           ActionLog.builder()
               .id(IdUtils.nextId())
               .userId(SecurityUtils.getCurrentUserLoginId().orElse(null))
-              .username(SecurityUtils.getCurrentUser().orElse(null))
+              .username(authenticatedUsername(servletRequest))
               .startTime(start)
               .endTime(finishRequest)
               .duration(Duration.between(start, finishRequest).toMillis())
@@ -174,7 +173,7 @@ public class ActionLoggingFilter extends OncePerRequestFilter {
     Object exceptionObj =
         request.getAttribute(Constants.EXCEPTION_MESSAGE, RequestAttributes.SCOPE_REQUEST);
     if (exceptionObj instanceof Exception exception) {
-      return ExceptionUtils.getStackTrace(exception);
+      return exception.getClass().getSimpleName();
     }
     return null;
   }
@@ -190,7 +189,7 @@ public class ActionLoggingFilter extends OncePerRequestFilter {
 
   private boolean shouldFilter(HttpServletRequest request) {
     try {
-      Optional<String> optionalUserAuthentication = SecurityUtils.getCurrentUser();
+      Optional<java.util.UUID> optionalUserAuthentication = SecurityUtils.getCurrentUserLoginId();
       if (optionalUserAuthentication.isEmpty()) {
         return false;
       }
@@ -203,6 +202,12 @@ public class ActionLoggingFilter extends OncePerRequestFilter {
     }
     String uri = String.valueOf(request.getRequestURI());
     return uri.startsWith("/api/") && BLACKLIST.stream().noneMatch(uri::matches);
+  }
+
+  private static @Nullable String authenticatedUsername(HttpServletRequest request) {
+    Object username =
+        request.getAttribute(CustomAuthenticationFilter.AUTHENTICATED_USERNAME_ATTRIBUTE);
+    return username instanceof String value ? value : null;
   }
 
   private String getRemoteIp(HttpServletRequest request) {

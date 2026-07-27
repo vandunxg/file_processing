@@ -29,5 +29,5 @@ public class ActionLog extends AuditableDomain {
   private Integer statusCode;
   private String errorMessage;
   private String requestParam;
-  private Instant deleteAt;
+  private Instant deletedAt;
 }

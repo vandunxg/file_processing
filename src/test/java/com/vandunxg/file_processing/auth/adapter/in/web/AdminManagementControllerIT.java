@@ -14,12 +14,14 @@ import java.util.UUID;
 
 import com.vandunxg.common.utils.HashUtils;
 import com.vandunxg.common.utils.IdUtils;
+import com.vandunxg.file_processing.auth.application.port.out.ActionLogPort;
 import com.vandunxg.file_processing.auth.application.port.out.AuditLogPort;
 import com.vandunxg.file_processing.auth.application.port.out.JwtIssuerPort;
 import com.vandunxg.file_processing.auth.application.port.out.RoleRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.SessionRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRepositoryPort;
 import com.vandunxg.file_processing.auth.application.port.out.UserRoleRepositoryPort;
+import com.vandunxg.file_processing.auth.domain.model.ActionLog;
 import com.vandunxg.file_processing.auth.domain.model.AuditLog;
 import com.vandunxg.file_processing.auth.domain.model.AuditLogDomain;
 import com.vandunxg.file_processing.auth.domain.model.OperationType;
@@ -47,6 +49,7 @@ class AdminManagementControllerIT extends AuthIntegrationTestBase {
   @Autowired private SessionRepositoryPort sessionRepositoryPort;
   @Autowired private JwtIssuerPort jwtIssuerPort;
   @Autowired private AuditLogPort auditLogPort;
+  @Autowired private ActionLogPort actionLogPort;
 
   @Test
   void createUserRequiresTheUserCreatePermission() throws Exception {
@@ -157,6 +160,48 @@ class AdminManagementControllerIT extends AuthIntegrationTestBase {
         .andExpect(jsonPath("$.page.pageSize").value(1))
         .andExpect(jsonPath("$.page.total").value(1))
         .andExpect(jsonPath("$.data[0].operation").value("LOGIN_FAILED"));
+  }
+
+  @Test
+  void listActionLogsReturnsFilteredResultsWithRawRequestAndErrorData() throws Exception {
+    Instant startTime = Instant.parse("2099-01-01T00:00:00Z");
+    ActionLog actionLog =
+        ActionLog.builder()
+            .id(IdUtils.nextId())
+            .userId(UUID.randomUUID())
+            .username("action-log-user")
+            .startTime(startTime)
+            .endTime(startTime.plusMillis(25))
+            .duration(25L)
+            .path("/api/v1/jobs")
+            .apiDoc("Read processing job")
+            .requestMethod("GET")
+            .ipAddress("203.0.113.10")
+            .userAgent("JUnit")
+            .requestData("{\"externalId\":\"customer-1\"}")
+            .statusCode(500)
+            .errorMessage("Database batch failed")
+            .requestParam("{\"include\":[\"details\"]}")
+            .build();
+    actionLogPort.record(actionLog);
+
+    mockMvc
+        .perform(
+            get("/api/v1/admin/action-logs")
+                .header(
+                    "Authorization", "Bearer " + accessToken("ADMIN", List.of("action_log:read")))
+                .queryParam("username", "log-user")
+                .queryParam("apiDoc", "processing")
+                .queryParam("errorMessage", "batch failed")
+                .queryParam("requestMethod", "GET")
+                .queryParam("startTimeFrom", "2098-12-31T00:00:00Z")
+                .queryParam("startTimeTo", "2099-01-02T00:00:00Z"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.page.total").value(1))
+        .andExpect(jsonPath("$.data[0].id").value(actionLog.getId().toString()))
+        .andExpect(jsonPath("$.data[0].requestData").value(actionLog.getRequestData()))
+        .andExpect(jsonPath("$.data[0].requestParam").value(actionLog.getRequestParam()))
+        .andExpect(jsonPath("$.data[0].errorMessage").value(actionLog.getErrorMessage()));
   }
 
   private String accessToken(String roleCode, List<String> permissions) {

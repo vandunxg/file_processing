@@ -1,0 +1,2 @@
+ALTER TABLE action_logs
+  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
