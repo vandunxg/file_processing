@@ -231,7 +231,7 @@ public final class Role extends AuditableDomain {
   private final UUID id;
   private String name;
   private RoleStatus status;
-  private Instant deleteAt;
+  private Instant deletedAt;
 
   private Role(UUID id, String name) {
     this.id = Objects.requireNonNull(id);
@@ -251,13 +251,13 @@ public final class Role extends AuditableDomain {
     if (status == RoleStatus.ACTIVE) {
       throw new RoleRuleViolation(RoleRule.ROLE_MUST_BE_INACTIVE);
     }
-    if (deleteAt == null) {
-      deleteAt = Objects.requireNonNull(now);
+    if (deletedAt == null) {
+      deletedAt = Objects.requireNonNull(now);
     }
   }
 
   public boolean isDeleted() {
-    return deleteAt != null;
+    return deletedAt != null;
   }
 }
 ```
@@ -593,11 +593,11 @@ Persistence adapter chuyển đổi giữa domain model và database model.
 - Mọi JPA entity tách riêng khỏi domain model.
 - Mọi JPA entity extends `AuditableEntity` khi common base phù hợp.
 - Mọi JPA entity **bắt buộc** kế thừa hoặc khai báo trạng thái soft delete
-  bằng `Instant deleteAt`, map tới cột SQL `delete_at`.
-- Nếu `AuditableEntity` đã khai báo `deleteAt`, không được khai báo lại field
+  bằng `Instant deletedAt`, map tới cột SQL `deleted_at`.
+- Nếu `AuditableEntity` đã khai báo `deletedAt`, không được khai báo lại field
   này trong entity con.
-- Tên Java chuẩn là `deleteAt`; tên cột SQL là `delete_at`.
-- Không dùng `deleted`, `isDeleted`, `deletedAt` hoặc boolean deletion column.
+- Tên Java chuẩn là `deletedAt`; tên cột SQL là `deleted_at`.
+- Không dùng `deleted`, `isDeleted`, `deleteAt` hoặc boolean deletion column.
 - Tên bảng và cột dùng `snake_case`.
 - Dùng `@Version` cho aggregate có thể bị concurrent update.
 - Database constraint là boundary cuối cùng bảo vệ tính đúng. Dùng `NOT NULL`,
@@ -607,17 +607,17 @@ Persistence adapter chuyển đổi giữa domain model và database model.
 
 Mọi thao tác delete thông thường của application đều là soft delete.
 
-- Gán `deleteAt` bằng `Instant` hiện tại từ `Clock` đã inject.
+- Gán `deletedAt` bằng `Instant` hiện tại từ `Clock` đã inject.
 - Delete lại object đã bị delete thông thường phải idempotent.
 - Mọi business read và existence check **phải** có
-  `delete_at IS NULL`.
+  `deleted_at IS NULL`.
 - Mọi uniqueness rule chỉ áp dụng cho dữ liệu đang sống **phải** dùng partial
   unique index.
 - Repository thông thường **không được** expose `delete`, `deleteById` hoặc bulk
   hard delete cho application service.
 - Physical delete chỉ được thực hiện trong retention/maintenance job rõ ràng sau
   khi hết retention period.
-- Khi hỗ trợ restore, gán `deleteAt` về `null` và kiểm tra lại uniqueness cùng
+- Khi hỗ trợ restore, gán `deletedAt` về `null` và kiểm tra lại uniqueness cùng
   business invariant.
 
 Ví dụ migration:
@@ -632,14 +632,14 @@ CREATE TABLE roles
   version          BIGINT       NOT NULL DEFAULT 0,
   created_at       TIMESTAMPTZ  NOT NULL,
   last_modified_at TIMESTAMPTZ  NOT NULL,
-  delete_at        TIMESTAMPTZ NULL
+  deleted_at       TIMESTAMPTZ NULL
 );
 
 CREATE UNIQUE INDEX roles_active_code_uidx
-  ON roles (code) WHERE delete_at IS NULL;
+  ON roles (code) WHERE deleted_at IS NULL;
 
-CREATE INDEX roles_delete_at_idx
-  ON roles (delete_at) WHERE delete_at IS NOT NULL;
+CREATE INDEX roles_deleted_at_idx
+  ON roles (deleted_at) WHERE deleted_at IS NOT NULL;
 ```
 
 ### 11.3 Flyway
@@ -931,7 +931,7 @@ Reject hoặc sửa mọi change có các pattern sau nếu chưa có ngoại l�
 20. Sửa Flyway migration đã apply.
 21. `ddl-auto` đặt thành `create`, `update`, `create-drop` ngoài local experiment
     có thể xóa bỏ.
-22. JPA entity không có `deleteAt` và `delete_at`.
+22. JPA entity không có `deletedAt` và `deleted_at`.
 23. Business read không loại row soft-deleted.
 24. Application service gọi repository hard-delete method.
 25. Dùng `EAGER` để che N+1 hoặc session-boundary problem.
@@ -950,8 +950,8 @@ Reject hoặc sửa mọi change có các pattern sau nếu chưa có ngoại l�
 - [ ] Change dùng thiết kế nhỏ nhất nhưng vẫn bảo vệ boundary có thật.
 - [ ] Domain code không phụ thuộc Spring, JPA, Jackson, servlet hoặc HTTP.
 - [ ] Interface mới đại diện cho inbound/outbound boundary có thật.
-- [ ] Mọi entity mới kế thừa hoặc khai báo `deleteAt` map tới `delete_at`.
-- [ ] Business read dùng `delete_at IS NULL`, trừ màn hình thùng rác rõ ràng.
+- [ ] Mọi entity mới kế thừa hoặc khai báo `deletedAt` map tới `deleted_at`.
+- [ ] Business read dùng `deleted_at IS NULL`, trừ màn hình thùng rác rõ ràng.
 - [ ] Uniqueness của live data dùng partial unique index phù hợp.
 - [ ] Schema change dùng Flyway migration mới, append-only.
 - [ ] Transaction ngắn và nằm trên application service.

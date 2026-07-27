@@ -229,7 +229,7 @@ public final class Role extends AuditableDomain {
   private final UUID id;
   private String name;
   private RoleStatus status;
-  private Instant deleteAt;
+  private Instant deletedAt;
 
   private Role(UUID id, String name) {
     this.id = Objects.requireNonNull(id);
@@ -249,13 +249,13 @@ public final class Role extends AuditableDomain {
     if (status == RoleStatus.ACTIVE) {
       throw new RoleRuleViolation(RoleRule.ROLE_MUST_BE_INACTIVE);
     }
-    if (deleteAt == null) {
-      deleteAt = Objects.requireNonNull(now);
+    if (deletedAt == null) {
+      deletedAt = Objects.requireNonNull(now);
     }
   }
 
   public boolean isDeleted() {
-    return deleteAt != null;
+    return deletedAt != null;
   }
 }
 ```
@@ -593,11 +593,11 @@ Persistence adapters translate between the domain and database models.
 - Every JPA entity is separate from the domain model.
 - Every JPA entity extends `AuditableEntity` when the common base applies.
 - Every JPA entity **MUST** inherit or declare soft-delete state as
-  `Instant deleteAt`, mapped to the SQL column `delete_at`.
-- If `AuditableEntity` already declares `deleteAt`, do not redeclare it in the
+  `Instant deletedAt`, mapped to the SQL column `deleted_at`.
+- If `AuditableEntity` already declares `deletedAt`, do not redeclare it in the
   child entity.
-- The standard Java field name is `deleteAt`; the SQL column is `delete_at`.
-- Do not use `deleted`, `isDeleted`, `deletedAt`, or a boolean deletion column.
+- The standard Java field name is `deletedAt`; the SQL column is `deleted_at`.
+- Do not use `deleted`, `isDeleted`, `deleteAt`, or a boolean deletion column.
 - Table and column names use `snake_case`.
 - Use `@Version` for aggregates that can be concurrently updated.
 - Database constraints are the final correctness boundary. Use `NOT NULL`,
@@ -607,17 +607,17 @@ Persistence adapters translate between the domain and database models.
 
 All normal application deletes are soft deletes.
 
-- Set `deleteAt` to the injected current `Instant`.
+- Set `deletedAt` to the injected current `Instant`.
 - Repeating delete on an already deleted object should normally be idempotent.
 - Every normal business read and existence check **MUST** include
-  `delete_at IS NULL`.
+  `deleted_at IS NULL`.
 - Every uniqueness rule that applies only to live data **MUST** use a partial
   unique index.
 - Normal repositories **MUST NOT** expose `delete`, `deleteById`, or bulk hard
   delete operations to application services.
 - Physical deletion is allowed only in an explicit retention or maintenance
   job after the required retention period.
-- Restore behavior, when supported, sets `deleteAt` to `null` and revalidates
+- Restore behavior, when supported, sets `deletedAt` to `null` and revalidates
   uniqueness and business invariants.
 
 Example migration:
@@ -632,14 +632,14 @@ CREATE TABLE roles
   version          BIGINT       NOT NULL DEFAULT 0,
   created_at       TIMESTAMPTZ  NOT NULL,
   last_modified_at TIMESTAMPTZ  NOT NULL,
-  delete_at        TIMESTAMPTZ NULL
+  deleted_at       TIMESTAMPTZ NULL
 );
 
 CREATE UNIQUE INDEX roles_active_code_uidx
-  ON roles (code) WHERE delete_at IS NULL;
+  ON roles (code) WHERE deleted_at IS NULL;
 
-CREATE INDEX roles_delete_at_idx
-  ON roles (delete_at) WHERE delete_at IS NOT NULL;
+CREATE INDEX roles_deleted_at_idx
+  ON roles (deleted_at) WHERE deleted_at IS NOT NULL;
 ```
 
 ### 11.3 Flyway
@@ -941,7 +941,7 @@ is documented:
 20. Editing an applied Flyway migration.
 21. `ddl-auto` set to `create`, `update`, or `create-drop` outside disposable
     local experiments.
-22. A JPA entity without `deleteAt` and `delete_at`.
+22. A JPA entity without `deletedAt` and `deleted_at`.
 23. Normal application reads that do not exclude soft-deleted rows.
 24. Calling repository hard-delete methods from an application service.
 25. `EAGER` associations used to hide an N+1 or session-boundary problem.
@@ -960,8 +960,8 @@ is documented:
 - [ ] The change uses the smallest design that preserves real boundaries.
 - [ ] Domain code has no Spring, JPA, Jackson, servlet, or HTTP dependency.
 - [ ] New interfaces represent real inbound or outbound boundaries.
-- [ ] Every new entity inherits or declares `deleteAt` mapped to `delete_at`.
-- [ ] Business reads use `delete_at IS NULL` unless explicitly reading the trash.
+- [ ] Every new entity inherits or declares `deletedAt` mapped to `deleted_at`.
+- [ ] Business reads use `deleted_at IS NULL` unless explicitly reading the trash.
 - [ ] Live-data uniqueness uses an appropriate partial unique index.
 - [ ] Schema changes use a new append-only Flyway migration.
 - [ ] Transaction boundaries are short and on application services.
