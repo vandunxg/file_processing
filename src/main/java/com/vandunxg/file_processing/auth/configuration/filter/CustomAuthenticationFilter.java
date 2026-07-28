@@ -1,5 +1,10 @@
 package com.vandunxg.file_processing.auth.configuration.filter;
 
+import java.io.IOException;
+import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
+
 import com.vandunxg.common.models.UserAuthentication;
 import com.vandunxg.common.web.support.CustomAuthenticationEntryPoint;
 import com.vandunxg.file_processing.auth.application.port.in.ResolveRequestAuthenticationUseCase;
@@ -20,18 +25,13 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import java.io.IOException;
-import java.util.List;
-import java.util.Objects;
-import java.util.UUID;
-
 @NullMarked
 @Component
 @RequiredArgsConstructor
 public class CustomAuthenticationFilter extends OncePerRequestFilter {
 
   static final String AUTHENTICATED_USERNAME_ATTRIBUTE =
-    CustomAuthenticationFilter.class.getName() + ".username";
+      CustomAuthenticationFilter.class.getName() + ".username";
   private static final String SESSION_ID_CLAIM = "sid";
 
   private final ResolveRequestAuthenticationUseCase resolveRequestAuthenticationUseCase;
@@ -44,11 +44,11 @@ public class CustomAuthenticationFilter extends OncePerRequestFilter {
 
   @Override
   protected void doFilterInternal(
-    HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-    throws ServletException, IOException {
+      HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+      throws ServletException, IOException {
 
     UserAuthentication authentication =
-      (UserAuthentication) SecurityContextHolder.getContext().getAuthentication();
+        (UserAuthentication) SecurityContextHolder.getContext().getAuthentication();
     RequestAuthenticationResult result;
     try {
       result = resolveRequestAuthenticationUseCase.resolve(authentication.getUserId());
@@ -58,23 +58,24 @@ public class CustomAuthenticationFilter extends OncePerRequestFilter {
       }
       SecurityContextHolder.clearContext();
       customAuthenticationEntryPoint.commence(
-        request,
-        response,
-        new AuthenticationCredentialsNotFoundException("Invalid credentials", exception));
+          request,
+          response,
+          new AuthenticationCredentialsNotFoundException("Invalid credentials", exception));
       return;
     }
     List<SimpleGrantedAuthority> authorities =
-      result.permissions().stream().map(SimpleGrantedAuthority::new).toList();
+        result.permissions().stream().map(SimpleGrantedAuthority::new).toList();
     Jwt token = (Jwt) authentication.getPrincipal();
-    UUID sessionId = UUID.fromString(Objects.requireNonNull(token.getClaimAsString(SESSION_ID_CLAIM)));
+    UUID sessionId =
+        UUID.fromString(Objects.requireNonNull(token.getClaimAsString(SESSION_ID_CLAIM)));
     AuthenticatedUser principal =
-      new AuthenticatedUser(result.userId(), result.username(), sessionId, authorities);
+        new AuthenticatedUser(result.userId(), result.username(), sessionId, authorities);
 
     request.setAttribute(AUTHENTICATED_USERNAME_ATTRIBUTE, result.username());
     SecurityContextHolder.getContext()
-      .setAuthentication(
-        new UserAuthentication(
-          principal, token, authorities, result.userId(), token.getTokenValue()));
+        .setAuthentication(
+            new UserAuthentication(
+                principal, token, authorities, result.userId(), token.getTokenValue()));
     filterChain.doFilter(request, response);
   }
 }

@@ -1,21 +1,21 @@
 package com.vandunxg.file_processing.auth.configuration.security;
 
-import org.jspecify.annotations.NullMarked;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.userdetails.UserDetails;
-
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
+import org.jspecify.annotations.NullMarked;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+
 @NullMarked
 public record AuthenticatedUser(
-  UUID userId,
-  String username,
-  UUID sessionId,
-  Collection<? extends GrantedAuthority> authorities)
-  implements UserDetails {
+    UUID userId,
+    String username,
+    UUID sessionId,
+    Collection<? extends GrantedAuthority> authorities)
+    implements UserDetails {
 
   public AuthenticatedUser {
     Objects.requireNonNull(userId, "userId");
