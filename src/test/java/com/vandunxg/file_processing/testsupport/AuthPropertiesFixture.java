@@ -45,12 +45,14 @@ public final class AuthPropertiesFixture {
         new AuthProperties.Amqp(
             "test.auth.events",
             new AuthProperties.Amqp.RoutingKey(
+                "test.action-log",
                 "test.audit-log",
                 "test.verification-email",
                 "test.session.persist",
                 "test.session.update",
                 "test.session.revoke"),
             new AuthProperties.Amqp.Queue(
+                "test.action-log.queue",
                 "test.audit-log.queue",
                 "test.verification-email.queue",
                 "test.session-persist.queue",

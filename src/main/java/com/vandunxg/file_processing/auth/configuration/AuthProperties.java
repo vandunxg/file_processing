@@ -177,6 +177,7 @@ public record AuthProperties(
   public record Amqp(String exchange, RoutingKey routingKey, Queue queue) {
 
     public record RoutingKey(
+        String actionLog,
         String auditLog,
         String verificationEmail,
         String sessionPersist,
@@ -184,6 +185,7 @@ public record AuthProperties(
         String sessionRevoke) {}
 
     public record Queue(
+        String actionLog,
         String auditLog,
         String verificationEmail,
         String sessionPersist,

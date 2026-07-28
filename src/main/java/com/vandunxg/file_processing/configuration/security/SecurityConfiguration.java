@@ -1,9 +1,15 @@
 package com.vandunxg.file_processing.configuration.security;
 
 import com.vandunxg.common.web.config.SpringSecurityAuditorAware;
+import com.vandunxg.common.web.security.ForbiddenTokenFilter;
+import com.vandunxg.common.web.security.NoHandlerFoundFilter;
 import com.vandunxg.common.web.security.RegexPermissionEvaluator;
+import com.vandunxg.common.web.support.CustomAuthenticationEntryPoint;
+import com.vandunxg.file_processing.auth.configuration.filter.ActionLoggingFilter;
+import com.vandunxg.file_processing.auth.configuration.filter.CustomAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.NullMarked;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
@@ -22,8 +28,10 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationProvider;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 
+@NullMarked
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
@@ -66,10 +74,17 @@ public class SecurityConfiguration {
     "/webjars/**"
   };
 
+  private static final String ALL_MANAGER_PERMISSION = "all:manage";
+
   private final RegexPermissionEvaluator customPermissionEvaluator;
   private final Converter<org.springframework.security.oauth2.jwt.Jwt, AbstractAuthenticationToken>
       jwtAuthenticationConverter;
   private final JwtDecoder jwtDecoder;
+  private final ActionLoggingFilter actionLoggingFilter;
+  private final CustomAuthenticationFilter customAuthenticationFilter;
+  private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
+  private final NoHandlerFoundFilter noHandlerFoundFilter;
+  private final ForbiddenTokenFilter forbiddenTokenFilter;
 
   @Bean
   public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -93,7 +108,7 @@ public class SecurityConfiguration {
                     .requestMatchers(ACTUATOR_PROBE_URLS)
                     .permitAll()
                     .requestMatchers("/actuator/prometheus")
-                    .hasAuthority("all:manage")
+                    .hasAuthority(ALL_MANAGER_PERMISSION)
                     .requestMatchers("/actuator/**")
                     .denyAll()
                     .requestMatchers(AUTHENTICATED_URLS)
@@ -101,10 +116,14 @@ public class SecurityConfiguration {
         .oauth2ResourceServer(
             oauth2 ->
                 oauth2.authenticationManagerResolver(
-                    request -> jwtAuthenticationProvider::authenticate));
-    //            .exceptionHandling(
-    //                exHandling ->
-    // exHandling.authenticationEntryPoint(this.customAuthenticationEntryPoint));
+                    request -> jwtAuthenticationProvider::authenticate))
+        .exceptionHandling(
+            exHandling -> exHandling.authenticationEntryPoint(this.customAuthenticationEntryPoint));
+
+    http.addFilterAfter(noHandlerFoundFilter, BearerTokenAuthenticationFilter.class);
+    http.addFilterAfter(forbiddenTokenFilter, BearerTokenAuthenticationFilter.class);
+    http.addFilterAfter(customAuthenticationFilter, BearerTokenAuthenticationFilter.class);
+    http.addFilterAfter(actionLoggingFilter, CustomAuthenticationFilter.class);
 
     return http.build();
   }
