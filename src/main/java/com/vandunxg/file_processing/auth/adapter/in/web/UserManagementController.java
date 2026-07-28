@@ -1,7 +1,6 @@
 package com.vandunxg.file_processing.auth.adapter.in.web;
 
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -14,6 +13,7 @@ import com.vandunxg.file_processing.auth.adapter.in.web.mapper.UserWebMapper;
 import com.vandunxg.file_processing.auth.adapter.out.persistence.entity.UserEntity;
 import com.vandunxg.file_processing.auth.application.query.UserSearchQuery;
 import com.vandunxg.file_processing.auth.application.service.AdminUserService;
+import com.vandunxg.file_processing.auth.configuration.security.AuthenticatedUser;
 import com.vandunxg.file_processing.auth.domain.model.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -27,7 +27,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -48,11 +47,12 @@ public class UserManagementController {
   @ResponseStatus(HttpStatus.CREATED)
   @PreAuthorize("hasPermission(null, 'user:create')")
   public Response<UserResponse> create(
-      @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody CreateUserRequest request) {
+      @AuthenticationPrincipal AuthenticatedUser principal,
+      @Valid @RequestBody CreateUserRequest request) {
     return Response.of(
         userWebMapper.toResponse(
             adminUserService.create(
-                subject(jwt),
+                principal.userId(),
                 request.username(),
                 request.email(),
                 request.displayName(),
@@ -84,13 +84,17 @@ public class UserManagementController {
   @PostMapping("/{userId}/update")
   @PreAuthorize("hasPermission(null, 'user:update')")
   public Response<UserResponse> update(
-      @AuthenticationPrincipal Jwt jwt,
+      @AuthenticationPrincipal AuthenticatedUser principal,
       @PathVariable UUID userId,
       @Valid @RequestBody UpdateUserRequest request) {
     return Response.of(
         userWebMapper.toResponse(
             adminUserService.update(
-                subject(jwt), userId, request.email(), request.displayName(), request.roleIds())));
+                principal.userId(),
+                userId,
+                request.email(),
+                request.displayName(),
+                request.roleIds())));
   }
 
   @Operation(
@@ -99,24 +103,27 @@ public class UserManagementController {
   @PostMapping("/{userId}/disable")
   @PreAuthorize("hasPermission(null, 'user:update')")
   public Response<UserResponse> disable(
-      @AuthenticationPrincipal Jwt jwt, @PathVariable UUID userId) {
-    return Response.of(userWebMapper.toResponse(adminUserService.disable(subject(jwt), userId)));
+      @AuthenticationPrincipal AuthenticatedUser principal, @PathVariable UUID userId) {
+    return Response.of(
+        userWebMapper.toResponse(adminUserService.disable(principal.userId(), userId)));
   }
 
   @Operation(summary = "Enable a disabled user", description = "Requires `user:update`.")
   @PostMapping("/{userId}/enable")
   @PreAuthorize("hasPermission(null, 'user:update')")
   public Response<UserResponse> enable(
-      @AuthenticationPrincipal Jwt jwt, @PathVariable UUID userId) {
-    return Response.of(userWebMapper.toResponse(adminUserService.enable(subject(jwt), userId)));
+      @AuthenticationPrincipal AuthenticatedUser principal, @PathVariable UUID userId) {
+    return Response.of(
+        userWebMapper.toResponse(adminUserService.enable(principal.userId(), userId)));
   }
 
   @Operation(summary = "Clear a user's failed-login lock", description = "Requires `user:update`.")
   @PostMapping("/{userId}/unlock")
   @PreAuthorize("hasPermission(null, 'user:update')")
   public Response<UserResponse> unlock(
-      @AuthenticationPrincipal Jwt jwt, @PathVariable UUID userId) {
-    return Response.of(userWebMapper.toResponse(adminUserService.unlock(subject(jwt), userId)));
+      @AuthenticationPrincipal AuthenticatedUser principal, @PathVariable UUID userId) {
+    return Response.of(
+        userWebMapper.toResponse(adminUserService.unlock(principal.userId(), userId)));
   }
 
   @Operation(
@@ -126,14 +133,11 @@ public class UserManagementController {
   @ResponseStatus(HttpStatus.NO_CONTENT)
   @PreAuthorize("hasPermission(null, 'user:update')")
   public void resetPassword(
-      @AuthenticationPrincipal Jwt jwt,
+      @AuthenticationPrincipal AuthenticatedUser principal,
       @PathVariable UUID userId,
       @Valid @RequestBody TemporaryPasswordRequest request) {
-    adminUserService.resetTemporaryPassword(subject(jwt), userId, request.temporaryPassword());
-  }
-
-  private static UUID subject(Jwt jwt) {
-    return UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
+    adminUserService.resetTemporaryPassword(
+        principal.userId(), userId, request.temporaryPassword());
   }
 
   public record CreateUserRequest(

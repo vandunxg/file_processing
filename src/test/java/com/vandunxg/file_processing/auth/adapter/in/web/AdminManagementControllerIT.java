@@ -1,5 +1,6 @@
 package com.vandunxg.file_processing.auth.adapter.in.web;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -34,6 +35,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
 
@@ -50,6 +52,7 @@ class AdminManagementControllerIT extends AuthIntegrationTestBase {
   @Autowired private JwtIssuerPort jwtIssuerPort;
   @Autowired private AuditLogPort auditLogPort;
   @Autowired private ActionLogPort actionLogPort;
+  @Autowired private JdbcTemplate jdbcTemplate;
 
   @Test
   void createUserRequiresTheUserCreatePermission() throws Exception {
@@ -80,6 +83,43 @@ class AdminManagementControllerIT extends AuthIntegrationTestBase {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(payload))
         .andExpect(status().isCreated());
+  }
+
+  @Test
+  void createUserUsesTheAuthenticatedUsernameForAuditColumns() throws Exception {
+    Role operator = roleRepositoryPort.findByCode("OPERATOR").orElseThrow();
+    String managedUsername = "managed-" + System.nanoTime();
+    AccessToken actor = authenticatedUser("ADMIN", List.of("user:create"));
+    String payload =
+        objectMapper.writeValueAsString(
+            new UserManagementController.CreateUserRequest(
+                managedUsername,
+                managedUsername + "@example.com",
+                "Managed User",
+                "StrongPassw0rd!",
+                Set.of(operator.getId()),
+                true));
+
+    mockMvc
+        .perform(
+            post("/api/v1/users")
+                .header("Authorization", "Bearer " + actor.value())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(payload))
+        .andExpect(status().isCreated());
+
+    assertThat(
+            jdbcTemplate.queryForObject(
+                "select created_by from auth_users where username = ?",
+                String.class,
+                managedUsername))
+        .isEqualTo(actor.username());
+    assertThat(
+            jdbcTemplate.queryForObject(
+                "select last_modified_by from auth_users where username = ?",
+                String.class,
+                managedUsername))
+        .isEqualTo(actor.username());
   }
 
   @Test
@@ -128,7 +168,7 @@ class AdminManagementControllerIT extends AuthIntegrationTestBase {
   @Test
   void listAuditLogsReturnsPagedSearchResults() throws Exception {
     Instant newer = Instant.parse("2099-01-01T00:00:00Z");
-    auditLogPort.record(
+    AuditLog successfulLogin =
         AuditLog.builder()
             .id(IdUtils.nextId())
             .domain(AuditLogDomain.AUTH)
@@ -136,8 +176,8 @@ class AdminManagementControllerIT extends AuthIntegrationTestBase {
             .operation(OperationType.LOGIN_SUCCEEDED)
             .changedBy(UUID.randomUUID())
             .changedAt(newer.minusSeconds(1))
-            .build());
-    auditLogPort.record(
+            .build();
+    AuditLog failedLogin =
         AuditLog.builder()
             .id(IdUtils.nextId())
             .domain(AuditLogDomain.AUTH)
@@ -145,7 +185,16 @@ class AdminManagementControllerIT extends AuthIntegrationTestBase {
             .operation(OperationType.LOGIN_FAILED)
             .changedBy(UUID.randomUUID())
             .changedAt(newer)
-            .build());
+            .build();
+    auditLogPort.record(successfulLogin);
+    auditLogPort.record(failedLogin);
+
+    assertThat(
+            jdbcTemplate.queryForObject(
+                "select created_by from audit_logs where id = ?",
+                String.class,
+                failedLogin.getId()))
+        .isEqualTo("anonymous");
 
     mockMvc
         .perform(
@@ -185,6 +234,11 @@ class AdminManagementControllerIT extends AuthIntegrationTestBase {
             .build();
     actionLogPort.record(actionLog);
 
+    assertThat(
+            jdbcTemplate.queryForObject(
+                "select created_by from action_logs where id = ?", String.class, actionLog.getId()))
+        .isEqualTo("anonymous");
+
     mockMvc
         .perform(
             get("/api/v1/admin/action-logs")
@@ -205,6 +259,10 @@ class AdminManagementControllerIT extends AuthIntegrationTestBase {
   }
 
   private String accessToken(String roleCode, List<String> permissions) {
+    return authenticatedUser(roleCode, permissions).value();
+  }
+
+  private AccessToken authenticatedUser(String roleCode, List<String> permissions) {
     Role role = roleRepositoryPort.findByCode(roleCode).orElseThrow();
     Instant now = Instant.now();
     User user =
@@ -230,14 +288,18 @@ class AdminManagementControllerIT extends AuthIntegrationTestBase {
     sessionRepositoryPort.save(
         session,
         HashUtils.sha256(("refresh-" + UUID.randomUUID()).getBytes(StandardCharsets.UTF_8)));
-    return jwtIssuerPort
-        .issue(
-            saved.getId(),
-            session.getId(),
-            saved.getCredentialVersion(),
-            List.of(roleCode),
-            permissions,
-            now)
-        .token();
+    return new AccessToken(
+        jwtIssuerPort
+            .issue(
+                saved.getId(),
+                session.getId(),
+                saved.getCredentialVersion(),
+                List.of(roleCode),
+                permissions,
+                now)
+            .token(),
+        saved.getUsername());
   }
+
+  private record AccessToken(String value, String username) {}
 }

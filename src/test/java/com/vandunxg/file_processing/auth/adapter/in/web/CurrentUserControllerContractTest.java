@@ -2,9 +2,9 @@ package com.vandunxg.file_processing.auth.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.vandunxg.file_processing.auth.configuration.security.AuthenticatedUser;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 class CurrentUserControllerContractTest {
@@ -22,7 +22,9 @@ class CurrentUserControllerContractTest {
   @Test
   void deniesCallersWithoutTheUserSelfReadPermission() throws Exception {
     PreAuthorize authorization =
-        currentUserControllerClass().getMethod("me", Jwt.class).getAnnotation(PreAuthorize.class);
+        currentUserControllerClass()
+            .getMethod("me", AuthenticatedUser.class)
+            .getAnnotation(PreAuthorize.class);
 
     assertThat(authorization).isNotNull();
     assertThat(authorization.value()).isEqualTo("hasPermission(null, 'user:self_read')");

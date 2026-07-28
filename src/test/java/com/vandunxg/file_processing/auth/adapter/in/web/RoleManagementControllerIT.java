@@ -1,5 +1,6 @@
 package com.vandunxg.file_processing.auth.adapter.in.web;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -23,10 +24,12 @@ import com.vandunxg.file_processing.auth.domain.model.Session;
 import com.vandunxg.file_processing.auth.domain.model.User;
 import com.vandunxg.file_processing.testsupport.AuthIntegrationTestBase;
 import com.vandunxg.file_processing.testsupport.PostgresIntegrationTest;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +44,8 @@ class RoleManagementControllerIT extends AuthIntegrationTestBase {
   @Autowired private UserRoleRepositoryPort userRoleRepositoryPort;
   @Autowired private SessionRepositoryPort sessionRepositoryPort;
   @Autowired private JwtIssuerPort jwtIssuerPort;
+  @Autowired private EntityManager entityManager;
+  @Autowired private JdbcTemplate jdbcTemplate;
 
   @Test
   void listReturnsPagedRolesForACallerWithRoleReadPermission() throws Exception {
@@ -152,7 +157,62 @@ class RoleManagementControllerIT extends AuthIntegrationTestBase {
         .andExpect(jsonPath("$.data.name").value("Created Role"));
   }
 
+  @Test
+  void roleWritesUseTheAuthenticatedUsernameForAuditColumns() throws Exception {
+    String code = "AUDIT_" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+    AccessToken creator = authenticatedUser("ADMIN", List.of("role:create"));
+
+    mockMvc
+        .perform(
+            post("/api/v1/roles")
+                .header("Authorization", "Bearer " + creator.value())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "code": "%s",
+                      "name": "Created Role",
+                      "permissions": []
+                    }
+                    """
+                        .formatted(code)))
+        .andExpect(status().isCreated());
+
+    Role role = roleRepositoryPort.findByCode(code).orElseThrow();
+    AccessToken modifier = authenticatedUser("ADMIN", List.of("role:update"));
+    mockMvc
+        .perform(
+            post("/api/v1/roles/{roleId}/update", role.getId())
+                .header("Authorization", "Bearer " + modifier.value())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "code": "%s",
+                      "name": "Updated Role",
+                      "permissions": []
+                    }
+                    """
+                        .formatted(code)))
+        .andExpect(status().isOk());
+
+    entityManager.flush();
+
+    assertThat(
+            jdbcTemplate.queryForObject(
+                "select created_by from role where id = ?", String.class, role.getId()))
+        .isEqualTo(creator.username());
+    assertThat(
+            jdbcTemplate.queryForObject(
+                "select last_modified_by from role where id = ?", String.class, role.getId()))
+        .isEqualTo(modifier.username());
+  }
+
   private String accessToken(String roleCode, List<String> permissions) {
+    return authenticatedUser(roleCode, permissions).value();
+  }
+
+  private AccessToken authenticatedUser(String roleCode, List<String> permissions) {
     Role role = roleRepositoryPort.findByCode(roleCode).orElseThrow();
     Instant now = Instant.now();
     User user =
@@ -178,14 +238,18 @@ class RoleManagementControllerIT extends AuthIntegrationTestBase {
     sessionRepositoryPort.save(
         session,
         HashUtils.sha256(("refresh-" + UUID.randomUUID()).getBytes(StandardCharsets.UTF_8)));
-    return jwtIssuerPort
-        .issue(
-            saved.getId(),
-            session.getId(),
-            saved.getCredentialVersion(),
-            List.of(roleCode),
-            permissions,
-            now)
-        .token();
+    return new AccessToken(
+        jwtIssuerPort
+            .issue(
+                saved.getId(),
+                session.getId(),
+                saved.getCredentialVersion(),
+                List.of(roleCode),
+                permissions,
+                now)
+            .token(),
+        saved.getUsername());
   }
+
+  private record AccessToken(String value, String username) {}
 }

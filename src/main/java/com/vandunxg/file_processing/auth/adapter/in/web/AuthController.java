@@ -18,6 +18,7 @@ import com.vandunxg.file_processing.auth.application.command.RefreshTokenCommand
 import com.vandunxg.file_processing.auth.application.port.in.*;
 import com.vandunxg.file_processing.auth.application.port.out.RefreshTokenGeneratorPort;
 import com.vandunxg.file_processing.auth.configuration.AuthProperties;
+import com.vandunxg.file_processing.auth.configuration.security.AuthenticatedUser;
 import com.vandunxg.file_processing.auth.domain.exception.AuthDomainException;
 import com.vandunxg.file_processing.auth.domain.exception.AuthErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
@@ -125,9 +126,9 @@ public class AuthController {
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void changePassword(
       @Valid @RequestBody ChangePasswordRequest request,
-      @AuthenticationPrincipal Jwt jwt,
+      @AuthenticationPrincipal AuthenticatedUser principal,
       HttpServletRequest http) {
-    changePasswordUseCase.change(webMapper.toCommand(request, subjectAsUuid(jwt), clientIp(http)));
+    changePasswordUseCase.change(webMapper.toCommand(request, principal.userId(), clientIp(http)));
   }
 
   @Operation(
@@ -216,12 +217,16 @@ public class AuthController {
   @PostMapping("/logout")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void logout(
-      @AuthenticationPrincipal Jwt jwt, HttpServletRequest http, HttpServletResponse response) {
-    UUID userId = subjectAsUuid(jwt);
-    UUID sid = sidAsUuid(jwt);
-    log.info("[logout] userId={} sid={}", userId, sid);
+      @AuthenticationPrincipal AuthenticatedUser principal,
+      HttpServletRequest http,
+      HttpServletResponse response) {
+    log.info("[logout] userId={} sid={}", principal.userId(), principal.sessionId());
     logoutUseCase.logout(
-        LogoutCommand.builder().sessionId(sid).userId(userId).ipAddress(clientIp(http)).build());
+        LogoutCommand.builder()
+            .sessionId(principal.sessionId())
+            .userId(principal.userId())
+            .ipAddress(clientIp(http))
+            .build());
     clearAuthCookies(response);
   }
 
@@ -239,10 +244,6 @@ public class AuthController {
 
   private static UUID subjectAsUuid(Jwt jwt) {
     return UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
-  }
-
-  private static UUID sidAsUuid(Jwt jwt) {
-    return UUID.fromString(Objects.requireNonNull(jwt.getClaimAsString("sid")));
   }
 
   private void setAuthCookies(HttpServletResponse response, String refreshToken) {

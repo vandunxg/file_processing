@@ -14,6 +14,7 @@ import com.vandunxg.common.models.UserAuthentication;
 import com.vandunxg.common.web.support.CustomAuthenticationEntryPoint;
 import com.vandunxg.file_processing.auth.application.port.in.ResolveRequestAuthenticationUseCase;
 import com.vandunxg.file_processing.auth.application.result.RequestAuthenticationResult;
+import com.vandunxg.file_processing.auth.configuration.security.AuthenticatedUser;
 import com.vandunxg.file_processing.auth.domain.exception.AuthDomainException;
 import com.vandunxg.file_processing.auth.domain.exception.AuthErrorCode;
 import jakarta.servlet.FilterChain;
@@ -56,7 +57,8 @@ class CustomAuthenticationFilterTest {
   @Test
   void refreshesAuthoritiesFromTheApplicationUseCase() throws Exception {
     UUID userId = UUID.randomUUID();
-    Jwt jwt = jwt(userId);
+    UUID sessionId = UUID.randomUUID();
+    Jwt jwt = jwt(userId, sessionId);
     SecurityContextHolder.getContext()
         .setAuthentication(new UserAuthentication(jwt, List.of(), userId));
     when(resolveRequestAuthenticationUseCase.resolve(userId))
@@ -67,7 +69,12 @@ class CustomAuthenticationFilterTest {
 
     Authentication refreshed = SecurityContextHolder.getContext().getAuthentication();
     assertThat(refreshed).isInstanceOf(UserAuthentication.class);
-    assertThat(refreshed.getPrincipal()).isSameAs(jwt);
+    assertThat(refreshed.getPrincipal()).isInstanceOf(AuthenticatedUser.class);
+    AuthenticatedUser principal = (AuthenticatedUser) refreshed.getPrincipal();
+    assertThat(principal.userId()).isEqualTo(userId);
+    assertThat(principal.getUsername()).isEqualTo("operator01");
+    assertThat(principal.sessionId()).isEqualTo(sessionId);
+    assertThat(refreshed.getName()).isEqualTo("operator01");
     assertThat(request.getAttribute(CustomAuthenticationFilter.AUTHENTICATED_USERNAME_ATTRIBUTE))
         .isEqualTo("operator01");
     assertThat(refreshed.getAuthorities())
@@ -87,7 +94,7 @@ class CustomAuthenticationFilterTest {
   @Test
   void delegatesInvalidCredentialsToTheAuthenticationEntryPoint() throws Exception {
     UUID userId = UUID.randomUUID();
-    Jwt jwt = jwt(userId);
+    Jwt jwt = jwt(userId, UUID.randomUUID());
     SecurityContextHolder.getContext()
         .setAuthentication(new UserAuthentication(jwt, List.of(), userId));
     when(resolveRequestAuthenticationUseCase.resolve(userId))
@@ -102,11 +109,12 @@ class CustomAuthenticationFilterTest {
     verifyNoInteractions(filterChain);
   }
 
-  private static Jwt jwt(UUID userId) {
+  private static Jwt jwt(UUID userId, UUID sessionId) {
     Instant now = Instant.parse("2026-07-27T00:00:00Z");
     return Jwt.withTokenValue("test-token")
         .header("alg", "RS256")
         .subject(userId.toString())
+        .claim("sid", sessionId.toString())
         .issuedAt(now)
         .expiresAt(now.plusSeconds(60))
         .build();
