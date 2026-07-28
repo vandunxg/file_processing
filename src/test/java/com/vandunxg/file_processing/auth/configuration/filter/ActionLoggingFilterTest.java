@@ -70,7 +70,9 @@ class ActionLoggingFilterTest {
     assertThat(log.getRequestMethod()).isEqualTo("POST");
     assertThat(log.getIpAddress()).isEqualTo("10.0.0.1");
     assertThat(log.getStatusCode()).isEqualTo(500);
-    assertThat(log.getErrorMessage()).isEqualTo("RuntimeException");
+    assertThat(log.getErrorMessage())
+        .contains("java.lang.RuntimeException: boom")
+        .contains("ActionLoggingFilterTest");
     assertThat(log.getRequestData()).contains("******").doesNotContain("secret");
 
     verify(actionLogEventPublisherPort).publish(any(ActionLog.class));
