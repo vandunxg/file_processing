@@ -1,0 +1,7 @@
+package com.vandunxg.file_processing.fileimport.adapter.out.persistence.entity;
+
+import java.util.UUID;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface JpaFileImportRepository extends JpaRepository<ImportFileEntity, UUID> {}

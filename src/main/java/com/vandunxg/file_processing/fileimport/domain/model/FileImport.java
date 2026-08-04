@@ -5,12 +5,7 @@ import java.util.UUID;
 
 import com.vandunxg.common.models.domain.AuditableDomain;
 import com.vandunxg.common.utils.IdUtils;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import lombok.experimental.SuperBuilder;
 
 @Getter
@@ -18,8 +13,9 @@ import lombok.experimental.SuperBuilder;
 @NoArgsConstructor
 @AllArgsConstructor
 @Setter(AccessLevel.PRIVATE)
-@EqualsAndHashCode(callSuper = false, of = "id")
-public class ImportFile extends AuditableDomain {
+@ToString(callSuper = true)
+@EqualsAndHashCode(callSuper = true, of = "id")
+public class FileImport extends AuditableDomain {
 
   private UUID id;
   private UUID ownerId;
@@ -29,21 +25,27 @@ public class ImportFile extends AuditableDomain {
   private long sizeBytes;
   private String detectedContentType;
   private Instant retentionDeadline;
+  private String bucket;
+  private StorageProvider storageProvider;
   private Long version;
 
-  public static ImportFile register(
+  public static FileImport register(
       UUID ownerId,
       String originalFilename,
       String storageKey,
       String checksumSha256,
       long sizeBytes,
       String detectedContentType,
-      Instant retentionDeadline) {
+      Instant retentionDeadline,
+      String bucket,
+      StorageProvider storageProvider) {
     if (ownerId == null
         || isBlank(originalFilename)
         || isBlank(storageKey)
         || isBlank(detectedContentType)
-        || retentionDeadline == null) {
+        || isBlank(bucket)
+        || retentionDeadline == null
+        || storageProvider == null) {
       throw new IllegalArgumentException("Import file metadata is required");
     }
     if (checksumSha256 == null || !checksumSha256.matches("[0-9a-f]{64}")) {
@@ -52,7 +54,7 @@ public class ImportFile extends AuditableDomain {
     if (sizeBytes < 0) {
       throw new IllegalArgumentException("Import file size must be non-negative");
     }
-    return ImportFile.builder()
+    return FileImport.builder()
         .id(IdUtils.nextId())
         .ownerId(ownerId)
         .originalFilename(originalFilename.trim())
@@ -61,6 +63,8 @@ public class ImportFile extends AuditableDomain {
         .sizeBytes(sizeBytes)
         .detectedContentType(detectedContentType.trim())
         .retentionDeadline(retentionDeadline)
+        .bucket(bucket.trim())
+        .storageProvider(storageProvider)
         .build();
   }
 

@@ -4,20 +4,12 @@ import java.time.Instant;
 import java.util.UUID;
 
 import com.vandunxg.common.models.entities.AuditableEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import jakarta.persistence.Version;
-import lombok.AllArgsConstructor;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-import lombok.ToString;
+import com.vandunxg.file_processing.fileimport.domain.model.StorageProvider;
+import jakarta.persistence.*;
+import lombok.*;
 
 @Entity
-@Table(name = "import_files")
+@Table(name = "file_import")
 @Getter
 @Setter
 @ToString
@@ -50,6 +42,13 @@ public class ImportFileEntity extends AuditableEntity {
 
   @Column(name = "retention_deadline", nullable = false)
   private Instant retentionDeadline;
+
+  @Column(name = "bucket", nullable = false, length = 100)
+  private String bucket;
+
+  @Column(name = "storage_provider", nullable = false, length = 20)
+  @Enumerated(EnumType.STRING)
+  private StorageProvider storageProvider;
 
   @Version
   @Column(name = "version", nullable = false)

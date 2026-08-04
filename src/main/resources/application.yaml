@@ -302,3 +302,13 @@ app:
   pagination:
     default-page-size: ${DEFAULT_PAGE_SIZE:20}
     max-page-size: ${MAX_PAGE_SIZE:100}
+
+  file-import:
+    retention: ${FILE_IMPORT_RETENTION:PT720H}
+    storage:
+      r2:
+        endpoint: ${R2_ENDPOINT}
+        access-key-id: ${R2_ACCESS_KEY_ID}
+        secret-access-key: ${R2_SECRET_ACCESS_KEY}
+        bucket: ${R2_BUCKET:file-processing}
+        api-call-timeout: ${R2_API_CALL_TIMEOUT:PT30S}

@@ -24,22 +24,24 @@
 
 ## File Structure
 
-| File | Responsibility |
-|---|---|
-| `src/main/java/com/vandunxg/file_processing/fileimport/domain/model/ImportFile.java` | Pure domain aggregate for immutable registered upload metadata. |
-| `src/test/java/com/vandunxg/file_processing/fileimport/domain/model/ImportFileTest.java` | Unit tests for construction invariants. |
-| `src/main/java/com/vandunxg/file_processing/fileimport/adapter/out/persistence/entity/ImportFileEntity.java` | JPA mapping for `import_files`. |
-| `src/main/java/com/vandunxg/file_processing/fileimport/adapter/out/persistence/mapper/ImportFilePersistenceMapper.java` | MapStruct domain/entity conversion. |
-| `src/main/resources/db/migration/V202607280000__create_import_files.sql` | PostgreSQL table, checks, unique constraints, and indexes. |
-| `src/test/java/com/vandunxg/file_processing/auth/adapter/out/persistence/MigrationAndSeedIT.java` | Existing migration smoke test extended with `import_files` schema assertions. |
+| File                                                                                                                    | Responsibility                                                                |
+|-------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------|
+| `src/main/java/com/vandunxg/file_processing/fileimport/domain/model/ImportFile.java`                                    | Pure domain aggregate for immutable registered upload metadata.               |
+| `src/test/java/com/vandunxg/file_processing/fileimport/domain/model/ImportFileTest.java`                                | Unit tests for construction invariants.                                       |
+| `src/main/java/com/vandunxg/file_processing/fileimport/adapter/out/persistence/entity/ImportFileEntity.java`            | JPA mapping for `import_files`.                                               |
+| `src/main/java/com/vandunxg/file_processing/fileimport/adapter/out/persistence/mapper/ImportFilePersistenceMapper.java` | MapStruct domain/entity conversion.                                           |
+| `src/main/resources/db/migration/V202607280000__create_import_files.sql`                                                | PostgreSQL table, checks, unique constraints, and indexes.                    |
+| `src/test/java/com/vandunxg/file_processing/auth/adapter/out/persistence/MigrationAndSeedIT.java`                       | Existing migration smoke test extended with `import_files` schema assertions. |
 
 ### Task 1: Add The Pure `ImportFile` Domain Model
 
 **Files:**
+
 - Create: `src/main/java/com/vandunxg/file_processing/fileimport/domain/model/ImportFile.java`
 - Create: `src/test/java/com/vandunxg/file_processing/fileimport/domain/model/ImportFileTest.java`
 
 **Interfaces:**
+
 - Consumes: `com.vandunxg.common.models.domain.AuditableDomain`, `com.vandunxg.common.utils.IdUtils`.
 - Produces: `ImportFile.register(UUID ownerId, String originalFilename, String storageKey, String checksumSha256, long sizeBytes, String detectedContentType, Instant retentionDeadline): ImportFile`.
 
@@ -67,8 +69,8 @@
     void registerCreatesStoredFileMetadata() {
       UUID ownerId = UUID.randomUUID();
 
-      ImportFile file =
-          ImportFile.register(
+      FileImport file =
+          FileImport.register(
               ownerId,
               " customers.csv ",
               "imports/2026/07/file.csv",
@@ -91,7 +93,7 @@
     void registerRejectsInvalidChecksum() {
       assertThatThrownBy(
               () ->
-                  ImportFile.register(
+                  FileImport.register(
                       UUID.randomUUID(),
                       "customers.csv",
                       "imports/file.csv",
@@ -107,7 +109,7 @@
     void registerRejectsMissingCoreFields() {
       assertThatThrownBy(
               () ->
-                  ImportFile.register(
+                  FileImport.register(
                       UUID.randomUUID(),
                       " ",
                       "imports/file.csv",
@@ -119,7 +121,7 @@
 
       assertThatThrownBy(
               () ->
-                  ImportFile.register(
+                  FileImport.register(
                       UUID.randomUUID(),
                       "customers.csv",
                       " ",
@@ -134,7 +136,7 @@
     void registerRejectsNegativeSize() {
       assertThatThrownBy(
               () ->
-                  ImportFile.register(
+                  FileImport.register(
                       UUID.randomUUID(),
                       "customers.csv",
                       "imports/file.csv",
@@ -240,12 +242,14 @@
 ### Task 2: Add JPA Entity, Mapper, Migration, And Schema Checks
 
 **Files:**
+
 - Create: `src/main/java/com/vandunxg/file_processing/fileimport/adapter/out/persistence/entity/ImportFileEntity.java`
 - Create: `src/main/java/com/vandunxg/file_processing/fileimport/adapter/out/persistence/mapper/ImportFilePersistenceMapper.java`
 - Create: `src/main/resources/db/migration/V202607280000__create_import_files.sql`
 - Modify: `src/test/java/com/vandunxg/file_processing/auth/adapter/out/persistence/MigrationAndSeedIT.java`
 
 **Interfaces:**
+
 - Consumes: `ImportFile` from Task 1.
 - Produces: `ImportFileEntity` mapped to table `import_files`; `ImportFilePersistenceMapper extends EntityMapper<ImportFile, ImportFileEntity>`.
 
@@ -456,7 +460,7 @@
 
   import com.vandunxg.common.models.mapper.EntityMapper;
   import com.vandunxg.file_processing.fileimport.adapter.out.persistence.entity.ImportFileEntity;
-  import com.vandunxg.file_processing.fileimport.domain.model.ImportFile;
+  import com.vandunxg.file_processing.fileimport.domain.model.FileImport;
   import org.mapstruct.Mapper;
   import org.mapstruct.Mapping;
   import org.mapstruct.MappingConstants;
@@ -466,23 +470,23 @@
       componentModel = MappingConstants.ComponentModel.SPRING,
       unmappedTargetPolicy = ReportingPolicy.ERROR,
       unmappedSourcePolicy = ReportingPolicy.WARN)
-  public interface ImportFilePersistenceMapper extends EntityMapper<ImportFile, ImportFileEntity> {
+  public interface ImportFilePersistenceMapper extends EntityMapper<FileImport, ImportFileEntity> {
 
     @Override
-    ImportFile toDomain(ImportFileEntity entity);
+    FileImport toDomain(ImportFileEntity entity);
 
     @Override
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "lastModifiedAt", ignore = true)
     @Mapping(target = "createdBy", ignore = true)
     @Mapping(target = "lastModifiedBy", ignore = true)
-    ImportFileEntity toEntity(ImportFile domain);
+    ImportFileEntity toEntity(FileImport domain);
 
     @Override
-    List<ImportFile> toDomain(List<ImportFileEntity> entities);
+    List<FileImport> toDomain(List<ImportFileEntity> entities);
 
     @Override
-    List<ImportFileEntity> toEntity(List<ImportFile> domains);
+    List<ImportFileEntity> toEntity(List<FileImport> domains);
   }
   ```
 

@@ -53,7 +53,7 @@ public class SecurityConfiguration {
     "/api/v1/auth/complete-password-change",
     "/api/v1/auth/login",
     "/api/v1/auth/refresh",
-    "/api/v1/certificate/.well-known/jwks.json",
+    "/api/v1/certificate/.well-known/jwks.json"
   };
 
   private static final String[] AUTHENTICATED_URLS = {"/api/**"};

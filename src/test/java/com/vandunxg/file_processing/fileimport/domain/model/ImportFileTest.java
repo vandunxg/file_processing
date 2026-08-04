@@ -17,15 +17,17 @@ class ImportFileTest {
   void registerCreatesStoredFileMetadata() {
     UUID ownerId = UUID.randomUUID();
 
-    ImportFile file =
-        ImportFile.register(
+    FileImport file =
+        FileImport.register(
             ownerId,
             " customers.csv ",
             "imports/2026/07/file.csv",
             CHECKSUM,
             123L,
             "text/csv",
-            RETENTION_DEADLINE);
+            RETENTION_DEADLINE,
+            "file-processing",
+            StorageProvider.R2);
 
     assertThat(file.getId()).isNotNull();
     assertThat(file.getOwnerId()).isEqualTo(ownerId);
@@ -41,14 +43,16 @@ class ImportFileTest {
   void registerRejectsInvalidChecksum() {
     assertThatThrownBy(
             () ->
-                ImportFile.register(
+                FileImport.register(
                     UUID.randomUUID(),
                     "customers.csv",
                     "imports/file.csv",
                     "ABC",
                     1L,
                     "text/csv",
-                    RETENTION_DEADLINE))
+                    RETENTION_DEADLINE,
+                    "file-processing",
+                    StorageProvider.R2))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("checksum");
   }
@@ -57,26 +61,30 @@ class ImportFileTest {
   void registerRejectsMissingCoreFields() {
     assertThatThrownBy(
             () ->
-                ImportFile.register(
+                FileImport.register(
                     UUID.randomUUID(),
                     " ",
                     "imports/file.csv",
                     CHECKSUM,
                     1L,
                     "text/csv",
-                    RETENTION_DEADLINE))
+                    RETENTION_DEADLINE,
+                    "file-processing",
+                    StorageProvider.R2))
         .isInstanceOf(IllegalArgumentException.class);
 
     assertThatThrownBy(
             () ->
-                ImportFile.register(
+                FileImport.register(
                     UUID.randomUUID(),
                     "customers.csv",
                     " ",
                     CHECKSUM,
                     1L,
                     "text/csv",
-                    RETENTION_DEADLINE))
+                    RETENTION_DEADLINE,
+                    "file-processing",
+                    StorageProvider.R2))
         .isInstanceOf(IllegalArgumentException.class);
   }
 
@@ -84,14 +92,16 @@ class ImportFileTest {
   void registerRejectsNegativeSize() {
     assertThatThrownBy(
             () ->
-                ImportFile.register(
+                FileImport.register(
                     UUID.randomUUID(),
                     "customers.csv",
                     "imports/file.csv",
                     CHECKSUM,
                     -1L,
                     "text/csv",
-                    RETENTION_DEADLINE))
+                    RETENTION_DEADLINE,
+                    "file-processing",
+                    StorageProvider.R2))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("size");
   }
