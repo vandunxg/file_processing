@@ -29,9 +29,11 @@ class CsvValidationReaderTest {
             Clock.fixed(Instant.parse("2026-08-04T00:00:00Z"), ZoneOffset.UTC),
             new InMemoryTracker())) {
       assertThat(reader.next().orElseThrow().row()).isPresent();
-      assertThat(reader.next().orElseThrow().issues())
+      var duplicate = reader.next().orElseThrow();
+      assertThat(duplicate.issues())
           .extracting(issue -> issue.code())
           .containsExactly(ValidationErrorCode.DUPLICATE_EXTERNAL_ID_IN_FILE);
+      assertThat(duplicate.originalRow().fullName()).isEqualTo("Tran Van B");
     }
   }
 

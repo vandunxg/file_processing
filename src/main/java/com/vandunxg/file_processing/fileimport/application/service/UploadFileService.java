@@ -1,9 +1,15 @@
 package com.vandunxg.file_processing.fileimport.application.service;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.vandunxg.file_processing.fileimport.adapter.in.csv.CsvFormatException;
+import com.vandunxg.file_processing.fileimport.adapter.in.csv.CsvRecordReader;
+import com.vandunxg.file_processing.fileimport.adapter.out.persistence.CustomerUpsertRepository;
 import com.vandunxg.file_processing.fileimport.application.command.UploadFileCommand;
 import com.vandunxg.file_processing.fileimport.application.port.in.UploadFileUseCase;
 import com.vandunxg.file_processing.fileimport.application.port.out.FileImportRepositoryPort;
@@ -28,6 +34,8 @@ public class UploadFileService implements UploadFileUseCase {
   private final FileImportRepositoryPort fileImportRepositoryPort;
   private final FileImportProperties properties;
   private final Clock clock;
+  private final CustomerImportProcessor customerImportProcessor;
+  private final CustomerUpsertRepository customerUpsertRepository;
 
   @Override
   public UploadFileResult upload(UploadFileCommand command) {
@@ -35,7 +43,9 @@ public class UploadFileService implements UploadFileUseCase {
     var storedObject =
         objectStoragePort.store(
             storageKey, command.contentType(), command.contentLength(), command.content());
+    FileImport saved;
     try {
+      validateStoredCsv(storageKey);
       FileImport fileImport =
           FileImport.register(
               command.ownerId(),
@@ -47,9 +57,7 @@ public class UploadFileService implements UploadFileUseCase {
               Instant.now(clock).plus(properties.retention()),
               storedObject.bucket(),
               StorageProvider.R2);
-      var saved = fileImportRepositoryPort.save(fileImport);
-      log.info("[upload] fileId={} ownerId={}", saved.getId(), saved.getOwnerId());
-      return UploadFileResult.from(saved);
+      saved = fileImportRepositoryPort.save(fileImport);
     } catch (DataIntegrityViolationException exception) {
       cleanUp(storageKey);
       throw new FileImportException(FileImportErrorCode.DUPLICATE_FILE, exception);
@@ -57,7 +65,81 @@ public class UploadFileService implements UploadFileUseCase {
       cleanUp(storageKey);
       throw exception;
     }
+    ProcessedImport processed = null;
+    try {
+      processed = process(saved);
+      saved.complete(
+          processed.result().validRows(),
+          processed.result().invalidRows(),
+          processed.result().insertedRows(),
+          processed.result().updatedRows(),
+          processed.reportKey());
+      var completed = fileImportRepositoryPort.save(saved);
+      log.info("[upload] fileId={} ownerId={}", completed.getId(), completed.getOwnerId());
+      return UploadFileResult.from(completed);
+    } catch (RuntimeException exception) {
+      if (processed != null && processed.reportKey() != null) {
+        cleanUp(processed.reportKey());
+      }
+      saved.fail();
+      try {
+        fileImportRepositoryPort.save(saved);
+      } catch (RuntimeException persistFailure) {
+        exception.addSuppressed(persistFailure);
+      }
+      throw exception;
+    }
   }
+
+  private void validateStoredCsv(String storageKey) {
+    try (var input = objectStoragePort.open(storageKey);
+        var reader = new CsvRecordReader(input)) {
+      reader.next();
+    } catch (CsvFormatException exception) {
+      throw new FileImportException(FileImportErrorCode.INVALID_CSV_HEADER, exception);
+    } catch (IOException exception) {
+      throw new FileImportException(FileImportErrorCode.STORAGE_UNAVAILABLE, exception);
+    }
+  }
+
+  private ProcessedImport process(FileImport fileImport) {
+    Path report = null;
+    try {
+      report = Files.createTempFile("customer-import-", ".csv");
+      CustomerImportResult result;
+      try (var reportWriter = new CsvErrorReportWriter(report);
+          var input = objectStoragePort.open(fileImport.getStorageKey())) {
+        result =
+            customerImportProcessor.process(
+                input,
+                rows -> customerUpsertRepository.upsert(rows, fileImport.getId()),
+                invalid ->
+                    invalid
+                        .issues()
+                        .forEach(issue -> reportWriter.write(issue, invalid.originalRow())));
+      }
+      String reportKey = null;
+      if (result.invalidRows() > 0) {
+        reportKey = "reports/" + fileImport.getId() + ".csv";
+        try (var input = Files.newInputStream(report)) {
+          objectStoragePort.store(reportKey, "text/csv", Files.size(report), input);
+        }
+      }
+      return new ProcessedImport(result, reportKey);
+    } catch (IOException exception) {
+      throw new FileImportException(FileImportErrorCode.STORAGE_UNAVAILABLE, exception);
+    } finally {
+      if (report != null) {
+        try {
+          Files.deleteIfExists(report);
+        } catch (IOException ignored) {
+          // The report object has already been finalized or will be retried manually in the MVP.
+        }
+      }
+    }
+  }
+
+  private record ProcessedImport(CustomerImportResult result, String reportKey) {}
 
   private void cleanUp(String storageKey) {
     try {

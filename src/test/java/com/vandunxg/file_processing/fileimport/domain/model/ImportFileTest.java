@@ -37,6 +37,57 @@ class ImportFileTest {
     assertThat(file.getSizeBytes()).isEqualTo(123L);
     assertThat(file.getDetectedContentType()).isEqualTo("text/csv");
     assertThat(file.getRetentionDeadline()).isEqualTo(RETENTION_DEADLINE);
+    assertThat(file.getProcessingStatus()).isEqualTo(ImportProcessingStatus.PROCESSING);
+  }
+
+  @Test
+  void completeRecordsFinalCountersAndReportAvailability() {
+    FileImport file =
+        FileImport.register(
+            UUID.randomUUID(),
+            "customers.csv",
+            "imports/file.csv",
+            CHECKSUM,
+            123L,
+            "text/csv",
+            RETENTION_DEADLINE,
+            "file-processing",
+            StorageProvider.R2);
+
+    file.complete(3, 1, 2, 1, "reports/file.csv");
+
+    assertThat(file.getProcessingStatus()).isEqualTo(ImportProcessingStatus.COMPLETED_WITH_ERRORS);
+    assertThat(file.getProcessedRows()).isEqualTo(4);
+    assertThat(file.getValidRows()).isEqualTo(3);
+    assertThat(file.getInvalidRows()).isEqualTo(1);
+    assertThat(file.getInsertedRows()).isEqualTo(2);
+    assertThat(file.getUpdatedRows()).isEqualTo(1);
+    assertThat(file.getErrorReportKey()).isEqualTo("reports/file.csv");
+  }
+
+  @Test
+  void completeRejectsErrorsWithoutAReportAndFailSetsTerminalStatus() {
+    FileImport file =
+        FileImport.register(
+            UUID.randomUUID(),
+            "customers.csv",
+            "imports/file.csv",
+            CHECKSUM,
+            123L,
+            "text/csv",
+            RETENTION_DEADLINE,
+            "file-processing",
+            StorageProvider.R2);
+
+    assertThatThrownBy(() -> file.complete(0, 1, 0, 0, null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("report");
+
+    file.complete(0, 1, 0, 0, "reports/file.csv");
+    file.fail();
+
+    assertThat(file.getProcessingStatus()).isEqualTo(ImportProcessingStatus.FAILED);
+    assertThat(file.getErrorReportKey()).isNull();
   }
 
   @Test

@@ -16,6 +16,7 @@ import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 @Component
@@ -54,6 +55,16 @@ public class R2ObjectStorageAdapter implements ObjectStoragePort {
     try {
       r2Client.deleteObject(
           DeleteObjectRequest.builder().bucket(properties.bucket()).key(storageKey).build());
+    } catch (SdkException exception) {
+      throw new FileImportException(FileImportErrorCode.STORAGE_UNAVAILABLE, exception);
+    }
+  }
+
+  @Override
+  public InputStream open(String storageKey) {
+    try {
+      return r2Client.getObject(
+          GetObjectRequest.builder().bucket(properties.bucket()).key(storageKey).build());
     } catch (SdkException exception) {
       throw new FileImportException(FileImportErrorCode.STORAGE_UNAVAILABLE, exception);
     }

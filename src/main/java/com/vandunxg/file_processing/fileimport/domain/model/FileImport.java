@@ -27,6 +27,16 @@ public class FileImport extends AuditableDomain {
   private Instant retentionDeadline;
   private String bucket;
   private StorageProvider storageProvider;
+
+  @Builder.Default
+  private ImportProcessingStatus processingStatus = ImportProcessingStatus.PROCESSING;
+
+  private long processedRows;
+  private long validRows;
+  private long invalidRows;
+  private long insertedRows;
+  private long updatedRows;
+  private String errorReportKey;
   private Long version;
 
   public static FileImport register(
@@ -66,6 +76,39 @@ public class FileImport extends AuditableDomain {
         .bucket(bucket.trim())
         .storageProvider(storageProvider)
         .build();
+  }
+
+  public void complete(
+      long validRows,
+      long invalidRows,
+      long insertedRows,
+      long updatedRows,
+      String errorReportKey) {
+    if (validRows < 0
+        || invalidRows < 0
+        || insertedRows < 0
+        || updatedRows < 0
+        || insertedRows + updatedRows > validRows) {
+      throw new IllegalArgumentException("Import counters are invalid");
+    }
+    if ((invalidRows == 0) != (errorReportKey == null || errorReportKey.isBlank())) {
+      throw new IllegalArgumentException("A report is required exactly when rows are invalid");
+    }
+    this.validRows = validRows;
+    this.invalidRows = invalidRows;
+    this.processedRows = validRows + invalidRows;
+    this.insertedRows = insertedRows;
+    this.updatedRows = updatedRows;
+    this.errorReportKey = errorReportKey;
+    this.processingStatus =
+        invalidRows == 0
+            ? ImportProcessingStatus.COMPLETED
+            : ImportProcessingStatus.COMPLETED_WITH_ERRORS;
+  }
+
+  public void fail() {
+    processingStatus = ImportProcessingStatus.FAILED;
+    errorReportKey = null;
   }
 
   private static boolean isBlank(String value) {

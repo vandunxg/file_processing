@@ -43,19 +43,19 @@ public final class CsvValidationReader implements AutoCloseable {
   }
 
   private ValidatedCustomerRow validate(ParsedCsvRow parsed) {
-    ValidatedCustomerRow validated =
-        validator.validate(
-            new ParsedCustomerRow(
-                parsed.rowNumber(),
-                parsed.externalId(),
-                parsed.fullName(),
-                parsed.email(),
-                parsed.phone(),
-                parsed.dateOfBirth(),
-                parsed.address()));
+    ParsedCustomerRow originalRow =
+        new ParsedCustomerRow(
+            parsed.rowNumber(),
+            parsed.externalId(),
+            parsed.fullName(),
+            parsed.email(),
+            parsed.phone(),
+            parsed.dateOfBirth(),
+            parsed.address());
+    ValidatedCustomerRow validated = validator.validate(originalRow);
     if (validated.row().isEmpty()
         || duplicateTracker.firstOccurrence(validated.row().orElseThrow().externalId())) {
-      return validated;
+      return new ValidatedCustomerRow(validated.row(), validated.issues(), originalRow);
     }
     return new ValidatedCustomerRow(
         Optional.empty(),
@@ -65,6 +65,7 @@ public final class CsvValidationReader implements AutoCloseable {
                 validated.row().orElseThrow().externalId(),
                 ValidationErrorCode.DUPLICATE_EXTERNAL_ID_IN_FILE,
                 "external_id",
-                "External ID appears more than once in the file")));
+                "External ID appears more than once in the file")),
+        originalRow);
   }
 }
