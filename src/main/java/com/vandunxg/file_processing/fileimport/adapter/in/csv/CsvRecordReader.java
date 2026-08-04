@@ -1,18 +1,18 @@
 package com.vandunxg.file_processing.fileimport.adapter.in.csv;
 
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
-import org.apache.commons.csv.CSVRecord;
-
 import java.io.*;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
+
 public final class CsvRecordReader implements AutoCloseable {
 
   private static final List<String> REQUIRED_COLUMNS =
-    List.of("external_id", "full_name", "email", "phone", "date_of_birth", "address");
+      List.of("external_id", "full_name", "email", "phone", "date_of_birth", "address");
   private static final int DEFAULT_MAXIMUM_DATA_ROWS = 1_000_000;
   private static final int DEFAULT_MAXIMUM_RECORD_CHARACTERS = 65_536;
 
@@ -33,18 +33,18 @@ public final class CsvRecordReader implements AutoCloseable {
     }
     this.maximumDataRows = maximumDataRows;
     InputStreamReader source =
-      new InputStreamReader(
-        input,
-        StandardCharsets.UTF_8
-          .newDecoder()
-          .onMalformedInput(CodingErrorAction.REPORT)
-          .onUnmappableCharacter(CodingErrorAction.REPORT));
+        new InputStreamReader(
+            input,
+            StandardCharsets.UTF_8
+                .newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT));
     try {
       parser =
-        CSVParser.builder()
-          .setReader(new BoundedCsvReader(source, maximumRecordCharacters))
-          .setFormat(CSVFormat.RFC4180.builder().setIgnoreEmptyLines(true).get())
-          .get();
+          CSVParser.builder()
+              .setReader(new BoundedCsvReader(source, maximumRecordCharacters))
+              .setFormat(CSVFormat.RFC4180.builder().setIgnoreEmptyLines(true).get())
+              .get();
 
       records = parser.iterator();
       columnIndexes = readHeader();
@@ -66,28 +66,28 @@ public final class CsvRecordReader implements AutoCloseable {
         if (!records.hasNext()) {
           if (!hasDataRow) {
             throw new CsvFormatException(
-              CsvErrorCode.INVALID_CSV_HEADER, "CSV must contain at least one data row");
+                CsvErrorCode.INVALID_CSV_HEADER, "CSV must contain at least one data row");
           }
           return Optional.empty();
         }
         CSVRecord record = records.next();
         if (record.size() != REQUIRED_COLUMNS.size()) {
           throw new CsvFormatException(
-            CsvErrorCode.MALFORMED_CSV, "CSV row has an invalid column count");
+              CsvErrorCode.MALFORMED_CSV, "CSV row has an invalid column count");
         }
         if (++dataRowCount > maximumDataRows) {
           throw new CsvFormatException(CsvErrorCode.MAXIMUM_ROWS_EXCEEDED, "CSV has too many rows");
         }
         hasDataRow = true;
         return Optional.of(
-          new ParsedCsvRow(
-            rowNumber,
-            value(record, "external_id"),
-            value(record, "full_name"),
-            value(record, "email"),
-            value(record, "phone"),
-            value(record, "date_of_birth"),
-            value(record, "address")));
+            new ParsedCsvRow(
+                rowNumber,
+                value(record, "external_id"),
+                value(record, "full_name"),
+                value(record, "email"),
+                value(record, "phone"),
+                value(record, "date_of_birth"),
+                value(record, "address")));
       }
     } catch (UncheckedIOException exception) {
       throw new CsvFormatException(CsvErrorCode.MALFORMED_CSV, "CSV cannot be parsed", exception);
