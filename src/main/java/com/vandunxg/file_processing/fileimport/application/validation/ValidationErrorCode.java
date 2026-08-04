@@ -1,0 +1,15 @@
+package com.vandunxg.file_processing.fileimport.application.validation;
+
+public enum ValidationErrorCode {
+  REQUIRED_FIELD,
+  INVALID_EXTERNAL_ID,
+  FULL_NAME_TOO_SHORT,
+  FULL_NAME_TOO_LONG,
+  INVALID_EMAIL,
+  INVALID_PHONE,
+  INVALID_DATE_FORMAT,
+  DATE_OF_BIRTH_IN_FUTURE,
+  DATE_OF_BIRTH_TOO_OLD,
+  ADDRESS_TOO_LONG,
+  DUPLICATE_EXTERNAL_ID_IN_FILE
+}

@@ -1,5 +1,7 @@
 package com.vandunxg.file_processing.fileimport.adapter.in.web;
 
+import java.io.IOException;
+
 import com.vandunxg.common.models.dto.response.Response;
 import com.vandunxg.file_processing.auth.configuration.security.AuthenticatedUser;
 import com.vandunxg.file_processing.fileimport.application.command.UploadFileCommand;
@@ -15,8 +17,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-
 @RestController
 @RequestMapping("${app.api.prefix}/${app.api.version}/file-import/")
 @RequiredArgsConstructor
@@ -26,24 +26,24 @@ public class FileImportController {
   private final UploadFileUseCase uploadFileUseCase;
 
   @PostMapping(
-    consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
-    produces = MediaType.APPLICATION_JSON_VALUE)
+      consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
+      produces = MediaType.APPLICATION_JSON_VALUE)
   @ResponseStatus(HttpStatus.ACCEPTED)
   public Response<UploadFileResult> upload(
-    @RequestPart("file") MultipartFile file,
-    @AuthenticationPrincipal AuthenticatedUser principal) {
+      @RequestPart("file") MultipartFile file,
+      @AuthenticationPrincipal AuthenticatedUser principal) {
     if (file.isEmpty()) {
       throw new FileImportException(FileImportErrorCode.EMPTY_FILE);
     }
     try (var inputStream = file.getInputStream()) {
       return Response.of(
-        uploadFileUseCase.upload(
-          new UploadFileCommand(
-            principal.userId(),
-            file.getOriginalFilename(),
-            MediaType.APPLICATION_OCTET_STREAM_VALUE,
-            file.getSize(),
-            inputStream)));
+          uploadFileUseCase.upload(
+              new UploadFileCommand(
+                  principal.userId(),
+                  file.getOriginalFilename(),
+                  MediaType.APPLICATION_OCTET_STREAM_VALUE,
+                  file.getSize(),
+                  inputStream)));
     } catch (IOException exception) {
       throw new FileImportException(FileImportErrorCode.STORAGE_UNAVAILABLE, exception);
     }

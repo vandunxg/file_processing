@@ -62,6 +62,7 @@
     <caffeine.version>3.1.8</caffeine.version>
     <spotless.version>2.46.1</spotless.version>
     <software.amazon.awssdk>2.25.0</software.amazon.awssdk>
+    <commons-csv.version>1.13.0</commons-csv.version>
     <vandunxg.common.version>3.0.4</vandunxg.common.version>
   </properties>
   <dependencies>
@@ -286,6 +287,12 @@
       <groupId>software.amazon.awssdk</groupId>
       <artifactId>s3</artifactId>
       <version>${software.amazon.awssdk}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-csv</artifactId>
+      <version>${commons-csv.version}</version>
     </dependency>
   </dependencies>
 

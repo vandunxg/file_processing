@@ -157,9 +157,9 @@ class MigrationAndSeedIT extends AuthIntegrationTestBase {
     String checksum = "b".repeat(64);
 
     jdbcTemplate.update(
-        "INSERT INTO import_files (id, owner_id, original_filename, storage_key, checksum_sha256, "
-            + "size_bytes, detected_content_type, retention_deadline, created_at, last_modified_at) "
-            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO file_import (id, owner_id, original_filename, storage_key, checksum_sha256, "
+            + "size_bytes, detected_content_type, retention_deadline, created_at, last_modified_at, "
+            + "bucket, storage_provider) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         UUID.randomUUID(),
         ownerId,
         "customers.csv",
@@ -169,14 +169,17 @@ class MigrationAndSeedIT extends AuthIntegrationTestBase {
         "text/csv",
         Timestamp.from(now.plusSeconds(30 * 24 * 60 * 60)),
         Timestamp.from(now),
-        Timestamp.from(now));
+        Timestamp.from(now),
+        "file-processing",
+        "R2");
 
     assertThatThrownBy(
             () ->
                 jdbcTemplate.update(
-                    "INSERT INTO import_files (id, owner_id, original_filename, storage_key, "
+                    "INSERT INTO file_import (id, owner_id, original_filename, storage_key, "
                         + "checksum_sha256, size_bytes, detected_content_type, retention_deadline, "
-                        + "created_at, last_modified_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        + "created_at, last_modified_at, bucket, storage_provider) "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     UUID.randomUUID(),
                     ownerId,
                     "copy.csv",
@@ -186,7 +189,9 @@ class MigrationAndSeedIT extends AuthIntegrationTestBase {
                     "text/csv",
                     Timestamp.from(now.plusSeconds(30 * 24 * 60 * 60)),
                     Timestamp.from(now),
-                    Timestamp.from(now)))
+                    Timestamp.from(now),
+                    "file-processing",
+                    "R2"))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 
@@ -198,9 +203,10 @@ class MigrationAndSeedIT extends AuthIntegrationTestBase {
     assertThatThrownBy(
             () ->
                 jdbcTemplate.update(
-                    "INSERT INTO import_files (id, owner_id, original_filename, storage_key, "
+                    "INSERT INTO file_import (id, owner_id, original_filename, storage_key, "
                         + "checksum_sha256, size_bytes, detected_content_type, retention_deadline, "
-                        + "created_at, last_modified_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        + "created_at, last_modified_at, bucket, storage_provider) "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     UUID.randomUUID(),
                     UUID.randomUUID(),
                     "bad.csv",
@@ -210,7 +216,9 @@ class MigrationAndSeedIT extends AuthIntegrationTestBase {
                     "text/csv",
                     Timestamp.from(now.plusSeconds(30 * 24 * 60 * 60)),
                     Timestamp.from(now),
-                    Timestamp.from(now)))
+                    Timestamp.from(now),
+                    "file-processing",
+                    "R2"))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 
