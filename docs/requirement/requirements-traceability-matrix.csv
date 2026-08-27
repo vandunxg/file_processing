@@ -1,0 +1,12 @@
+﻿REQ-ID,Feature,Use Case,Acceptance Criteria,Suggested Test Type
+FR-01,Upload CSV,UC-01,AC-01.1 to AC-01.5,"API integration, MinIO integration, large-file memory test"
+FR-02,Duplicate control,UC-02,AC-02.1 to AC-02.5,"Concurrency integration test, DB constraint test, Redis failure test"
+FR-03,Asynchronous processing,UC-03,AC-03.1 to AC-03.8,"Unit, PostgreSQL integration, concurrency, timeout, large-file test"
+FR-04,Job tracking,"UC-04, UC-05, UC-06",AC-04.1 to AC-04.5,"Security test, repository integration, API contract test"
+FR-05A,Error report download,UC-07,AC-05.1 to AC-05.3,"MinIO integration, authorization, retention test"
+FR-05B,Retry job,UC-08,AC-05.4 to AC-05.7,"State-machine unit, idempotency integration, attempt history test"
+FR-05C,Cancel job,UC-09,AC-05.8 to AC-05.11,"Concurrency test, cooperative cancellation, idempotent API test"
+NFR-P,Performance & memory,N/A,NFR-P01 to NFR-P08,"Benchmark 1M rows, heap 512 MB, executor saturation test"
+NFR-R,Reliability & recovery,N/A,Reliability/Graceful shutdown requirements,"SIGTERM test, stale heartbeat recovery test"
+NFR-S,Security,N/A,Security requirements,"JWT/RBAC, path traversal, PII logging, signed URL test"
+NFR-O,Observability,N/A,Logging/Metrics/Health requirements,"Metric assertion, trace correlation, actuator test"

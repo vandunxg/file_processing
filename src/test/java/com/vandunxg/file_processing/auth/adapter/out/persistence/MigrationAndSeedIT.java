@@ -148,4 +148,95 @@ class MigrationAndSeedIT extends AuthIntegrationTestBase {
 
     assertThat(predicate).contains("deleted_at IS NULL", "revoked_at IS NOT NULL");
   }
+
+  @Test
+  @Transactional
+  void migrations_createImportFilesWithDuplicateGuard() {
+    UUID ownerId = UUID.randomUUID();
+    Instant now = Instant.now();
+    String checksum = "b".repeat(64);
+
+    jdbcTemplate.update(
+        "INSERT INTO file_import (id, owner_id, original_filename, storage_key, checksum_sha256, "
+            + "size_bytes, detected_content_type, retention_deadline, created_at, last_modified_at, "
+            + "bucket, storage_provider) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        UUID.randomUUID(),
+        ownerId,
+        "customers.csv",
+        "imports/one.csv",
+        checksum,
+        12L,
+        "text/csv",
+        Timestamp.from(now.plusSeconds(30 * 24 * 60 * 60)),
+        Timestamp.from(now),
+        Timestamp.from(now),
+        "file-processing",
+        "R2");
+
+    assertThatThrownBy(
+            () ->
+                jdbcTemplate.update(
+                    "INSERT INTO file_import (id, owner_id, original_filename, storage_key, "
+                        + "checksum_sha256, size_bytes, detected_content_type, retention_deadline, "
+                        + "created_at, last_modified_at, bucket, storage_provider) "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    UUID.randomUUID(),
+                    ownerId,
+                    "copy.csv",
+                    "imports/two.csv",
+                    checksum,
+                    12L,
+                    "text/csv",
+                    Timestamp.from(now.plusSeconds(30 * 24 * 60 * 60)),
+                    Timestamp.from(now),
+                    Timestamp.from(now),
+                    "file-processing",
+                    "R2"))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  @Test
+  @Transactional
+  void migrations_createImportFilesWithIntegrityGuards() {
+    Instant now = Instant.now();
+
+    assertThatThrownBy(
+            () ->
+                jdbcTemplate.update(
+                    "INSERT INTO file_import (id, owner_id, original_filename, storage_key, "
+                        + "checksum_sha256, size_bytes, detected_content_type, retention_deadline, "
+                        + "created_at, last_modified_at, bucket, storage_provider) "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    UUID.randomUUID(),
+                    UUID.randomUUID(),
+                    "bad.csv",
+                    "imports/bad.csv",
+                    "ABC",
+                    -1L,
+                    "text/csv",
+                    Timestamp.from(now.plusSeconds(30 * 24 * 60 * 60)),
+                    Timestamp.from(now),
+                    Timestamp.from(now),
+                    "file-processing",
+                    "R2"))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  @Test
+  void migrations_indexImportFilesForOwnerListingAndRetentionCleanup() {
+    List<String> indexes =
+        jdbcTemplate.queryForList(
+            "SELECT indexname FROM pg_indexes WHERE schemaname = 'public' "
+                + "AND indexname IN ('import_files_owner_checksum_uk', "
+                + "'import_files_storage_key_uk', 'import_files_owner_created_at_idx', "
+                + "'import_files_retention_deadline_idx')",
+            String.class);
+
+    assertThat(indexes)
+        .containsExactlyInAnyOrder(
+            "import_files_owner_checksum_uk",
+            "import_files_storage_key_uk",
+            "import_files_owner_created_at_idx",
+            "import_files_retention_deadline_idx");
+  }
 }
