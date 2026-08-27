@@ -74,7 +74,7 @@ public class RegistrationCommandService {
   @Transactional
   public RegisterResult register(RegisterCommand command) {
     if (!authThrottle.tryConsume(
-        REGISTER_THROTTLE_KEY_PREFIX + command.getIpAddress(),
+        REGISTER_THROTTLE_KEY_PREFIX + command.ipAddress(),
         authProperties.register().maxAttemptsPerHour(),
         THROTTLE_WINDOW)) {
       log.warn(
@@ -83,11 +83,11 @@ public class RegistrationCommandService {
       throw new AuthException(AuthErrorCode.AUTH_RATE_LIMITED);
     }
 
-    String normalizedUsername = User.normalize(command.getUsername());
-    String normalizedEmail = User.normalize(command.getEmail());
+    String normalizedUsername = User.normalize(command.username());
+    String normalizedEmail = User.normalize(command.email());
 
     PasswordPolicy.ValidationResult validation =
-        passwordPolicy.validate(command.getPassword(), normalizedUsername, normalizedEmail);
+        passwordPolicy.validate(command.password(), normalizedUsername, normalizedEmail);
     if (!validation.valid()) {
       log.warn(
           "[register] password policy violation username={} reason={}",
@@ -115,14 +115,14 @@ public class RegistrationCommandService {
                 });
 
     Instant now = Instant.now(clock);
-    String passwordHash = passwordHasher.hash(command.getPassword());
+    String passwordHash = passwordHasher.hash(command.password());
     User user;
     try {
       user =
           User.register(
-              command.getUsername(),
-              command.getEmail(),
-              command.getDisplayName(),
+              command.username(),
+              command.email(),
+              command.displayName(),
               passwordHash,
               operatorRole,
               now);
@@ -150,7 +150,7 @@ public class RegistrationCommandService {
 
     userRepository.assignRole(new UserRole(saved.getId(), operatorRole.getId()));
 
-    String ipHash = hashIp(command.getIpAddress());
+    String ipHash = hashIp(command.ipAddress());
     String rawToken = issueVerificationToken(saved.getId(), now, ipHash);
 
     log.info("[register] registered user userId={} status={}", saved.getId(), saved.getStatus());
@@ -163,7 +163,7 @@ public class RegistrationCommandService {
 
   @Transactional
   public RegisterResult verifyEmail(VerifyEmailCommand command) {
-    String tokenHash = HashUtils.sha256(command.getToken().getBytes(StandardCharsets.UTF_8));
+    String tokenHash = HashUtils.sha256(command.token().getBytes(StandardCharsets.UTF_8));
 
     EmailVerificationToken token =
         tokenRepository
@@ -212,7 +212,7 @@ public class RegistrationCommandService {
   @Transactional
   public void resendVerificationEmail(ResendVerificationEmailCommand command) {
     if (!authThrottle.tryConsume(
-        RESEND_THROTTLE_KEY_PREFIX + command.getIpAddress(),
+        RESEND_THROTTLE_KEY_PREFIX + command.ipAddress(),
         authProperties.emailVerification().resendMaxAttemptsPerHour(),
         THROTTLE_WINDOW)) {
       log.warn(
@@ -221,7 +221,7 @@ public class RegistrationCommandService {
       throw new AuthException(AuthErrorCode.AUTH_RATE_LIMITED);
     }
 
-    String normalizedIdentifier = User.normalize(command.getIdentifier());
+    String normalizedIdentifier = User.normalize(command.identifier());
     User user = userRepository.findByNormalizedIdentifier(normalizedIdentifier).orElse(null);
     if (user == null || !user.isPendingVerify()) {
       log.info("[resendVerificationEmail] no-op");
@@ -231,7 +231,7 @@ public class RegistrationCommandService {
     Instant now = Instant.now(clock);
     tokenRepository.invalidateAllForUser(user.getId(), now);
 
-    String ipHash = hashIp(command.getIpAddress());
+    String ipHash = hashIp(command.ipAddress());
     String rawToken = issueVerificationToken(user.getId(), now, ipHash);
 
     log.info("[resendVerificationEmail] issued new verification token userId={}", user.getId());

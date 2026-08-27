@@ -22,14 +22,14 @@ public class CurrentUserQueryService {
 
   @Transactional(readOnly = true)
   public MeResult me(GetCurrentUserQuery query) {
-    log.info("[me] userId={}", query.getUserId());
+    log.info("[me] userId={}", query.userId());
 
     User user =
         userRepository
-            .findById(query.getUserId())
+            .findById(query.userId())
             .orElseThrow(
                 () -> {
-                  log.warn("[me] user not found userId={}", query.getUserId());
+                  log.warn("[me] user not found userId={}", query.userId());
                   return new AuthException(AuthErrorCode.USER_NOT_FOUND);
                 });
     return userResultMapper.toMeResult(user);

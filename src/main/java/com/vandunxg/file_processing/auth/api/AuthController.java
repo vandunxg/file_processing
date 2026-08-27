@@ -156,7 +156,7 @@ public class AuthController {
     log.info("[login] username={}", request.getUsername());
     var command = webMapper.toCommand(request, clientIp(http), userAgent(http));
     var result = authenticationCommandService.login(command);
-    setAuthCookies(response, result.getRefreshToken());
+    setAuthCookies(response, result.refreshToken());
     return Response.of(webMapper.toResponse(result));
   }
 
@@ -209,7 +209,7 @@ public class AuthController {
             .userAgent(userAgent(http))
             .build();
     var result = sessionCommandService.refresh(command);
-    setAuthCookies(response, result.getRefreshToken());
+    setAuthCookies(response, result.refreshToken());
     return Response.of(webMapper.toResponse(result));
   }
 

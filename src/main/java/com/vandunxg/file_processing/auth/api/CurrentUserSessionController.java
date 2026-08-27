@@ -74,11 +74,8 @@ public class CurrentUserSessionController {
       HttpServletRequest http,
       HttpServletResponse response) {
     sessionCommandService.revokeAll(
-        RevokeAllSessionsCommand.builder()
-            .userId(principal.userId())
-            .reason(RevocationReason.USER_TRIGGERED)
-            .ipAddress(IpUtils.getRemoteIp(http))
-            .build());
+        new RevokeAllSessionsCommand(
+            principal.userId(), RevocationReason.USER_TRIGGERED, IpUtils.getRemoteIp(http)));
     response.setHeader(
         HTTP_HEADER_SET_COOKIE, "fps_refresh=; Path=/api/v1/auth; Max-Age=0; HttpOnly");
     response.addHeader(HTTP_HEADER_SET_COOKIE, "fps_csrf=; Path=/api/v1/auth; Max-Age=0");

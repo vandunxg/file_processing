@@ -414,7 +414,18 @@ Additional conventions:
 - Enum constants and constants use `SCREAMING_SNAKE_CASE`.
 - Avoid abbreviations unless they are established domain language.
 - Keep methods focused. Prefer early returns over deep nesting.
-- Prefer records for immutable commands, queries, results, and value objects.
+- Commands, queries, results, and value objects are **records**, not classes
+  with Lombok accessors. The one exception is a type that must extend a class:
+  a paginated query extends `PagingQuery` (§12) and is mutated to apply a
+  default sort, so it stays a class with `@Getter`/`@Setter`/`@SuperBuilder`.
+- Add Lombok `@Builder` to such a record only when it is constructed **by hand**
+  somewhere — not only by a mapper — **and** two or more of its components
+  share a type. A positional call can then transpose them and still compile,
+  which is a silent bug in production and a silently wrong assertion in a test.
+  Otherwise use the canonical constructor: no generated builder, and no
+  half-built instance. A call site whose argument expressions already name the
+  components, such as `new RoleActionCommand(actorId(), roleId)`, does not need
+  a builder either.
 - Do not use `Optional` as a field, DTO field, entity field, or parameter.
 - Return an empty collection instead of `null`.
 - Only paginated queries extend `PagingQuery`. Point lookups use plain records

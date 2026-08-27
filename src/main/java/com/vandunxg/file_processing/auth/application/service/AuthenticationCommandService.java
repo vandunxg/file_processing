@@ -64,8 +64,8 @@ public class AuthenticationCommandService {
 
   @Transactional
   public LoginResult login(LoginCommand command) {
-    String ipHash = hashIp(command.getIpAddress());
-    String normalizedUsername = User.normalize(command.getUsername());
+    String ipHash = hashIp(command.ipAddress());
+    String normalizedUsername = User.normalize(command.username());
 
     if (!authThrottle.tryConsume(
         IP_THROTTLE_PREFIX + ipHash, authProperties.login().ipMaxPerHour(), IP_WINDOW)) {
@@ -99,7 +99,7 @@ public class AuthenticationCommandService {
       log.warn("[login] account locked userId={}", user.getId());
       throw new AuthException(AuthErrorCode.AUTH_ACCOUNT_LOCKED);
     }
-    if (!passwordHasher.matches(command.getPassword(), user.getPasswordHash())) {
+    if (!passwordHasher.matches(command.password(), user.getPasswordHash())) {
       recordFailedLogin(user, now, ipHash);
       authMetrics.loginInvalidCredentials();
       log.warn("[login] invalid password userId={}", user.getId());
@@ -120,7 +120,7 @@ public class AuthenticationCommandService {
     User saved = userRepository.save(user);
     AuditLog auditLog =
         audit(saved.getId(), OperationType.LOGIN_SUCCEEDED, now, ipHash)
-            .userAgent(command.getUserAgent())
+            .userAgent(command.userAgent())
             .build();
 
     if (saved.isMustChangePassword()) {
@@ -146,7 +146,7 @@ public class AuthenticationCommandService {
             IdUtils.nextId(),
             saved.getId(),
             saved.getCredentialVersion(),
-            command.getUserAgent(),
+            command.userAgent(),
             ipHash,
             now,
             authProperties.refresh().tokenTtl());

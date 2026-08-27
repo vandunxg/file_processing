@@ -65,7 +65,7 @@ public class SessionCommandService {
 
   @Transactional
   public LoginResult refresh(RefreshTokenCommand command) {
-    String ipHash = hashIp(command.getIpAddress());
+    String ipHash = hashIp(command.ipAddress());
     if (!authThrottle.tryConsume(
         IP_THROTTLE_PREFIX + ipHash, authProperties.login().refreshIpMaxPerHour(), IP_WINDOW)) {
       authMetrics.refreshRateLimited();
@@ -73,7 +73,7 @@ public class SessionCommandService {
       throw new AuthException(AuthErrorCode.AUTH_RATE_LIMITED);
     }
 
-    String rawRefresh = command.getRefreshToken();
+    String rawRefresh = command.refreshToken();
     if (rawRefresh == null || rawRefresh.isBlank()) {
       log.warn("[refresh] blank refresh token");
       throw new AuthException(AuthErrorCode.AUTH_REFRESH_TOKEN_INVALID);
@@ -145,7 +145,7 @@ public class SessionCommandService {
 
     auditTrail.recordAfterCommit(
         audit(sid, OperationType.TOKEN_REFRESHED, user.getId(), now, ipHash)
-            .userAgent(command.getUserAgent())
+            .userAgent(command.userAgent())
             .build());
 
     log.info("[refresh] token refreshed sid={} userId={}", sid, user.getId());
@@ -166,19 +166,18 @@ public class SessionCommandService {
   @Transactional
   public void logout(LogoutCommand command) {
     Instant now = Instant.now(clock);
-    sessionRepository.revoke(command.getSessionId(), RevocationReason.LOGOUT, now);
+    sessionRepository.revoke(command.sessionId(), RevocationReason.LOGOUT, now);
 
     auditTrail.recordAfterCommit(
         audit(
-                command.getSessionId(),
+                command.sessionId(),
                 OperationType.LOGOUT,
-                command.getUserId(),
+                command.userId(),
                 now,
-                hashIp(command.getIpAddress()))
+                hashIp(command.ipAddress()))
             .build());
 
-    log.info(
-        "[logout] session revoked userId={} sid={}", command.getUserId(), command.getSessionId());
+    log.info("[logout] session revoked userId={} sid={}", command.userId(), command.sessionId());
   }
 
   @Transactional
@@ -186,35 +185,35 @@ public class SessionCommandService {
     Instant now = Instant.now(clock);
     Session session =
         sessionRepository
-            .findActiveById(command.getSessionId(), now)
+            .findActiveById(command.sessionId(), now)
             .orElseThrow(
                 () -> {
-                  log.warn("[revoke] session not found sid={}", command.getSessionId());
+                  log.warn("[revoke] session not found sid={}", command.sessionId());
                   return new AuthException(AuthErrorCode.AUTH_SESSION_NOT_FOUND);
                 });
-    if (!session.getUserId().equals(command.getCallerUserId())) {
+    if (!session.getUserId().equals(command.callerUserId())) {
       log.warn(
           "[revoke] foreign session revoke attempt sid={} callerUserId={}",
-          command.getSessionId(),
-          command.getCallerUserId());
+          command.sessionId(),
+          command.callerUserId());
       throw new AuthException(AuthErrorCode.AUTH_SESSION_NOT_FOUND);
     }
 
-    sessionRepository.revoke(command.getSessionId(), RevocationReason.USER_TRIGGERED, now);
+    sessionRepository.revoke(command.sessionId(), RevocationReason.USER_TRIGGERED, now);
 
     auditTrail.recordAfterCommit(
         audit(
-                command.getSessionId(),
+                command.sessionId(),
                 OperationType.SESSION_REVOKED,
-                command.getCallerUserId(),
+                command.callerUserId(),
                 now,
-                hashIp(command.getIpAddress()))
+                hashIp(command.ipAddress()))
             .build());
 
     log.info(
         "[revoke] session revoked sid={} callerUserId={}",
-        command.getSessionId(),
-        command.getCallerUserId());
+        command.sessionId(),
+        command.callerUserId());
   }
 
   /**
@@ -227,34 +226,34 @@ public class SessionCommandService {
   public void revokeAll(RevokeAllSessionsCommand command) {
     User user =
         userRepository
-            .findById(command.getUserId())
+            .findById(command.userId())
             .orElseThrow(
                 () -> {
-                  log.warn("[revokeAll] user not found userId={}", command.getUserId());
+                  log.warn("[revokeAll] user not found userId={}", command.userId());
                   return new AuthException(AuthErrorCode.USER_NOT_FOUND);
                 });
 
     Instant now = Instant.now(clock);
     user.bumpCredentialVersion(now);
     userRepository.save(user);
-    credentialVersionCache.invalidate(command.getUserId());
+    credentialVersionCache.invalidate(command.userId());
 
     RevocationReason reason =
-        command.getReason() == null ? RevocationReason.USER_TRIGGERED : command.getReason();
-    int revoked = sessionRepository.revokeAllForUser(command.getUserId(), reason, now);
+        command.reason() == null ? RevocationReason.USER_TRIGGERED : command.reason();
+    int revoked = sessionRepository.revokeAllForUser(command.userId(), reason, now);
 
     auditTrail.recordAfterCommit(
         audit(
-                command.getUserId(),
+                command.userId(),
                 OperationType.ALL_SESSIONS_REVOKED,
-                command.getUserId(),
+                command.userId(),
                 now,
-                hashIp(command.getIpAddress()))
+                hashIp(command.ipAddress()))
             .build());
 
     log.info(
         "[revokeAll] revoked all sessions userId={} count={} reason={}",
-        command.getUserId(),
+        command.userId(),
         revoked,
         reason);
   }

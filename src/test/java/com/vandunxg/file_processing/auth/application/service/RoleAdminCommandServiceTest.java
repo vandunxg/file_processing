@@ -64,7 +64,11 @@ class RoleAdminCommandServiceTest {
     assertThatThrownBy(
             () ->
                 service.setInheritance(
-                    new SetRoleInheritanceCommand(UUID.randomUUID(), childId, parentId)))
+                    SetRoleInheritanceCommand.builder()
+                        .actorId(UUID.randomUUID())
+                        .roleId(childId)
+                        .roleInheritedId(parentId)
+                        .build()))
         .isInstanceOf(AuthException.class)
         .extracting("error")
         .isEqualTo(AuthErrorCode.ROLE_INHERITANCE_CYCLE);
@@ -94,8 +98,13 @@ class RoleAdminCommandServiceTest {
 
     newService()
         .update(
-            new UpdateRoleCommand(
-                UUID.randomUUID(), roleId, "AUDITOR", "Auditor", null, java.util.Set.of()));
+            UpdateRoleCommand.builder()
+                .actorId(UUID.randomUUID())
+                .roleId(roleId)
+                .code("AUDITOR")
+                .name("Auditor")
+                .permissions(java.util.Set.of())
+                .build());
 
     assertThat(user.getCredentialVersion()).isEqualTo(2);
     verify(sessionRepository)

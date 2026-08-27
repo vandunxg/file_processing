@@ -118,10 +118,10 @@ class AuthenticationCommandServiceTest {
 
     LoginResult result = authenticationCommandService.login(loginCommand());
 
-    assertThat(result.getTokenType()).isEqualTo("Bearer");
-    assertThat(result.getAccessToken()).isEqualTo("access-token");
-    assertThat(result.getRefreshToken()).isEqualTo("raw-refresh-token");
-    assertThat(result.getUserId()).isEqualTo(user.getId());
+    assertThat(result.tokenType()).isEqualTo("Bearer");
+    assertThat(result.accessToken()).isEqualTo("access-token");
+    assertThat(result.refreshToken()).isEqualTo("raw-refresh-token");
+    assertThat(result.userId()).isEqualTo(user.getId());
     assertThat(user.getFailedLoginCount()).isZero();
 
     verify(sessionRepository).save(any(Session.class), anyString());
@@ -159,10 +159,10 @@ class AuthenticationCommandServiceTest {
 
     LoginResult result = authenticationCommandService.login(loginCommand());
 
-    assertThat(result.getStatus()).isEqualTo("PASSWORD_CHANGE_REQUIRED");
-    assertThat(result.getPasswordChangeToken()).isNotBlank();
-    assertThat(result.getAccessToken()).isNull();
-    assertThat(result.getRefreshToken()).isNull();
+    assertThat(result.status()).isEqualTo("PASSWORD_CHANGE_REQUIRED");
+    assertThat(result.passwordChangeToken()).isNotBlank();
+    assertThat(result.accessToken()).isNull();
+    assertThat(result.refreshToken()).isNull();
     verify(sessionRepository, never()).save(any(Session.class), anyString());
     verify(tokenIssuer, never()).issue(any(), any(), anyInt(), any(), any(), any());
     verify(tokenIssuer).issuePasswordChange(user.getId(), user.getCredentialVersion(), NOW);

@@ -26,8 +26,8 @@ public class SessionQueryService {
   @Transactional(readOnly = true)
   public List<SessionResult> list(ListSessionsQuery query) {
     Instant now = Instant.now(clock);
-    List<Session> sessions = sessionRepository.listActiveByUser(query.getUserId(), now);
-    log.debug("[list] userId={} count={}", query.getUserId(), sessions.size());
-    return sessionResultMapper.toResults(sessions, query.getCurrentSessionId());
+    List<Session> sessions = sessionRepository.listActiveByUser(query.userId(), now);
+    log.debug("[list] userId={} count={}", query.userId(), sessions.size());
+    return sessionResultMapper.toResults(sessions, query.currentSessionId());
   }
 }

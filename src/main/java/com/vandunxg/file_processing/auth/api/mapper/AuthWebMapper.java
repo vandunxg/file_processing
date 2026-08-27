@@ -64,6 +64,6 @@ public interface AuthWebMapper {
 
   @Mapping(
       target = "status",
-      expression = "java(result.getStatus() != null ? result.getStatus().name() : null)")
+      expression = "java(result.status() != null ? result.status().name() : null)")
   MeResponse toResponse(MeResult result);
 }

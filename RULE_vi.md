@@ -408,7 +408,17 @@ Quy ước bổ sung:
 - Enum constant và constant dùng `SCREAMING_SNAKE_CASE`.
 - Tránh viết tắt nếu đó không phải thuật ngữ domain đã thống nhất.
 - Method tập trung vào một mục đích. Ưu tiên early return thay vì lồng nhiều cấp.
-- Ưu tiên record cho command, query, result và value object bất biến.
+- Command, query, result và value object là **record**, không phải class kèm
+  Lombok accessor. Ngoại lệ duy nhất là type buộc phải extends một class: query
+  có phân trang extends `PagingQuery` (§12) và bị mutate để set default sort,
+  nên vẫn là class với `@Getter`/`@Setter`/`@SuperBuilder`.
+- Chỉ thêm Lombok `@Builder` cho record đó khi nó **được dựng bằng tay** ở đâu
+  đó — không phải chỉ qua mapper — **và** có từ hai component trở lên cùng
+  type. Khi đó gọi positional có thể đảo thứ tự mà vẫn compile: một bug âm
+  thầm ở production, và một assertion sai âm thầm trong test. Còn lại dùng
+  canonical constructor: không sinh builder, không có instance dựng nửa vời.
+  Call site mà biểu thức tham số đã tự nêu tên component, ví dụ
+  `new RoleActionCommand(actorId(), roleId)`, cũng không cần builder.
 - Không dùng `Optional` làm field, DTO field, entity field hoặc parameter.
 - Trả collection rỗng thay vì `null`.
 - Chỉ query có phân trang mới extends `PagingQuery`. Point lookup dùng record

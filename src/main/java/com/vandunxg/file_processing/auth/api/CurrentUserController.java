@@ -28,9 +28,7 @@ public class CurrentUserController {
   @GetMapping
   @PreAuthorize("hasPermission(null, 'user:self_read')")
   public Response<MeResponse> me(@AuthenticationPrincipal AuthenticatedUser principal) {
-    var result =
-        currentUserQueryService.me(
-            GetCurrentUserQuery.builder().userId(principal.userId()).build());
+    var result = currentUserQueryService.me(new GetCurrentUserQuery(principal.userId()));
     return Response.of(webMapper.toResponse(result));
   }
 }

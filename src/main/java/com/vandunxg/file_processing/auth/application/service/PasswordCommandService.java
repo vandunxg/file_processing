@@ -83,8 +83,8 @@ public class PasswordCommandService {
 
   @Transactional
   public void requestReset(ForgotPasswordCommand command) {
-    String normalizedIdentifier = User.normalize(command.getIdentifier());
-    String ipHash = hash(command.getIpAddress());
+    String normalizedIdentifier = User.normalize(command.identifier());
+    String ipHash = hash(command.ipAddress());
     if (!authThrottle.tryConsume(
         IP_THROTTLE_PREFIX + ipHash,
         authProperties.passwordReset().ipMaxAttemptsPerHour(),
@@ -130,7 +130,7 @@ public class PasswordCommandService {
   public void reset(ResetPasswordCommand command) {
     PasswordResetToken token =
         tokenRepository
-            .findByTokenHashForUpdate(hash(command.getToken()))
+            .findByTokenHashForUpdate(hash(command.token()))
             .orElseThrow(() -> rejected(AuthErrorCode.AUTH_PASSWORD_RESET_TOKEN_INVALID));
     Instant now = Instant.now(clock);
     if (!token.isUsableAt(now)) {
@@ -144,22 +144,22 @@ public class PasswordCommandService {
     if (!user.isActive() && !user.isPendingVerify()) {
       throw rejected(AuthErrorCode.AUTH_PASSWORD_RESET_TOKEN_INVALID);
     }
-    if (!Objects.equals(command.getNewPassword(), command.getConfirmPassword())) {
+    if (!Objects.equals(command.newPassword(), command.confirmPassword())) {
       throw rejected(AuthErrorCode.AUTH_PASSWORD_CONFIRMATION_MISMATCH);
     }
     if (!passwordPolicy
-        .validate(command.getNewPassword(), user.getNormalizedUsername(), user.getNormalizedEmail())
+        .validate(command.newPassword(), user.getNormalizedUsername(), user.getNormalizedEmail())
         .valid()) {
       throw rejected(AuthErrorCode.AUTH_PASSWORD_POLICY_VIOLATION);
     }
-    if (passwordHasher.matches(command.getNewPassword(), user.getPasswordHash())) {
+    if (passwordHasher.matches(command.newPassword(), user.getPasswordHash())) {
       throw rejected(AuthErrorCode.AUTH_PASSWORD_SAME_AS_CURRENT);
     }
 
     try {
       token.consume(now);
       tokenRepository.save(token);
-      user.resetPassword(passwordHasher.hash(command.getNewPassword()), now);
+      user.resetPassword(passwordHasher.hash(command.newPassword()), now);
     } catch (AuthRuleViolation violation) {
       throw AuthException.of(violation);
     }
@@ -170,43 +170,40 @@ public class PasswordCommandService {
 
     auditTrail.recordAfterCommit(
         audit(
-            user.getId(),
-            OperationType.PASSWORD_RESET_COMPLETED,
-            now,
-            hash(command.getIpAddress())));
+            user.getId(), OperationType.PASSWORD_RESET_COMPLETED, now, hash(command.ipAddress())));
   }
 
   private void change(ChangePasswordCommand command, boolean mustChangePassword) {
     User user =
         userRepository
-            .findById(command.getUserId())
+            .findById(command.userId())
             .orElseThrow(() -> new AuthException(AuthErrorCode.USER_NOT_FOUND));
     if (mustChangePassword && (!user.isActive() || !user.isMustChangePassword())) {
       throw new AuthException(AuthErrorCode.AUTH_PASSWORD_CHANGE_TOKEN_INVALID);
     }
-    if (!passwordHasher.matches(command.getCurrentPassword(), user.getPasswordHash())) {
+    if (!passwordHasher.matches(command.currentPassword(), user.getPasswordHash())) {
       throw new AuthException(AuthErrorCode.AUTH_CURRENT_PASSWORD_INVALID);
     }
-    if (!Objects.equals(command.getNewPassword(), command.getConfirmPassword())) {
+    if (!Objects.equals(command.newPassword(), command.confirmPassword())) {
       throw new AuthException(AuthErrorCode.AUTH_PASSWORD_CONFIRMATION_MISMATCH);
     }
     if (!passwordPolicy
-        .validate(command.getNewPassword(), user.getNormalizedUsername(), user.getNormalizedEmail())
+        .validate(command.newPassword(), user.getNormalizedUsername(), user.getNormalizedEmail())
         .valid()) {
       throw new AuthException(AuthErrorCode.AUTH_PASSWORD_POLICY_VIOLATION);
     }
-    if (passwordHasher.matches(command.getNewPassword(), user.getPasswordHash())) {
+    if (passwordHasher.matches(command.newPassword(), user.getPasswordHash())) {
       throw new AuthException(AuthErrorCode.AUTH_PASSWORD_REUSE_NOT_ALLOWED);
     }
 
     Instant now = Instant.now(clock);
-    user.changePassword(passwordHasher.hash(command.getNewPassword()), now);
+    user.changePassword(passwordHasher.hash(command.newPassword()), now);
     userRepository.save(user);
     sessionRepository.revokeAllForUser(user.getId(), RevocationReason.PASSWORD_CHANGED, now);
 
     invalidateCacheAfterCommit(user.getId());
     auditTrail.recordAfterCommit(
-        audit(user.getId(), OperationType.PASSWORD_CHANGED, now, hash(command.getIpAddress())));
+        audit(user.getId(), OperationType.PASSWORD_CHANGED, now, hash(command.ipAddress())));
   }
 
   private void invalidateCacheAfterCommit(UUID userId) {

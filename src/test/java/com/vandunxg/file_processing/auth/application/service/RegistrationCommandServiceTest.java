@@ -113,7 +113,7 @@ class RegistrationCommandServiceTest {
       givenThrottleAllows();
       givenNoExistingUsernameOrEmail();
       when(roleRepository.findByCode("OPERATOR")).thenReturn(Optional.of(operatorRole));
-      when(passwordHasher.hash(command.getPassword())).thenReturn("{bcrypt}hashed");
+      when(passwordHasher.hash(command.password())).thenReturn("{bcrypt}hashed");
       when(userRepository.save(any(User.class)))
           .thenAnswer(invocation -> invocation.getArgument(0));
       when(userRepository.assignRole(any(UserRole.class)))
@@ -126,15 +126,15 @@ class RegistrationCommandServiceTest {
 
       RegisterResult result = registrationCommandService.register(command);
 
-      assertThat(result.getStatus()).isEqualTo(UserStatus.PENDING_VERIFY);
-      assertThat(result.getUsername()).isEqualTo("operator1");
-      assertThat(result.getEmail()).isEqualTo("operator1@example.com");
-      assertThat(result.getDisplayName()).isEqualTo("Operator One");
-      assertThat(result.getId()).isNotNull();
+      assertThat(result.status()).isEqualTo(UserStatus.PENDING_VERIFY);
+      assertThat(result.username()).isEqualTo("operator1");
+      assertThat(result.email()).isEqualTo("operator1@example.com");
+      assertThat(result.displayName()).isEqualTo("Operator One");
+      assertThat(result.id()).isNotNull();
 
       ArgumentCaptor<UserRole> userRoleCaptor = ArgumentCaptor.forClass(UserRole.class);
       verify(userRepository).assignRole(userRoleCaptor.capture());
-      assertThat(userRoleCaptor.getValue().getUserId()).isEqualTo(result.getId());
+      assertThat(userRoleCaptor.getValue().getUserId()).isEqualTo(result.id());
       assertThat(userRoleCaptor.getValue().getRoleId()).isEqualTo(operatorRole.getId());
 
       ArgumentCaptor<EmailVerificationToken> tokenCaptor =
@@ -144,7 +144,7 @@ class RegistrationCommandServiceTest {
           HashUtils.sha256("raw-verification-token".getBytes(StandardCharsets.UTF_8));
       assertThat(tokenCaptor.getValue().getTokenHash()).isEqualTo(expectedHash);
       assertThat(tokenCaptor.getValue().getTokenHash()).isNotEqualTo("raw-verification-token");
-      assertThat(tokenCaptor.getValue().getUserId()).isEqualTo(result.getId());
+      assertThat(tokenCaptor.getValue().getUserId()).isEqualTo(result.id());
 
       verifyNoInteractions(auditLogEventPublisher, verificationEmailEventPublisher);
 
@@ -153,8 +153,8 @@ class RegistrationCommandServiceTest {
       ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
       verify(auditLogEventPublisher).publish(auditCaptor.capture());
       assertThat(auditCaptor.getValue().getOperation()).isEqualTo(OperationType.USER_REGISTERED);
-      assertThat(auditCaptor.getValue().getObjectId()).isEqualTo(result.getId());
-      assertThat(auditCaptor.getValue().getChangedBy()).isEqualTo(result.getId());
+      assertThat(auditCaptor.getValue().getObjectId()).isEqualTo(result.id());
+      assertThat(auditCaptor.getValue().getChangedBy()).isEqualTo(result.id());
 
       verify(verificationEmailEventPublisher)
           .publish(
@@ -202,7 +202,7 @@ class RegistrationCommandServiceTest {
       givenThrottleAllows();
       givenNoExistingUsernameOrEmail();
       when(roleRepository.findByCode("OPERATOR")).thenReturn(Optional.of(operatorRole()));
-      when(passwordHasher.hash(command.getPassword())).thenReturn("{bcrypt}hashed");
+      when(passwordHasher.hash(command.password())).thenReturn("{bcrypt}hashed");
       when(userRepository.save(any(User.class)))
           .thenThrow(
               new DataIntegrityViolationException(
@@ -224,7 +224,7 @@ class RegistrationCommandServiceTest {
       givenThrottleAllows();
       givenNoExistingUsernameOrEmail();
       when(roleRepository.findByCode("OPERATOR")).thenReturn(Optional.of(operatorRole()));
-      when(passwordHasher.hash(command.getPassword())).thenReturn("{bcrypt}hashed");
+      when(passwordHasher.hash(command.password())).thenReturn("{bcrypt}hashed");
       when(userRepository.save(any(User.class)))
           .thenThrow(
               new DataIntegrityViolationException(
@@ -246,7 +246,7 @@ class RegistrationCommandServiceTest {
       givenThrottleAllows();
       givenNoExistingUsernameOrEmail();
       when(roleRepository.findByCode("OPERATOR")).thenReturn(Optional.of(operatorRole()));
-      when(passwordHasher.hash(command.getPassword())).thenReturn("{bcrypt}hashed");
+      when(passwordHasher.hash(command.password())).thenReturn("{bcrypt}hashed");
       when(userRepository.save(any(User.class)))
           .thenThrow(new DataIntegrityViolationException("connection reset by peer"));
 
@@ -287,7 +287,7 @@ class RegistrationCommandServiceTest {
     void registerThrowsRateLimitedBeforeAnyOtherCheckWhenThrottleExceeded() {
       RegisterCommand command = validCommand();
       when(authThrottle.tryConsume(
-              eq("register:" + command.getIpAddress()), eq(5), any(Duration.class)))
+              eq("register:" + command.ipAddress()), eq(5), any(Duration.class)))
           .thenReturn(false);
 
       assertThatThrownBy(() -> registrationCommandService.register(command))
@@ -372,11 +372,10 @@ class RegistrationCommandServiceTest {
       TransactionSynchronizationManager.initSynchronization();
 
       RegisterResult result =
-          registrationCommandService.verifyEmail(
-              VerifyEmailCommand.builder().token(RAW_TOKEN).build());
+          registrationCommandService.verifyEmail(new VerifyEmailCommand(RAW_TOKEN));
 
-      assertThat(result.getId()).isEqualTo(userId);
-      assertThat(result.getStatus()).isEqualTo(UserStatus.ACTIVE);
+      assertThat(result.id()).isEqualTo(userId);
+      assertThat(result.status()).isEqualTo(UserStatus.ACTIVE);
       assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
       assertThat(token.getUsedAt()).isEqualTo(NOW);
 
@@ -393,9 +392,7 @@ class RegistrationCommandServiceTest {
       // second call with the same raw token must fail: the mock returns the same
       // (now-consumed) token instance, so EmailVerificationToken#consume rejects it.
       assertThatThrownBy(
-              () ->
-                  registrationCommandService.verifyEmail(
-                      VerifyEmailCommand.builder().token(RAW_TOKEN).build()))
+              () -> registrationCommandService.verifyEmail(new VerifyEmailCommand(RAW_TOKEN)))
           .isInstanceOf(AuthException.class)
           .extracting("error")
           .isEqualTo(AuthErrorCode.AUTH_EMAIL_VERIFICATION_TOKEN_INVALID);
@@ -406,9 +403,7 @@ class RegistrationCommandServiceTest {
       when(tokenRepository.findByTokenHashForUpdate(TOKEN_HASH)).thenReturn(Optional.empty());
 
       assertThatThrownBy(
-              () ->
-                  registrationCommandService.verifyEmail(
-                      VerifyEmailCommand.builder().token(RAW_TOKEN).build()))
+              () -> registrationCommandService.verifyEmail(new VerifyEmailCommand(RAW_TOKEN)))
           .isInstanceOf(AuthException.class)
           .extracting("error")
           .isEqualTo(AuthErrorCode.AUTH_EMAIL_VERIFICATION_TOKEN_INVALID);
@@ -423,9 +418,7 @@ class RegistrationCommandServiceTest {
           .thenReturn(Optional.of(expiredToken(UUID.randomUUID())));
 
       assertThatThrownBy(
-              () ->
-                  registrationCommandService.verifyEmail(
-                      VerifyEmailCommand.builder().token(RAW_TOKEN).build()))
+              () -> registrationCommandService.verifyEmail(new VerifyEmailCommand(RAW_TOKEN)))
           .isInstanceOf(AuthException.class)
           .extracting("error")
           .isEqualTo(AuthErrorCode.AUTH_EMAIL_VERIFICATION_TOKEN_INVALID);
@@ -440,9 +433,7 @@ class RegistrationCommandServiceTest {
           .thenReturn(Optional.of(usedToken(UUID.randomUUID())));
 
       assertThatThrownBy(
-              () ->
-                  registrationCommandService.verifyEmail(
-                      VerifyEmailCommand.builder().token(RAW_TOKEN).build()))
+              () -> registrationCommandService.verifyEmail(new VerifyEmailCommand(RAW_TOKEN)))
           .isInstanceOf(AuthException.class)
           .extracting("error")
           .isEqualTo(AuthErrorCode.AUTH_EMAIL_VERIFICATION_TOKEN_INVALID);
@@ -563,8 +554,7 @@ class RegistrationCommandServiceTest {
     @Test
     void resendThrowsRateLimitedBeforeIdentifierLookupWhenThrottleExceeded() {
       ResendVerificationEmailCommand command = command("operator1@example.com");
-      when(authThrottle.tryConsume(
-              eq("resend:" + command.getIpAddress()), eq(5), any(Duration.class)))
+      when(authThrottle.tryConsume(eq("resend:" + command.ipAddress()), eq(5), any(Duration.class)))
           .thenReturn(false);
 
       assertThatThrownBy(() -> registrationCommandService.resendVerificationEmail(command))
