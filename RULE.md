@@ -16,6 +16,12 @@ When rules conflict, use this precedence:
 Do not silently reinterpret a rule. Raise a change request when a rule no
 longer fits the codebase.
 
+**Architecture target: Pragmatic Modular DDD** — a modular monolith packaged by
+business module with `api` / `application` / `domain` / `infrastructure` layers.
+The Hexagonal `adapter/*` and `port/*` packages still present in
+`src/main/java` are legacy implementation pending migration, not guidance. See
+§4 before writing or reviewing any code.
+
 ---
 
 ## 1. Rule strength
@@ -90,7 +96,51 @@ unless a verified compatibility or security reason requires it.
 
 ---
 
-## 4. Module structure and dependency direction
+## 4. Architecture: Pragmatic Modular DDD
+
+The target architecture of this repository is:
+
+```text
+Modular Monolith
+        +
+Package by business module (bounded context)
+        +
+Pragmatic DDD
+```
+
+It is **not** Hexagonal / ports-and-adapters and **not** strict Clean
+Architecture.
+
+<!-- prettier-ignore -->
+> [!IMPORTANT]
+> **Legacy versus target.** Parts of `src/main/java` still use the legacy
+> Hexagonal layout: `adapter/in`, `adapter/out`, `application/port/in`,
+> `application/port/out`, `*UseCase`, `*RepositoryPort`, `*PersistenceAdapter`.
+> That code is **legacy implementation pending migration**, not architecture
+> guidance. New code and refactors **MUST** follow this section, including
+> inside modules that still contain the legacy layout. Do not add new
+> Hexagonal ceremony anywhere.
+
+Mental model for every change:
+
+```text
+api             "What does the caller want?"
+      ↓
+application     "What workflow must happen?"
+      ↓
+domain          "What does the business allow?"
+      ↑
+infrastructure  "How is the technical capability implemented?"
+```
+
+Architecture complexity **MUST** come from business complexity, never from a
+template. Every abstraction must answer one question:
+
+> Which boundary or business problem makes this abstraction necessary?
+
+If there is no answer, do not create the abstraction.
+
+### 4.1 Module layout
 
 Business modules live under:
 
@@ -98,65 +148,218 @@ Business modules live under:
 src/main/java/com/vandunxg/file_processing/<module>/
 ```
 
-Use this layout as a dependency boundary, not as a mandatory list of folders.
-Create only the packages and types the module actually needs.
+A module has four semantic layers. This is a dependency boundary, not a
+mandatory folder template. Create only the packages and types the module
+actually needs.
 
 ```text
 <module>/
-├── adapter/
-│   ├── in/web/
-│   │   ├── <Xxx>Controller.java
-│   │   ├── dto/request/
-│   │   ├── dto/response/
-│   │   └── mapper/
-│   └── out/
-│       ├── persistence/
-│       │   ├── entity/
-│       │   ├── mapper/
-│       │   └── <Xxx>PersistenceAdapter.java
-│       └── client/
-├── application/
-│   ├── port/in/
-│   ├── port/out/
-│   ├── service/
+├── api/                          # HTTP contract of this module
+│   ├── <Xxx>Controller.java
+│   ├── dto/request/
+│   ├── dto/response/
+│   └── mapper/
+├── application/                  # use-case orchestration, transaction boundary
+│   ├── <Capability>CommandService.java
+│   ├── <Capability>QueryService.java
 │   ├── command/
 │   ├── query/
 │   ├── result/
 │   └── exception/
-├── domain/
+├── domain/                       # aggregates, invariants, behavior, repositories
 │   ├── model/
+│   ├── <Aggregate>Repository.java
+│   ├── policy/
+│   ├── event/
 │   ├── service/
 │   └── exception/
-└── configuration/
+└── infrastructure/               # technology implementations
+    ├── persistence/
+    ├── cache/
+    ├── messaging/
+    ├── storage/
+    ├── email/
+    ├── security/
+    ├── client/
+    ├── scheduling/
+    ├── bootstrap/
+    └── config/
 ```
 
-### 4.1 Dependency rules
+Rules:
 
-- `domain` **MUST NOT** import Spring, JPA, Jackson, servlet, HTTP, or adapter
-  classes.
-- `application` **MAY** use Spring transaction and component annotations, but
-  **MUST NOT** depend on controllers, JPA entities, Spring Data repositories,
-  HTTP clients, or other adapters.
-- `adapter` implements inbound and outbound boundaries and may depend on
-  `application` and `domain`.
-- `configuration` wires infrastructure and cross-cutting beans. Keep it thin.
-- One business module **MUST NOT** reach into another module's adapter package.
-  Communicate through an application port or an explicitly shared domain API.
+- **MUST NOT** create `adapter/in`, `adapter/out`, `port/in`, or `port/out`.
+- **MUST NOT** create an empty package or a placeholder type to match a
+  diagram.
+- `infrastructure` is divided by **technology or capability**
+  (`persistence`, `cache`, `messaging`, `storage`), never by direction
+  (`in`, `out`).
+- Non-HTTP technical entry points — schedulers, AMQP listeners, startup
+  bootstrap — live in `infrastructure/<technology>/` and call an application
+  service. They are infrastructure, not a separate inbound layer.
+- `infrastructure/config` wires beans and cross-cutting concerns. Keep it thin
+  and free of business rules.
 
-### 4.2 Interfaces without ceremony
+### 4.2 Dependency rules
 
-Create an interface when it protects a real boundary:
+```text
+api ──────────────► application ──────────────► domain
+                                                   ▲
+infrastructure ────────────────────────────────────┘
+        └─────────► application
+```
 
-- an inbound use case is called by one or more inbound adapters;
-- an outbound dependency can have multiple implementations or must be replaced
-  in tests;
-- a module boundary must be kept stable.
+Allowed:
 
-Do not create one interface per class or one use-case interface per trivial
-method. Group cohesive operations when that keeps the API understandable.
+| From             | To                                                        |
+|------------------|-----------------------------------------------------------|
+| `api`            | `application`                                             |
+| `api`            | `domain` types, when response mapping genuinely needs them |
+| `application`    | `domain`                                                  |
+| `infrastructure` | `application`, `domain`                                   |
 
-Do not create empty packages or placeholder classes to match the reference
-shape.
+Forbidden (**MUST NOT**):
+
+- `domain` → `api`, `application`, or `infrastructure`.
+- `application` → `api`.
+- `application` → JPA entities, Spring Data repositories, HTTP clients, broker
+  clients, object-storage clients, or any other infrastructure type.
+- module A → module B's `infrastructure`, or module B's persistence
+  implementation, or module B's persistence model.
+- `domain` importing Spring, Jackson, servlet, or HTTP types. Direct
+  `jakarta.persistence` mapping on an aggregate is allowed only under §6.4.
+
+`application` **MAY** use Spring transaction and component annotations.
+
+### 4.3 Complexity levels
+
+Choose the thinnest level that fits the problem. Do not promote a level so the
+architecture looks enterprise.
+
+**Level 1 — CRUD or thin technical capability**
+
+```text
+api → application → infrastructure
+```
+
+`domain` appears only when there is real domain behavior to protect.
+
+**Level 2 — core business capability (default)**
+
+```text
+api → application → domain, implemented by infrastructure
+```
+
+Has an aggregate, business invariants, one repository per aggregate root, and
+value objects where they carry semantic value.
+
+**Level 3 — complex workflow**
+
+Add only what the workflow actually needs: domain events, policies, domain
+services, gateways, outbox, specifications, process managers, sagas.
+
+A Level 1 capability **MUST NOT** be built as Level 3.
+
+### 4.4 Cross-module boundaries
+
+A module owns its data and its behavior. Another module **MUST NOT** read or
+write that data directly.
+
+Forbidden:
+
+```text
+fileimport ──► auth Spring Data repository
+fileimport ──► auth persistence model
+```
+
+Preferred:
+
+```text
+fileimport application ──► auth application capability
+```
+
+or, when asynchronous decoupling has real value:
+
+```text
+fileimport ──► domain / application event ──► auth
+```
+
+Do not introduce a cross-module interface when calling the other module's
+application service directly is already sufficient.
+
+### 4.5 Interfaces without ceremony
+
+**A concrete application service is the default.** Controllers, listeners, and
+schedulers call the concrete class.
+
+Create an interface only when a real boundary exists:
+
+- an aggregate repository contract owned by `domain` and implemented in
+  `infrastructure`;
+- an external service, storage provider, email provider, distributed cache,
+  event publisher, or cryptographic provider;
+- more than one implementation actually exists;
+- a deliberately stable contract between modules, with a stated reason.
+
+Do **not** create an interface because of "DDD", "Clean Architecture",
+"Hexagonal", "easier to mock", or "we may swap the implementation later".
+Spring beans are mockable without an interface.
+
+**MUST NOT** create:
+
+- a `<Capability>UseCase` interface whose only caller is one controller;
+- one interface per class, or one interface per trivial method.
+
+Group cohesive operations into one contract when that keeps the API
+understandable.
+
+### 4.6 Name the meaning, not the pattern
+
+`Port` is **not** a default suffix. Use the business or capability name:
+
+| Do not use             | Use             |
+|------------------------|-----------------|
+| `UserRepositoryPort`   | `UserRepository` |
+| `EmailSenderPort`      | `EmailSender`    |
+| `JwtIssuerPort`        | `TokenIssuer`    |
+| `StoragePort`          | `FileStorage`    |
+
+`Adapter` is **not** a default suffix. Use the technology or capability:
+
+| Do not use                      | Use                    |
+|---------------------------------|------------------------|
+| `UserPersistenceAdapter`        | `JpaUserRepository`    |
+| `BcryptPasswordHasherAdapter`   | `BcryptPasswordHasher` |
+| `RedisAuthThrottleAdapter`      | `RedisAuthThrottle`    |
+| `MailServiceEmailSenderAdapter` | `SmtpEmailSender`      |
+| `R2ObjectStorageAdapter`        | `R2FileStorage`        |
+
+A class name states what the implementation **is**, not which pattern it
+follows.
+
+### 4.7 Command, Query, and Result without ceremony
+
+A use case is **not** required to have a `Command`, `Query`, and `Result`
+triple. Passing the value or the request record straight through is correct
+when the boundary is that simple.
+
+Create an application `Command`, `Query`, or `Result` when:
+
+- more than one caller — controller, listener, scheduler — invokes the same use
+  case;
+- the HTTP contract must be able to evolve independently of the use case;
+- the input carries business meaning of its own, such as normalization or a
+  value object;
+- the workflow has enough steps that a named input clarifies it;
+- the type is reused outside HTTP.
+
+**MUST NOT** apply CQRS ceremony to ordinary CRUD. A `Command` wrapping one
+`UUID` adds a file and removes nothing.
+
+Splitting a module into `<Capability>CommandService` and
+`<Capability>QueryService` is the default for a module with meaningful read and
+write paths, and optional for a small one. It is a code-organisation choice, not
+a CQRS adoption.
 
 ---
 
@@ -164,26 +367,44 @@ shape.
 
 Use names that reveal business intent.
 
-| Concept                | Convention                                |
-|------------------------|-------------------------------------------|
-| Domain aggregate       | `User`, `Role`, `ProcessingJob`           |
-| Domain value object    | `EmailAddress`, `FileChecksum`            |
-| Domain enum            | `UserStatus`, `JobStatus`                 |
-| Inbound port           | `<Capability>UseCase`                     |
-| Outbound port          | `<Xxx>RepositoryPort`, `<Xxx>StoragePort` |
-| Application service    | `<Capability>Service`                     |
-| Write input            | `<Action>Command`                         |
-| Read input             | `<Action>Query`                           |
-| Application output     | `<Action>Result`                          |
-| Controller             | `<Xxx>Controller`                         |
-| Request DTO            | `<Xxx>Request`                            |
-| Response DTO           | `<Xxx>Response`                           |
-| JPA entity             | `<Xxx>Entity`                             |
-| Spring Data repository | `Jpa<Xxx>Repository`                      |
-| Persistence adapter    | `<Xxx>PersistenceAdapter`                 |
-| Configuration          | `<Xxx>Configuration`                      |
-| Unit test              | `<ClassName>Test`                         |
-| Integration test       | `<ClassName>IT`                           |
+| Concept                              | Convention                              |
+|--------------------------------------|-----------------------------------------|
+| Domain aggregate                     | `User`, `Role`, `ProcessingJob`         |
+| Domain value object                  | `EmailAddress`, `FileChecksum`          |
+| Domain enum                          | `UserStatus`, `JobStatus`               |
+| Aggregate repository contract        | `<Aggregate>Repository`                 |
+| Domain policy                        | `<Rule>Policy`                          |
+| Domain event                         | `<Aggregate><PastTenseFact>`            |
+| Application write service            | `<Capability>CommandService`            |
+| Application read service             | `<Capability>QueryService`              |
+| Application service, when one suffices | `<Capability>Service`                 |
+| External capability contract         | `EmailSender`, `FileStorage`, `TokenIssuer` |
+| Write input                          | `<Action>Command`                       |
+| Read input                           | `<Action>Query`                         |
+| Application output                   | `<Action>Result`                        |
+| Controller                           | `<Xxx>Controller`                       |
+| Request DTO                          | `<Xxx>Request`                          |
+| Response DTO                         | `<Xxx>Response`                         |
+| Separate persistence model           | `<Xxx>Entity`                           |
+| JPA repository of the domain contract | `Jpa<Aggregate>Repository`             |
+| Spring Data interface over a separate persistence model | `<Xxx>EntityRepository` |
+| Spring Data custom fragment          | `<Xxx>EntityRepositoryCustom`           |
+| Other infrastructure implementation  | `<Technology><Capability>`              |
+| Configuration                        | `<Xxx>Configuration`                    |
+| Unit test                            | `<ClassName>Test`                       |
+| Integration test                     | `<ClassName>IT`                         |
+
+Repository naming, in detail:
+
+- `domain/<Aggregate>Repository` is the contract. It speaks in domain types.
+- `Jpa<Aggregate>Repository` in `infrastructure/persistence` is **always** the
+  JPA implementation of that contract. Under §6.4 it is usually a Spring Data
+  interface that extends both `JpaRepository<...>` and the domain contract, so
+  no extra class exists. When a separate persistence model is justified, it is
+  a `@Repository` class that delegates to `<Xxx>EntityRepository` and maps.
+- `<Xxx>EntityRepository` is the low-level Spring Data interface over a
+  separate persistence model. It **MUST NOT** be injected outside
+  `infrastructure/persistence`.
 
 Additional conventions:
 
@@ -202,8 +423,9 @@ Additional conventions:
 
 ## 6. Domain model
 
-Domain objects express business state and behavior. They are not persistence or
-HTTP models.
+Domain objects express business state and behavior. They answer *what the
+business allows*. They are never HTTP models. Whether they are also the
+persistence model is decided by §6.4.
 
 ### 6.1 Construction and invariants
 
@@ -271,6 +493,70 @@ standard response contract.
 - Do not call `Instant.now()` directly in business logic that requires
   deterministic tests.
 - Convert to a user time zone only at the API or presentation boundary.
+
+### 6.3 Repository per aggregate root
+
+A repository contract belongs to the **aggregate root**, and only to the
+aggregate root. It lives in `domain` and is named `<Aggregate>Repository`.
+
+```text
+domain
+├── Order              # aggregate root
+├── OrderItem          # inside the Order aggregate
+├── ShippingAddress    # inside the Order aggregate
+└── OrderRepository    # the only repository for this aggregate
+```
+
+- **MUST NOT** create a repository for an entity or value object that lives
+  inside another aggregate — no `OrderItemRepository`, no
+  `ShippingAddressRepository`.
+- The contract speaks in domain types and domain language. It **MUST NOT**
+  expose `Pageable`, `Specification`, `EntityManager`, JPA entities, or any
+  other Spring Data type.
+- Load and save the aggregate as a whole. Do not let callers mutate an inner
+  entity through a side door.
+- A read model that spans aggregates is a **query concern**, not a repository:
+  put it behind an application query service and keep the SQL or projection in
+  `infrastructure/persistence`.
+
+### 6.4 Pragmatic JPA mapping
+
+This project does **not** require a domain object to be separated from its JPA
+mapping.
+
+When the domain model and the persistence model are effectively the same shape,
+and JPA annotations do not distort domain behavior, an aggregate **MAY** carry
+`jakarta.persistence` mapping directly:
+
+```text
+domain/model/Order.java   with @Entity
+```
+
+In that case `Jpa<Aggregate>Repository` is usually a single Spring Data
+interface that extends both `JpaRepository<...>` and the domain contract. No
+separate model and no mapper exist.
+
+Split into `Order` + `OrderEntity` + a mapper only for a real reason:
+
+- a legacy or externally-owned schema;
+- a persistence model that differs meaningfully from the domain model;
+- more than one storage model for the same aggregate;
+- a complex aggregate whose persistence needs distort the domain;
+- a specialised read or query model.
+
+**MUST NOT** create three objects and two mappers for a simple CRUD model with
+no such reason.
+
+Two limits always apply:
+
+- HTTP and Jackson concerns **MUST NOT** leak into `domain`. No
+  `@JsonProperty`, `@JsonIgnore`, servlet, or Spring Web types on an aggregate.
+- A JPA-mapped aggregate still preserves its invariants (§6.1). A public
+  no-argument constructor and setters required by Hibernate are `protected` or
+  package-private, and mutation still happens through business methods.
+
+Record the choice in the pull-request description when a module splits the
+models.
 
 ---
 
@@ -374,9 +660,9 @@ Do not use dotted keys when the common exception handler resolves by
   itself enforces the rule.
 - Application services translate a domain violation or application failure
   into a module-specific exception that extends `ResponseException`.
-- Adapters translate infrastructure-specific exceptions into a meaningful
-  application/module error when callers can act on it. Preserve the original
-  cause.
+- Infrastructure implementations translate technology-specific exceptions into
+  a meaningful application/module error when callers can act on it. Preserve the
+  original cause.
 - Controllers normally do not create or translate business exceptions.
 - Do not throw `IllegalArgumentException`, `RuntimeException`, or
   `NullPointerException` to signal a business failure.
@@ -425,7 +711,7 @@ Classes that log use SLF4J, normally through Lombok:
 
 @Slf4j(topic = "ROLE-SERVICE")
 @Service
-public class RoleService implements RoleManagementUseCase {
+public class RoleCommandService {
   // ...
 }
 ```
@@ -497,7 +783,8 @@ multiple fields or transformation rules.
 
 Use a dedicated mapper when:
 
-- mapping between domain and JPA entity;
+- a separate persistence model exists and the aggregate must be mapped to it
+  (see §6.4 — most aggregates do not need this);
 - mapping has multiple fields, nested values, conversions, or ignored fields;
 - the same mapping is reused;
 - API and application models must evolve independently.
@@ -586,13 +873,19 @@ app:
 
 ## 11. Persistence and transactions
 
-Persistence adapters translate between the domain and database models.
+`infrastructure/persistence` owns every database concern of a module: the JPA
+mapping, the Spring Data interfaces, and the implementation of the domain
+repository contracts.
 
 ### 11.1 Entity rules
 
-- Every JPA entity is separate from the domain model.
-- Every JPA entity extends `AuditableEntity` when the common base applies.
-- Every JPA entity **MUST** inherit or declare soft-delete state as
+Read §6.4 first to decide whether the module needs a separate persistence
+model at all. The rules below apply to whichever class carries the JPA mapping.
+
+- A separate persistence model is created only for a reason listed in §6.4.
+- Every JPA-mapped class extends `AuditableEntity` when the common base
+  applies.
+- Every JPA-mapped class **MUST** inherit or declare soft-delete state as
   `Instant deletedAt`, mapped to the SQL column `deleted_at`.
 - If `AuditableEntity` already declares `deletedAt`, do not redeclare it in the
   child entity.
@@ -654,7 +947,9 @@ CREATE INDEX roles_deleted_at_idx
 
 ### 11.4 Transaction boundaries
 
-- Put transaction boundaries on application service methods, not controllers.
+- Put transaction boundaries on application service methods, not controllers
+  and not domain objects. `domain` never opens, commits, or rolls back a
+  transaction.
 - Use `@Transactional(readOnly = true)` for read-only use cases.
 - Keep transactions short.
 - Do not perform HTTP, email, object-storage, or message-broker calls inside a
@@ -680,10 +975,11 @@ CREATE INDEX roles_deleted_at_idx
 
 ## 12. API layer
 
-Controllers adapt HTTP to an application use case.
+Controllers translate HTTP into an application use case. They live in
+`<module>/api` and call a concrete application service directly (§4.5).
 
-- Controllers contain request validation, mapping, use-case invocation, and
-  response construction only.
+- Controllers contain request validation, mapping, application-service
+  invocation, and response construction only.
 - Business decisions and transaction boundaries do not belong in controllers.
 - Request and response contracts use DTOs, never JPA entities or domain
   aggregates.
@@ -710,12 +1006,12 @@ Example:
 @RequiredArgsConstructor
 public class RoleController {
 
-  private final RoleManagementUseCase roleManagementUseCase;
+  private final RoleCommandService roleCommandService;
   private final RoleWebMapper roleWebMapper;
 
   @DeleteMapping("/{roleId}")
   public Response<Void> delete(@PathVariable UUID roleId) {
-    roleManagementUseCase.delete(roleId);
+    roleCommandService.delete(roleId);
     return Response.noContent();
   }
 }
@@ -922,35 +1218,52 @@ is documented:
 1. Business logic or transactions in a controller.
 2. An interface for every class or one interface per trivial method.
 3. Empty packages or placeholder types created only to match a diagram.
-4. Domain code importing Spring, JPA, Jackson, servlet, or HTTP types.
-5. A domain exception carrying HTTP status or response-format details.
-6. A custom controller advice duplicating the common exception handler.
-7. Business failures represented by bare runtime exceptions.
-8. Logging before every throw or logging the same exception at every layer.
-9. Swallowing an exception and returning `null` or a sentinel value.
-10. ModelMapper, BeanUtils, Dozer, Orika, or reflection-based field copying.
-11. Replacing a managed JPA entity instead of updating it intentionally.
-12. Field injection with `@Autowired`.
-13. `System.out.println`, `printStackTrace`, or string-concatenated logs.
-14. Logging tokens, passwords, secrets, full PII, request bodies, or file data.
-15. Hard-coded user-facing messages outside i18n.
-16. Error enum names without a module prefix.
-17. Duplicate numeric business error codes.
-18. Missing error keys in either English or Vietnamese message files.
-19. Returning a JPA entity or domain aggregate from a controller.
-20. Editing an applied Flyway migration.
-21. `ddl-auto` set to `create`, `update`, or `create-drop` outside disposable
+4. New `adapter/in`, `adapter/out`, `port/in`, or `port/out` packages.
+5. A new `<Capability>UseCase` interface, `*RepositoryPort`, `*StoragePort`, or
+   `*PersistenceAdapter` type.
+6. A `Port` or `Adapter` suffix used as a default naming convention.
+7. A repository for an entity or value object that lives inside another
+   aggregate.
+8. A Spring Data type (`Pageable`, `Specification`, `EntityManager`, an entity)
+   exposed on a `domain` repository contract.
+9. An application service depending on a JPA entity, Spring Data repository,
+   HTTP client, broker client, or object-storage client.
+10. A module reading or writing another module's persistence model or
+    persistence implementation.
+11. A separate persistence model plus mappers for a simple CRUD aggregate with
+    no reason from §6.4.
+12. `Command`, `Query`, or `Result` types created for a trivial single-value
+    boundary, against §4.7.
+13. Domain code importing Spring, Jackson, servlet, or HTTP types, or JPA
+    mapping added to an aggregate outside the conditions in §6.4.
+14. A domain exception carrying HTTP status or response-format details.
+15. A custom controller advice duplicating the common exception handler.
+16. Business failures represented by bare runtime exceptions.
+17. Logging before every throw or logging the same exception at every layer.
+18. Swallowing an exception and returning `null` or a sentinel value.
+19. ModelMapper, BeanUtils, Dozer, Orika, or reflection-based field copying.
+20. Replacing a managed JPA entity instead of updating it intentionally.
+21. Field injection with `@Autowired`.
+22. `System.out.println`, `printStackTrace`, or string-concatenated logs.
+23. Logging tokens, passwords, secrets, full PII, request bodies, or file data.
+24. Hard-coded user-facing messages outside i18n.
+25. Error enum names without a module prefix.
+26. Duplicate numeric business error codes.
+27. Missing error keys in either English or Vietnamese message files.
+28. Returning a JPA entity or domain aggregate from a controller.
+29. Editing an applied Flyway migration.
+30. `ddl-auto` set to `create`, `update`, or `create-drop` outside disposable
     local experiments.
-22. A JPA entity without `deletedAt` and `deleted_at`.
-23. Normal application reads that do not exclude soft-deleted rows.
-24. Calling repository hard-delete methods from an application service.
-25. `EAGER` associations used to hide an N+1 or session-boundary problem.
-26. Network or object-storage calls inside a long database transaction.
-27. Unbounded page size, executor, queue, retry, or file memory load.
-28. `MultipartFile.getBytes()`, `Files.readAllBytes()`, or equivalent on
+31. A JPA entity without `deletedAt` and `deleted_at`.
+32. Normal application reads that do not exclude soft-deleted rows.
+33. Calling repository hard-delete methods from an application service.
+34. `EAGER` associations used to hide an N+1 or session-boundary problem.
+35. Network or object-storage calls inside a long database transaction.
+36. Unbounded page size, executor, queue, retry, or file memory load.
+37. `MultipartFile.getBytes()`, `Files.readAllBytes()`, or equivalent on
     unbounded content.
-29. Secrets with insecure configuration defaults.
-30. New frameworks or infrastructure added without an approved requirement.
+38. Secrets with insecure configuration defaults.
+39. New frameworks or infrastructure added without an approved requirement.
 
 ---
 
@@ -958,8 +1271,14 @@ is documented:
 
 - [ ] Relevant source, tests, `AGENTS.md`, and `LIBRARY.md` were inspected.
 - [ ] The change uses the smallest design that preserves real boundaries.
-- [ ] Domain code has no Spring, JPA, Jackson, servlet, or HTTP dependency.
-- [ ] New interfaces represent real inbound or outbound boundaries.
+- [ ] Domain code has no Spring, Jackson, servlet, or HTTP dependency; any
+  JPA mapping on an aggregate meets §6.4.
+- [ ] New interfaces protect a real boundary listed in §4.5.
+- [ ] No new `adapter/in|out`, `port/in|out`, `*UseCase`, `*RepositoryPort`,
+  or `*PersistenceAdapter` was introduced.
+- [ ] Dependency direction follows §4.2, and no module reaches into another
+  module's infrastructure.
+- [ ] Each aggregate root has at most one repository contract in `domain`.
 - [ ] Every new entity inherits or declares `deletedAt` mapped to `deleted_at`.
 - [ ] Business reads use `deleted_at IS NULL` unless explicitly reading the trash.
 - [ ] Live-data uniqueness uses an appropriate partial unique index.

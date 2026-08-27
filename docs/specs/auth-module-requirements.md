@@ -1,7 +1,7 @@
 # Đặc tả yêu cầu mô-đun xác thực và phân quyền (V2)
 
 Tài liệu này định nghĩa đầy đủ yêu cầu nghiệp vụ, yêu cầu chức năng, kiến trúc
-Hexagonal, hợp đồng API, mô hình dữ liệu, yêu cầu bảo mật, use case, tiêu chí
+module, hợp đồng API, mô hình dữ liệu, yêu cầu bảo mật, use case, tiêu chí
 nghiệm thu, và chiến lược kiểm thử cho mô-đun xác thực của Customer CSV File
 Processing Service.
 
@@ -39,7 +39,7 @@ Mô-đun cung cấp:
 | Phiên bản         | 2.0                                                         |
 | Trạng thái        | Sẵn sàng triển khai                                         |
 | Mô-đun            | Authentication and Authorization                            |
-| Kiến trúc         | Hexagonal Architecture trong modular monolith               |
+| Kiến trúc         | Pragmatic Modular DDD trong Modular Monolith                |
 | Nền tảng          | Java 21, Spring Boot 4.1.x                                  |
 | Cơ sở dữ liệu     | PostgreSQL 16+                                              |
 | Bộ nhớ phân tán   | Redis 7+ (qua `common-cache`)                               |
@@ -68,8 +68,9 @@ Mô-đun đạt các mục tiêu sau:
 - Kiểm tra quyền sở hữu tài nguyên ở tầng application và truy vấn dữ liệu.
 - Ghi audit cho các hành động bảo mật quan trọng.
 - Không làm lộ mật khẩu, token, khóa ký, hoặc thông tin nhạy cảm trong log.
-- Cho phép thay đổi adapter JWT, persistence, cache, email, hoặc password
-  encoder mà không thay đổi domain và use case.
+- Tách implementation JWT, persistence, cache, email và password encoder khỏi
+  business workflow khi boundary đó thực sự cần thay thế hoặc cô lập, để có thể
+  đổi implementation mà không thay đổi domain và use case.
 
 ## 3. Quan hệ với tài liệu dự án
 
@@ -579,7 +580,7 @@ Client gửi lại giá trị `fps_csrf` qua header `X-CSRF-Token` khi refresh.
 
 ### 9.6 Xác thực access token
 
-JWT adapter kiểm tra:
+Bước xác thực access token kiểm tra:
 
 1. Header `alg = RS256`.
 2. `kid` tồn tại trong key ring được tin cậy.
@@ -609,63 +610,107 @@ phải bị từ chối.
 - Redis unavailable → fallback DB theo policy fail-closed.
 - Không chấp nhận token khi không xác minh được trạng thái bảo mật của user.
 
-## 10. Kiến trúc Hexagonal
+## 10. Kiến trúc module (Pragmatic Modular DDD)
+
+<!-- prettier-ignore -->
+> [!IMPORTANT]
+> Kiến trúc mục tiêu của module `auth` là **Pragmatic Modular DDD**, được định
+> nghĩa normative tại [`RULE.md` §4](../../RULE.md). Đây **không phải** Hexagonal
+> / ports-and-adapters.
+>
+> Package `auth/adapter/*` và `auth/application/port/*` hiện có trong
+> `src/main/java` là **legacy implementation đang chờ migrate**. Không mở rộng
+> thêm cấu trúc đó. Mọi requirement dưới đây mô tả cấu trúc **target**.
+>
+> Việc đổi cấu trúc và tên class **không** làm thay đổi bất kỳ hợp đồng
+> authentication, authorization, token, session hoặc audit nào trong tài liệu
+> này.
 
 ### 10.1 Nguyên tắc phụ thuộc
 
-- Domain không import Spring, JPA, Jackson, Servlet, hoặc JWT library.
-- Application phụ thuộc domain và định nghĩa inbound/outbound port.
-- Inbound adapter (web/security) gọi inbound port.
-- Outbound adapter triển khai outbound port.
-- Adapter có thể phụ thuộc Spring và library hạ tầng.
-- Entity JPA khác class với domain model; mapping qua MapStruct.
+- `domain` không import Spring, Jackson, Servlet hoặc JWT library. Mapping
+  `jakarta.persistence` trực tiếp trên aggregate chỉ được phép theo
+  `RULE.md` §6.4.
+- `application` phụ thuộc `domain`, orchestrate use case, và giữ transaction
+  boundary.
+- `api` chứa REST controller và DTO; controller gọi trực tiếp concrete
+  application service.
+- `infrastructure` triển khai các contract của `domain` và `application`, và
+  chứa mọi thứ thuộc công nghệ: persistence, JWT, Redis, email, Spring Security
+  wiring, scheduling, bootstrap.
+- `infrastructure` chia theo công nghệ hoặc capability, không chia theo hướng
+  `in` / `out`.
 - Controller không chứa business rule.
-- Security filter không thực hiện user management use case.
+- Security filter không thực hiện user-management use case.
 - Transaction boundary bao quanh một application use case phù hợp.
+- Không tạo interface chỉ để bọc một class không có nhu cầu thay thế
+  (`RULE.md` §4.5).
 
 ### 10.2 Sơ đồ kiến trúc
 
 ```mermaid
 flowchart LR
-    Client[Client] --> Web[REST inbound adapter]
-    Client --> Security[JWT security inbound adapter]
-    Web --> InPort[Inbound use case ports]
-    Security --> AuthPort[Xác thực access token]
-    InPort --> App[Application services]
-    AuthPort --> App
-    App --> Domain[Domain model + policy]
-    App --> UserRepoPort[UserRepositoryPort]
-    App --> RoleRepoPort[RoleRepositoryPort]
-    App --> RolePermRepoPort[RolePermissionRepositoryPort]
-    App --> UserRolePort[UserRoleRepositoryPort]
-    App --> SessionPort[RefreshSessionRepositoryPort]
-    App --> ResetTokenPort[PasswordResetTokenRepositoryPort]
-    App --> VerifyTokenPort[EmailVerificationTokenRepositoryPort]
-    App --> TokenPort[TokenServicePort]
-    App --> PasswordPort[PasswordHasherPort]
-    App --> RateLimitPort[LoginThrottlePort]
-    App --> EmailPort[EmailSenderPort]
-    App --> AuditPort[AuditLogPort]
-    App --> ClockPort[ClockPort + IdGeneratorPort]
-    App --> CachePort[CredentialVersionCachePort]
-    UserRepoPort --> JpaAdapter[PostgreSQL adapter]
-    RoleRepoPort --> JpaAdapter
-    PermRepoPort --> JpaAdapter
-    SessionPort --> JpaAdapter
-    ResetTokenPort --> JpaAdapter
-    VerifyTokenPort --> JpaAdapter
-    AuditPort --> JpaAdapter
-    TokenPort --> JwtAdapter[Nimbus JWT RS256 adapter]
-    PasswordPort --> HashAdapter[BCrypt adapter]
-    RateLimitPort --> RedisAdapter[Redis atomic INCR adapter]
-    CachePort --> RedisAdapter
-    EmailPort --> EmailAdapter[common-email MailService adapter]
+    Client[Client] --> Web[api: REST controllers]
+    Client --> Security[infrastructure/security: JWT filter chain]
+    Web --> App[application services]
+    Security --> ReqAuth[RequestAuthenticationService]
+    ReqAuth --> App
+    App --> Domain[domain: model + policy]
+    App --> UserRepo[UserRepository]
+    App --> RoleRepo[RoleRepository]
+    App --> SessionRepo[RefreshSessionRepository]
+    App --> ResetRepo[PasswordResetTokenRepository]
+    App --> VerifyRepo[EmailVerificationTokenRepository]
+    App --> AuditRepo[AuditLogRepository]
+    App --> TokenIssuer[AccessTokenIssuer]
+    App --> Hasher[PasswordHasher]
+    App --> Throttle[LoginThrottle]
+    App --> CvCache[CredentialVersionCache]
+    App --> Mailer[EmailSender]
+    UserRepo --> Jpa[infrastructure/persistence: JPA + PostgreSQL]
+    RoleRepo --> Jpa
+    SessionRepo --> Jpa
+    ResetRepo --> Jpa
+    VerifyRepo --> Jpa
+    AuditRepo --> Jpa
+    TokenIssuer --> Jwt[infrastructure/security: NimbusRsaAccessTokenIssuer]
+    Hasher --> Bcrypt[infrastructure/security: BcryptPasswordHasher]
+    Throttle --> Redis[infrastructure/cache: Redis]
+    CvCache --> Redis
+    Mailer --> Smtp[infrastructure/email: MailServiceEmailSender]
 ```
+
+Các contract `UserRepository`, `RoleRepository`, `RefreshSessionRepository`,
+`PasswordResetTokenRepository`, `EmailVerificationTokenRepository`,
+`AuditLogRepository` thuộc `domain`. Các contract `AccessTokenIssuer`,
+`PasswordHasher`, `LoginThrottle`, `CredentialVersionCache`, `EmailSender` là
+capability hạ tầng, khai báo ở nơi consumer sử dụng chúng và được
+`infrastructure` triển khai.
 
 ### 10.3 Cấu trúc package
 
 ```text
 com.vandunxg.file_processing.auth
+├── api
+│   ├── AuthController, AdminUserController, AdminRoleController,
+│   │   AdminPermissionController, AdminAuditLogController,
+│   │   MeSessionController
+│   ├── dto/request           *Request DTO
+│   ├── dto/response          *Response DTO
+│   └── mapper                *WebMapper (MapStruct)
+├── application
+│   ├── AdminBootstrapService, RegistrationCommandService,
+│   │   AuthenticationCommandService, SessionCommandService,
+│   │   SessionQueryService, PasswordCommandService,
+│   │   CurrentUserQueryService, UserAdminCommandService,
+│   │   UserAdminQueryService, RoleAdminCommandService,
+│   │   RoleAdminQueryService, PermissionCatalogQueryService,
+│   │   AuditLogQueryService, RequestAuthenticationService
+│   ├── command               LoginCommand, RegisterCommand, …
+│   ├── query                 UserSearchQuery, RoleSearchQuery,
+│   │                         SessionSearchQuery, AuditLogSearchQuery
+│   ├── result                LoginResult, TokenPairResult, UserSummaryResult
+│   └── exception             AuthException (extends ResponseException)
 ├── domain
 │   ├── model                 User, Role, RolePermission, UserRole,
 │   │                         UserStatus, ActiveStatus,
@@ -676,109 +721,103 @@ com.vandunxg.file_processing.auth
 │   ├── policy                PasswordPolicy, LoginLockPolicy,
 │   │                         LastActiveAdminPolicy, PermissionExpression
 │   │                         (helper build "resource:action" string)
-│   ├── event                 (domain events sau commit; V1 có thể bỏ trống)
+│   ├── event                 (domain event sau commit; V1 có thể bỏ trống)
+│   ├── UserRepository, RoleRepository, RefreshSessionRepository,
+│   │   PasswordResetTokenRepository, EmailVerificationTokenRepository,
+│   │   AuditLogRepository
 │   └── exception             AuthErrorCode, AuthDomainException
-├── application
-│   ├── port
-│   │   ├── in                LoginUseCase, RefreshTokenUseCase, LogoutUseCase,
-│   │   │                     RegisterUseCase, VerifyEmailUseCase, …
-│   │   └── out               UserRepositoryPort, RoleRepositoryPort, …
-│   ├── service               LoginService, RefreshTokenService, …
-│   ├── command               LoginCommand, RegisterCommand, …
-│   ├── query                 UserSearchQuery (đã có), RoleSearchQuery,
-│   │                         SessionSearchQuery, AuditLogSearchQuery
-│   └── result                LoginResult, TokenPairResult, UserSummaryResult
-├── adapter
-│   ├── in
-│   │   ├── web               AuthController, AdminUserController,
-│   │   │                     AdminRoleController, AdminPermissionController,
-│   │   │                     AdminAuditLogController, MeSessionController
-│   │   │   ├── request       *Request DTO
-│   │   │   ├── response      *Response DTO
-│   │   │   └── mapper        *WebMapper (MapStruct)
-│   │   └── security          JwtAuthenticationConverter,
-│   │                         CustomAuthenticationEntryPoint,
-│   │                         RateLimitInterceptor,
-│   │                         CredentialVersionValidator
-│   └── out
-│       ├── persistence
-│       │   ├── entity        *Entity, Jpa*Repository
-│       │   ├── mapper        *PersistenceMapper (MapStruct)
-│       │   └── *PersistenceAdapter
-│       ├── jwt               NimbusRsaTokenService, JwkKeyRing,
-│       │                     JwksEndpoint (RestController public)
-│       ├── redis             RedisCredentialVersionCache,
-│       │                     RedisLoginThrottle
-│       ├── email             CommonEmailSenderAdapter (dùng MailService),
-│       │                     template resources/templates/email/*.html
-│       └── audit             AuditLogPersistenceAdapter
-└── configuration             AuthProperties (typed @ConfigurationProperties),
-                              AuthSecurityConfiguration (bổ sung SecurityFilter),
-                              BootstrapAdminListener (@EventListener),
+└── infrastructure
+    ├── persistence           *Entity, *EntityRepository,
+    │                         *PersistenceMapper (MapStruct),
+    │                         JpaUserRepository, JpaRoleRepository,
+    │                         JpaRefreshSessionRepository,
+    │                         JpaPasswordResetTokenRepository,
+    │                         JpaEmailVerificationTokenRepository,
+    │                         JpaAuditLogRepository
+    ├── security              NimbusRsaAccessTokenIssuer, JwkKeyRing,
+    │                         JwksController (RestController public),
+    │                         BcryptPasswordHasher,
+    │                         JwtAuthenticationConverter,
+    │                         CustomAuthenticationEntryPoint,
+    │                         RateLimitInterceptor,
+    │                         CredentialVersionValidator
+    ├── cache                 RedisCredentialVersionCache, RedisLoginThrottle
+    ├── email                 MailServiceEmailSender (dùng MailService),
+    │                         template resources/templates/email/*.html
+    ├── bootstrap             BootstrapAdminListener (@EventListener)
+    └── config                AuthProperties (typed @ConfigurationProperties),
+                              AuthSecurityConfiguration,
                               JwkKeyRingConfiguration, RateLimitConfiguration
 ```
 
-### 10.4 Inbound port bắt buộc
+Chỉ tạo package và class mà module thực sự cần. Không tạo folder rỗng để giống
+sơ đồ này.
 
-| Port                                | Trách nhiệm                                                            |
-|-------------------------------------|------------------------------------------------------------------------|
-| `BootstrapAdminUseCase`             | Tạo Admin đầu tiên khi hệ thống trống                                  |
-| `RegisterUseCase`                   | Đăng ký tài khoản tự phục vụ + gửi email verify                        |
-| `VerifyEmailUseCase`                | Xác thực email bằng token                                              |
-| `ResendVerificationEmailUseCase`    | Gửi lại email xác thực                                                 |
-| `LoginUseCase`                      | Đăng nhập bằng username hoặc email                                     |
-| `CompletePasswordChangeUseCase`     | Hoàn tất đổi mật khẩu lần đầu                                          |
-| `RefreshTokenUseCase`               | Rotation refresh token + cấp access token mới                          |
-| `LogoutUseCase`                     | Revoke một session hoặc toàn bộ session                                |
-| `GetCurrentUserUseCase`             | Trả thông tin principal `/me`                                          |
-| `ChangePasswordUseCase`             | Đổi mật khẩu chủ động                                                  |
-| `RequestPasswordResetUseCase`       | Yêu cầu reset password (gửi email)                                     |
-| `ResetPasswordUseCase`              | Đặt lại password bằng token                                            |
-| `ListMySessionsUseCase`             | Xem danh sách phiên của mình                                           |
-| `RevokeMySessionUseCase`            | Revoke một phiên của mình                                              |
-| `CreateUserUseCase`                 | Admin tạo user                                                         |
-| `SearchUserUseCase`                 | Admin tìm kiếm user                                                    |
-| `GetUserDetailUseCase`              | Admin xem chi tiết user                                                |
-| `UpdateUserUseCase`                 | Admin cập nhật profile + role                                          |
-| `ChangeUserStatusUseCase`           | Admin disable/enable/unlock                                            |
-| `ResetUserPasswordUseCase`          | Admin đặt password tạm thời                                            |
-| `CreateRoleUseCase`                 | Admin tạo role mới (non-const)                                         |
-| `SearchRoleUseCase`                 | Admin tìm kiếm role                                                    |
-| `AutocompleteRoleUseCase`           | Admin autocomplete role                                                |
-| `UpdateRoleUseCase`                 | Admin cập nhật role + permission + propagate xuống role con            |
-| `SetRoleInheritanceUseCase`         | Admin set/gỡ `roleInheritedId` (cycle detection)                       |
-| `ActivateRoleUseCase`               | Admin chuyển role sang ACTIVE                                          |
-| `InactivateRoleUseCase`             | Admin chuyển role sang INACTIVE                                        |
-| `DeleteRoleUseCase`                 | Admin xoá role non-const và không có user                              |
-| `BulkDeleteRoleUseCase`             | Admin xoá nhiều role                                                   |
-| `GetPermissionCatalogUseCase`       | Trả `ResourcePermissionResponse[]` từ enum                             |
-| `GetResourceCatalogUseCase`         | Trả danh sách `ResourceCode` với i18n                                  |
-| `GetRoleAuditLogUseCase`            | Đọc audit của một role                                                 |
-| `SearchAuditLogUseCase`             | Admin đọc audit log                                                    |
-| `ValidatePrincipalUseCase`          | Xác thực credential version (nội bộ security filter)                   |
+### 10.4 Use case bắt buộc
 
-### 10.5 Outbound port bắt buộc
+Mọi operation dưới đây **bắt buộc** phải tồn tại. Cột thứ nhất là application
+service chịu trách nhiệm; cột thứ hai là các operation trên service đó.
 
-| Port                                | Trách nhiệm                                                            |
-|-------------------------------------|------------------------------------------------------------------------|
-| `UserRepositoryPort`                | Lưu, truy vấn, và lock user                                            |
-| `RoleRepositoryPort`                | CRUD role, gán/gỡ permission                                           |
-| `RolePermissionRepositoryPort`      | CRUD `role_permission` (không phải catalog table)                      |
-| `UserRoleRepositoryPort`            | CRUD `user_role`                                                       |
-| `RefreshSessionRepositoryPort`      | Tạo, rotate, revoke session và token                                   |
-| `PasswordResetTokenRepositoryPort`  | Tạo, consume, dọn dẹp reset token                                      |
-| `EmailVerificationTokenRepositoryPort` | Tạo, consume, dọn dẹp verification token                            |
-| `PasswordHasherPort`                | Hash, verify, kiểm tra rehash                                          |
-| `TokenServicePort`                  | Phát hành và verify JWT (access, password change)                      |
-| `CredentialVersionCachePort`        | Cache credential version                                               |
-| `LoginThrottlePort`                 | Rate limit theo IP và username                                         |
-| `EmailSenderPort`                   | Gửi email (verify, reset password)                                     |
-| `AuditLogPort`                      | Ghi audit event                                                        |
-| `ClockPort`                         | Thời gian có thể test                                                  |
-| `IdGeneratorPort`                   | Sinh UUID và token ID                                                  |
+Controller, security filter và listener gọi trực tiếp các service này. **Không**
+tạo một interface `*UseCase` cho mỗi operation.
 
-Không tạo interface chỉ để bọc một class không có nhu cầu thay thế. Mỗi port
-bảo vệ một ranh giới hạ tầng hoặc use case rõ ràng.
+| Application service             | Operation bắt buộc                                                                                                                             |
+|---------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------|
+| `AdminBootstrapService`         | Tạo Admin đầu tiên khi hệ thống trống                                                                                                          |
+| `RegistrationCommandService`    | Đăng ký tài khoản tự phục vụ + gửi email verify; xác thực email bằng token; gửi lại email xác thực                                              |
+| `AuthenticationCommandService`  | Đăng nhập bằng username hoặc email; hoàn tất đổi mật khẩu lần đầu                                                                              |
+| `SessionCommandService`         | Rotation refresh token + cấp access token mới; revoke một session; revoke toàn bộ session; revoke một phiên của chính mình                      |
+| `SessionQueryService`           | Xem danh sách phiên của mình                                                                                                                   |
+| `PasswordCommandService`        | Đổi mật khẩu chủ động; yêu cầu reset password (gửi email); đặt lại password bằng token                                                          |
+| `CurrentUserQueryService`       | Trả thông tin principal `/me`                                                                                                                  |
+| `UserAdminCommandService`       | Admin tạo user; cập nhật profile + role; disable/enable/unlock; đặt password tạm thời                                                           |
+| `UserAdminQueryService`         | Admin tìm kiếm user; xem chi tiết user                                                                                                         |
+| `RoleAdminCommandService`       | Tạo role non-const; cập nhật role + permission + propagate xuống role con; set/gỡ `roleInheritedId` (cycle detection); chuyển ACTIVE/INACTIVE; xoá role non-const không có user; xoá nhiều role |
+| `RoleAdminQueryService`         | Admin tìm kiếm role; autocomplete role                                                                                                         |
+| `PermissionCatalogQueryService` | Trả `ResourcePermissionResponse[]` từ enum; trả danh sách `ResourceCode` với i18n                                                               |
+| `AuditLogQueryService`          | Đọc audit của một role; Admin đọc audit log                                                                                                    |
+| `RequestAuthenticationService`  | Xác thực credential version cho security filter                                                                                                |
+
+Việc gom operation vào service theo capability là bắt buộc về mặt tổ chức, còn
+số lượng service cụ thể có thể điều chỉnh khi một service phình quá lớn. Tách
+`<Capability>CommandService` / `<Capability>QueryService` theo `RULE.md` §4.7.
+
+### 10.5 Contract bắt buộc mà infrastructure phải triển khai
+
+Repository theo aggregate root (`RULE.md` §6.3), khai báo trong `domain`:
+
+| Contract (`domain`)                    | Trách nhiệm                                                                                       |
+|----------------------------------------|---------------------------------------------------------------------------------------------------|
+| `UserRepository`                       | Lưu, truy vấn, lock user; và gán/gỡ role của user (`user_role` nằm trong `User` aggregate)         |
+| `RoleRepository`                       | CRUD role; gán/gỡ permission (`role_permission` nằm trong `Role` aggregate, không phải catalog table) |
+| `RefreshSessionRepository`             | Tạo, rotate, revoke session và refresh token (`RefreshToken` nằm trong `RefreshSession` aggregate) |
+| `PasswordResetTokenRepository`         | Tạo, consume, dọn dẹp reset token                                                                 |
+| `EmailVerificationTokenRepository`      | Tạo, consume, dọn dẹp verification token                                                          |
+| `AuditLogRepository`                   | Ghi và đọc audit event                                                                            |
+
+Capability hạ tầng có boundary thật, được `infrastructure` triển khai:
+
+| Contract                   | Trách nhiệm                                       | Triển khai target             |
+|----------------------------|---------------------------------------------------|-------------------------------|
+| `PasswordHasher`           | Hash, verify, kiểm tra rehash                     | `BcryptPasswordHasher`        |
+| `AccessTokenIssuer`        | Phát hành và verify JWT (access, password change) | `NimbusRsaAccessTokenIssuer`  |
+| `CredentialVersionCache`   | Cache credential version                          | `RedisCredentialVersionCache` |
+| `LoginThrottle`            | Rate limit theo IP và username                    | `RedisLoginThrottle`          |
+| `EmailSender`              | Gửi email (verify, reset password)                | `MailServiceEmailSender`      |
+
+Mỗi contract trên tồn tại vì nó cô lập một hệ thống ngoài hoặc một thuật toán
+bảo mật có thể thay thế — không phải vì template kiến trúc.
+
+**Không** tạo contract riêng cho:
+
+- thời gian — inject `java.time.Clock` (`RULE.md` §6.2);
+- sinh ID — dùng `IdUtils` của `common-utils`;
+- một repository cho entity nằm bên trong aggregate khác, ví dụ
+  `RolePermissionRepository`, `UserRoleRepository` hoặc `RefreshTokenRepository`.
+  Các operation đó nằm trên repository của aggregate root.
+
+Việc bỏ các contract này **không** làm thay đổi behavior: mọi operation cũ vẫn
+tồn tại, chỉ đổi nơi khai báo.
 
 ### 10.6 Transaction boundary
 
@@ -1375,7 +1414,7 @@ biệt username tồn tại hay không.
 3. Normalize identifier.
 4. Load user; nếu không tồn tại → dummy password verify + return generic fail.
 5. Kiểm tra `lockedUntil` và `status`. Không phân biệt lỗi cho response.
-6. Verify password qua `PasswordHasherPort`.
+6. Verify password qua `PasswordHasher`.
 7. Nếu fail: tăng `failedLoginCount`, cập nhật `lastFailedLoginAt`, áp dụng
    lock policy khi đạt ngưỡng, ghi audit `LOGIN_FAILED`, trả generic fail.
 8. Nếu password hash cần rehash → rehash và cập nhật.
@@ -2118,7 +2157,7 @@ UserAuthentication auth = new UserAuthentication(
 ### 38.3 CredentialVersionValidator
 
 Chạy sau converter (hoặc trong converter):
-- Load credential version từ `CredentialVersionCachePort` (Redis TTL 5 phút,
+- Load credential version từ `CredentialVersionCache` (Redis TTL 5 phút,
   fallback DB).
 - Compare với claim `cv`.
 - Không khớp → `AuthenticationException` (`ACCESS_TOKEN_REVOKED`).
@@ -2930,7 +2969,7 @@ lại một lần để nhận hai cookie mới. Sau đó client gửi credentia
 ```mermaid
 sequenceDiagram
     actor Client
-    participant API as Auth REST Adapter
+    participant API as Auth REST Controller
     participant Throttle as RateLimit Interceptor
     participant Login as Login Service
     participant Users as User Repository
@@ -2960,7 +2999,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor Client
-    participant API as Auth REST Adapter
+    participant API as Auth REST Controller
     participant CSRF as CSRF Filter
     participant Refresh as Refresh Service
     participant Tokens as RefreshToken Repository (SELECT FOR UPDATE)
@@ -2992,7 +3031,7 @@ sequenceDiagram
     participant Cache as Credential Cache
     participant DB as User Repository
     participant API as File API
-    participant UseCase as File Use Case
+    participant AppSvc as File Application Service
     Client->>Filter: Bearer access token
     Filter->>Filter: verify signature + kid + claims
     Filter->>Cache: get credential state
@@ -3005,9 +3044,9 @@ sequenceDiagram
     end
     Filter->>Filter: validate role + permission + cv
     Filter->>API: authenticated principal
-    API->>UseCase: command with principal
-    UseCase->>UseCase: check ownership in query
-    UseCase-->>Client: business response
+    API->>AppSvc: command with principal
+    AppSvc->>AppSvc: check ownership in query
+    AppSvc-->>Client: business response
 ```
 
 ## 50. Kiểm thử
@@ -3027,7 +3066,7 @@ sequenceDiagram
 - Permission bắt buộc của role `is_const` (ví dụ ADMIN phải có `(ALL, MANAGE)`).
 - Role inheritance propagation đệ quy và cycle detection.
 
-### 50.2 Unit test application (fake port)
+### 50.2 Unit test application (fake repository và fake capability)
 
 - Login success/failure/PENDING_VERIFY/mustChangePassword/DISABLED/locked.
 - Refresh success/reuse/expired/wrong-cv.
@@ -3193,8 +3232,10 @@ Triển khai theo 7 phase để giảm rủi ro.
 - Mở rộng domain model: `User`, `Role`, `Permission`, `UserStatus`,
   `AuditLogDomain`, `OperationType` như spec §11.
 - Tạo JPA entity + persistence mapper (MapStruct).
-- Repository port + PostgreSQL adapter cho User, Role, Permission, AuditLog.
-- Password hasher adapter (BCrypt cost 12 + `DelegatingPasswordEncoder`).
+- Domain repository contract + triển khai JPA/PostgreSQL cho User, Role,
+  Permission, AuditLog.
+- `PasswordHasher` + `BcryptPasswordHasher` (BCrypt cost 12 +
+  `DelegatingPasswordEncoder`).
 - Seed migration ADMIN (`(ALL, MANAGE)`), OPERATOR (`SELF_*` set).
 - Enum `ResourceCode` và `Action` là nguồn chân lý cho permission catalog
   (không có bảng permission).
@@ -3204,7 +3245,7 @@ Triển khai theo 7 phase để giảm rủi ro.
 
 - Bootstrap Admin `@EventListener(ApplicationReadyEvent)`.
 - Login use case (username hoặc email).
-- Nimbus RSA token service + JwkKeyRing + JWKS endpoint.
+- `NimbusRsaAccessTokenIssuer` + JwkKeyRing + JWKS endpoint.
 - Custom `JwtAuthenticationConverter` → `UserAuthentication`.
 - `CredentialVersionValidator`.
 - Spring Security filter chain (thay thế bản hiện có).
@@ -3226,7 +3267,7 @@ Triển khai theo 7 phase để giảm rủi ro.
 - Register + email verify use case.
 - Resend verification.
 - Forgot password + reset password.
-- `EmailSenderPort` + `CommonEmailSenderAdapter`.
+- `EmailSender` + `MailServiceEmailSender`.
 - Email templates HTML + text (Vietnamese + English).
 - GreenMail test.
 
@@ -3270,7 +3311,8 @@ Developer ghi ADR cho các quyết định sau:
 7. Last-active-admin concurrency control.
 8. Password hasher BCrypt cost 12 + `DelegatingPasswordEncoder`.
 9. Self-registration + email verify flow.
-10. Ranh giới Hexagonal giữa Spring Security adapter và application core.
+10. Ranh giới giữa Spring Security wiring trong `infrastructure/security` và
+    application core.
 
 ## 55. Anti-patterns bị cấm
 
@@ -3384,7 +3426,8 @@ Auth Module V2 là ranh giới tin cậy của File Processing Service. Thiết 
 tiên tính đúng, khả năng thu hồi credential, chống race condition, khả năng
 kiểm thử, và trải nghiệm người dùng qua self-registration + forget password.
 
-Kiến trúc Hexagonal giữ domain và use case độc lập với Spring Security, JWT
-library, PostgreSQL, và Redis. Spring Boot cung cấp adapter và runtime, nhưng
-business rule về user, role, permission, session, password, và authorization
-nằm trong domain hoặc application layer có thể kiểm thử độc lập.
+Kiến trúc Pragmatic Modular DDD giữ `domain` và `application` độc lập với Spring
+Security, JWT library, PostgreSQL và Redis. Spring Boot cung cấp
+`infrastructure` và runtime, nhưng business rule về user, role, permission,
+session, password và authorization nằm trong `domain` hoặc `application` và
+kiểm thử được độc lập.

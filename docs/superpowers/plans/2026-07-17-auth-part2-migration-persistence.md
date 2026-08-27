@@ -1,6 +1,27 @@
 # Auth Module — Part 2: Migration + Persistence + IT
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task.
+<!-- prettier-ignore -->
+> [!WARNING]
+> **LEGACY ARCHITECTURE NOTICE — SUPERSEDED ARCHITECTURE GUIDANCE**
+>
+> Tài liệu này được tạo trước quyết định chuyển sang Pragmatic Modular DDD.
+> Các package `adapter/*`, `port/*`, `*UseCase`, `*Port` và `*Adapter` trong tài
+> liệu này mô tả legacy implementation và **không còn là architecture guidance**.
+>
+> This document predates the migration to Pragmatic Modular DDD. Every
+> `adapter/in`, `adapter/out`, `port/in`, `port/out`, `*UseCase`,
+> `*RepositoryPort`, and `*PersistenceAdapter` reference below records the
+> legacy implementation **as it was actually built**. It is a historical record,
+> not an instruction. Do not reproduce this layout, naming, or interface
+> structure in new code or in a refactor.
+>
+> [`RULE.md`](../../../RULE.md) §4 is the source of truth for architecture. The
+> business behavior, API contracts, and security requirements described here
+> remain valid; only the structural guidance is superseded.
+
+> **PLAN COMPLETED — DO NOT RE-EXECUTE.** Every task in this plan was implemented and merged. Its package layout and type names follow the legacy Hexagonal structure and are superseded by `RULE.md` §4. Kept for history only.
+>
+> <sub>Original agent instruction, retained verbatim for the record: **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task.</sub>
 
 > **Part 2 of 4** — Prerequisite: Part 1 (`2026-07-17-auth-part1-setup-domain.md`) đã hoàn thành. Có thể chạy `./mvnw test` với domain unit test pass.
 

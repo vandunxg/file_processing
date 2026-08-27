@@ -15,6 +15,12 @@ Khi các quy tắc xung đột, áp dụng thứ tự ưu tiên sau:
 Không được tự diễn giải lại quy tắc trong im lặng. Hãy tạo change request khi
 một quy tắc không còn phù hợp với codebase.
 
+**Kiến trúc mục tiêu: Pragmatic Modular DDD** — modular monolith chia package
+theo business module với các layer `api` / `application` / `domain` /
+`infrastructure`. Các package Hexagonal `adapter/*` và `port/*` còn lại trong
+`src/main/java` là legacy implementation đang chờ migrate, không phải guidance.
+Đọc §4 trước khi viết hoặc review bất kỳ code nào.
+
 ---
 
 ## 1. Mức độ bắt buộc
@@ -91,7 +97,50 @@ do tương thích hoặc bảo mật đã được kiểm chứng.
 
 ---
 
-## 4. Cấu trúc module và hướng dependency
+## 4. Kiến trúc: Pragmatic Modular DDD
+
+Kiến trúc mục tiêu của repository này là:
+
+```text
+Modular Monolith
+        +
+Chia package theo business module (bounded context)
+        +
+Pragmatic DDD
+```
+
+Đây **không phải** Hexagonal / ports-and-adapters và **không phải** strict
+Clean Architecture.
+
+<!-- prettier-ignore -->
+> [!IMPORTANT]
+> **Legacy so với target.** Một phần `src/main/java` vẫn dùng layout Hexagonal
+> cũ: `adapter/in`, `adapter/out`, `application/port/in`,
+> `application/port/out`, `*UseCase`, `*RepositoryPort`, `*PersistenceAdapter`.
+> Phần code đó là **legacy implementation đang chờ migrate**, không phải
+> architecture guidance. Code mới và refactor **phải** theo section này, kể cả
+> bên trong module vẫn còn layout cũ. Không thêm Hexagonal ceremony ở bất kỳ đâu.
+
+Mental model cho mọi thay đổi:
+
+```text
+api             "Caller muốn gì?"
+      ↓
+application     "Workflow nào phải xảy ra?"
+      ↓
+domain          "Business cho phép điều gì?"
+      ↑
+infrastructure  "Capability kỹ thuật được thực hiện thế nào?"
+```
+
+Độ phức tạp kiến trúc **phải** xuất phát từ độ phức tạp nghiệp vụ, không bao giờ
+từ một template. Mọi abstraction phải trả lời được một câu hỏi:
+
+> Boundary hoặc business problem nào khiến abstraction này cần tồn tại?
+
+Nếu không trả lời được, không tạo abstraction đó.
+
+### 4.1 Cấu trúc module
 
 Business module nằm dưới:
 
@@ -99,66 +148,211 @@ Business module nằm dưới:
 src/main/java/com/vandunxg/file_processing/<module>/
 ```
 
-Cấu trúc dưới đây là ranh giới dependency, không phải danh sách package bắt buộc.
-Chỉ tạo package và type mà module thực sự cần.
+Một module có bốn layer mang nghĩa ngữ nghĩa. Đây là ranh giới dependency, không
+phải template folder bắt buộc. Chỉ tạo package và type mà module thực sự cần.
 
 ```text
 <module>/
-├── adapter/
-│   ├── in/web/
-│   │   ├── <Xxx>Controller.java
-│   │   ├── dto/request/
-│   │   ├── dto/response/
-│   │   └── mapper/
-│   └── out/
-│       ├── persistence/
-│       │   ├── entity/
-│       │   ├── mapper/
-│       │   └── <Xxx>PersistenceAdapter.java
-│       └── client/
-├── application/
-│   ├── port/in/
-│   ├── port/out/
-│   ├── service/
+├── api/                          # HTTP contract của module
+│   ├── <Xxx>Controller.java
+│   ├── dto/request/
+│   ├── dto/response/
+│   └── mapper/
+├── application/                  # orchestration use case, transaction boundary
+│   ├── <Capability>CommandService.java
+│   ├── <Capability>QueryService.java
 │   ├── command/
 │   ├── query/
 │   ├── result/
 │   └── exception/
-├── domain/
+├── domain/                       # aggregate, invariant, behavior, repository
 │   ├── model/
+│   ├── <Aggregate>Repository.java
+│   ├── policy/
+│   ├── event/
 │   ├── service/
 │   └── exception/
-└── configuration/
+└── infrastructure/               # triển khai công nghệ
+    ├── persistence/
+    ├── cache/
+    ├── messaging/
+    ├── storage/
+    ├── email/
+    ├── security/
+    ├── client/
+    ├── scheduling/
+    ├── bootstrap/
+    └── config/
 ```
 
-### 4.1 Quy tắc dependency
+Quy tắc:
 
-- `domain` **không được** import Spring, JPA, Jackson, servlet, HTTP hoặc class
-  thuộc adapter.
-- `application` **có thể** dùng annotation transaction và component của Spring,
-  nhưng **không được** phụ thuộc controller, JPA entity, Spring Data repository,
-  HTTP client hoặc adapter khác.
-- `adapter` triển khai inbound/outbound boundary và có thể phụ thuộc
-  `application`, `domain`.
-- `configuration` dùng để wire infrastructure và cross-cutting bean. Giữ lớp
-  này mỏng.
-- Một business module **không được** truy cập trực tiếp adapter package của
-  module khác. Giao tiếp qua application port hoặc domain API được chia sẻ rõ
-  ràng.
+- **Không được** tạo `adapter/in`, `adapter/out`, `port/in` hoặc `port/out`.
+- **Không được** tạo package rỗng hoặc placeholder type chỉ để giống sơ đồ.
+- `infrastructure` chia theo **công nghệ hoặc capability**
+  (`persistence`, `cache`, `messaging`, `storage`), không bao giờ chia theo
+  hướng (`in`, `out`).
+- Entry point kỹ thuật không phải HTTP — scheduler, AMQP listener, bootstrap khi
+  khởi động — nằm trong `infrastructure/<technology>/` và gọi application
+  service. Chúng là infrastructure, không phải một inbound layer riêng.
+- `infrastructure/config` dùng để wire bean và cross-cutting concern. Giữ lớp
+  này mỏng và không chứa business rule.
 
-### 4.2 Interface không gây ceremony
+### 4.2 Quy tắc dependency
 
-Tạo interface khi nó bảo vệ một boundary có thật:
+```text
+api ──────────────► application ──────────────► domain
+                                                   ▲
+infrastructure ────────────────────────────────────┘
+        └─────────► application
+```
 
-- inbound use case được gọi bởi một hoặc nhiều inbound adapter;
-- outbound dependency có thể có nhiều implementation hoặc cần thay thế trong
-  test;
-- boundary giữa module cần contract ổn định.
+Được phép:
 
-Không tạo một interface cho mọi class hoặc một use-case interface cho mỗi method
-nhỏ. Có thể nhóm các operation liên quan nếu contract vẫn dễ hiểu.
+| Từ               | Đến                                                   |
+|------------------|-------------------------------------------------------|
+| `api`            | `application`                                         |
+| `api`            | domain type, khi response mapping thực sự cần         |
+| `application`    | `domain`                                              |
+| `infrastructure` | `application`, `domain`                               |
 
-Không tạo package rỗng hoặc placeholder class chỉ để giống sơ đồ tham chiếu.
+Bị cấm (**không được**):
+
+- `domain` → `api`, `application` hoặc `infrastructure`.
+- `application` → `api`.
+- `application` → JPA entity, Spring Data repository, HTTP client, broker
+  client, object-storage client hoặc bất kỳ infrastructure type nào khác.
+- module A → `infrastructure` của module B, hoặc persistence implementation của
+  module B, hoặc persistence model của module B.
+- `domain` import Spring, Jackson, servlet hoặc HTTP type. Mapping
+  `jakarta.persistence` trực tiếp trên aggregate chỉ được phép theo §6.4.
+
+`application` **có thể** dùng annotation transaction và component của Spring.
+
+### 4.3 Mức độ phức tạp
+
+Chọn mức mỏng nhất phù hợp với bài toán. Không nâng mức chỉ để kiến trúc trông
+"enterprise".
+
+**Level 1 — CRUD hoặc capability kỹ thuật mỏng**
+
+```text
+api → application → infrastructure
+```
+
+`domain` chỉ xuất hiện khi có domain behavior thật cần bảo vệ.
+
+**Level 2 — core business capability (mặc định)**
+
+```text
+api → application → domain, được infrastructure triển khai
+```
+
+Có aggregate, business invariant, một repository cho mỗi aggregate root, và
+value object khi chúng mang giá trị ngữ nghĩa.
+
+**Level 3 — workflow phức tạp**
+
+Chỉ thêm những gì workflow thực sự cần: domain event, policy, domain service,
+gateway, outbox, specification, process manager, saga.
+
+Một capability Level 1 **không được** xây theo Level 3.
+
+### 4.4 Ranh giới giữa các module
+
+Module sở hữu dữ liệu và behavior của chính nó. Module khác **không được** đọc
+hoặc ghi dữ liệu đó trực tiếp.
+
+Bị cấm:
+
+```text
+fileimport ──► Spring Data repository của auth
+fileimport ──► persistence model của auth
+```
+
+Ưu tiên:
+
+```text
+fileimport application ──► auth application capability
+```
+
+hoặc, khi việc decouple bất đồng bộ thực sự có giá trị:
+
+```text
+fileimport ──► domain / application event ──► auth
+```
+
+Không tạo interface cross-module nếu gọi trực tiếp application service của
+module kia đã đủ.
+
+### 4.5 Interface không gây ceremony
+
+**Concrete application service là mặc định.** Controller, listener và scheduler
+gọi trực tiếp class cụ thể.
+
+Chỉ tạo interface khi tồn tại boundary thật:
+
+- repository contract của aggregate do `domain` sở hữu và `infrastructure`
+  triển khai;
+- external service, storage provider, email provider, distributed cache, event
+  publisher hoặc cryptographic provider;
+- thực tế đã có nhiều hơn một implementation;
+- contract giữa các module được giữ ổn định có chủ đích, kèm lý do rõ ràng.
+
+**Không** tạo interface vì lý do "DDD", "Clean Architecture", "Hexagonal", "để
+mock dễ hơn" hoặc "sau này có thể thay implementation". Spring bean vẫn mock
+được mà không cần interface.
+
+**Không được** tạo:
+
+- interface `<Capability>UseCase` mà caller duy nhất là một controller;
+- một interface cho mỗi class, hoặc một interface cho mỗi method nhỏ.
+
+Có thể nhóm các operation liên quan vào một contract nếu contract vẫn dễ hiểu.
+
+### 4.6 Đặt tên theo ý nghĩa, không theo pattern
+
+`Port` **không phải** suffix mặc định. Dùng tên business hoặc capability:
+
+| Không dùng             | Dùng             |
+|------------------------|------------------|
+| `UserRepositoryPort`   | `UserRepository` |
+| `EmailSenderPort`      | `EmailSender`    |
+| `JwtIssuerPort`        | `TokenIssuer`    |
+| `StoragePort`          | `FileStorage`    |
+
+`Adapter` **không phải** suffix mặc định. Dùng tên công nghệ hoặc capability:
+
+| Không dùng                      | Dùng                   |
+|---------------------------------|------------------------|
+| `UserPersistenceAdapter`        | `JpaUserRepository`    |
+| `BcryptPasswordHasherAdapter`   | `BcryptPasswordHasher` |
+| `RedisAuthThrottleAdapter`      | `RedisAuthThrottle`    |
+| `MailServiceEmailSenderAdapter` | `SmtpEmailSender`      |
+| `R2ObjectStorageAdapter`        | `R2FileStorage`        |
+
+Tên class nói implementation **là gì**, không nói nó theo pattern nào.
+
+### 4.7 Command, Query và Result không ceremony
+
+Một use case **không bắt buộc** phải có đủ bộ ba `Command`, `Query`, `Result`.
+Truyền trực tiếp value hoặc request record là đúng khi boundary đủ đơn giản.
+
+Tạo `Command`, `Query` hoặc `Result` ở application khi:
+
+- nhiều caller — controller, listener, scheduler — cùng gọi một use case;
+- HTTP contract cần tiến hoá độc lập với use case;
+- input mang business meaning riêng, ví dụ normalization hoặc value object;
+- workflow đủ nhiều bước để một named input làm nó rõ hơn;
+- type được reuse ngoài HTTP.
+
+**Không được** áp CQRS ceremony cho CRUD thông thường. Một `Command` chỉ bọc một
+`UUID` thì thêm một file mà không bỏ được gì.
+
+Việc tách module thành `<Capability>CommandService` và
+`<Capability>QueryService` là mặc định cho module có luồng đọc và ghi rõ rệt, và
+là tuỳ chọn với module nhỏ. Đây là lựa chọn tổ chức code, không phải áp dụng
+CQRS.
 
 ---
 
@@ -166,26 +360,45 @@ Không tạo package rỗng hoặc placeholder class chỉ để giống sơ đ�
 
 Tên phải thể hiện ý nghĩa nghiệp vụ.
 
-| Khái niệm              | Quy ước                                   |
-|------------------------|-------------------------------------------|
-| Domain aggregate       | `User`, `Role`, `ProcessingJob`           |
-| Domain value object    | `EmailAddress`, `FileChecksum`            |
-| Domain enum            | `UserStatus`, `JobStatus`                 |
-| Inbound port           | `<Capability>UseCase`                     |
-| Outbound port          | `<Xxx>RepositoryPort`, `<Xxx>StoragePort` |
-| Application service    | `<Capability>Service`                     |
-| Input ghi              | `<Action>Command`                         |
-| Input đọc              | `<Action>Query`                           |
-| Output application     | `<Action>Result`                          |
-| Controller             | `<Xxx>Controller`                         |
-| Request DTO            | `<Xxx>Request`                            |
-| Response DTO           | `<Xxx>Response`                           |
-| JPA entity             | `<Xxx>Entity`                             |
-| Spring Data repository | `Jpa<Xxx>Repository`                      |
-| Persistence adapter    | `<Xxx>PersistenceAdapter`                 |
-| Configuration          | `<Xxx>Configuration`                      |
-| Unit test              | `<ClassName>Test`                         |
-| Integration test       | `<ClassName>IT`                           |
+| Khái niệm                                | Quy ước                                 |
+|------------------------------------------|-----------------------------------------|
+| Domain aggregate                         | `User`, `Role`, `ProcessingJob`         |
+| Domain value object                      | `EmailAddress`, `FileChecksum`          |
+| Domain enum                              | `UserStatus`, `JobStatus`               |
+| Repository contract của aggregate        | `<Aggregate>Repository`                 |
+| Domain policy                            | `<Rule>Policy`                          |
+| Domain event                             | `<Aggregate><PastTenseFact>`            |
+| Application service ghi                  | `<Capability>CommandService`            |
+| Application service đọc                  | `<Capability>QueryService`              |
+| Application service khi một class là đủ  | `<Capability>Service`                   |
+| Contract của external capability         | `EmailSender`, `FileStorage`, `TokenIssuer` |
+| Input ghi                                | `<Action>Command`                       |
+| Input đọc                                | `<Action>Query`                         |
+| Output application                       | `<Action>Result`                        |
+| Controller                               | `<Xxx>Controller`                       |
+| Request DTO                              | `<Xxx>Request`                          |
+| Response DTO                             | `<Xxx>Response`                         |
+| Persistence model tách riêng             | `<Xxx>Entity`                           |
+| Triển khai JPA của domain contract       | `Jpa<Aggregate>Repository`              |
+| Spring Data interface trên persistence model tách riêng | `<Xxx>EntityRepository` |
+| Spring Data custom fragment              | `<Xxx>EntityRepositoryCustom`           |
+| Infrastructure implementation khác       | `<Technology><Capability>`              |
+| Configuration                            | `<Xxx>Configuration`                    |
+| Unit test                                | `<ClassName>Test`                       |
+| Integration test                         | `<ClassName>IT`                         |
+
+Chi tiết về naming repository:
+
+- `domain/<Aggregate>Repository` là contract. Nó nói bằng domain type.
+- `Jpa<Aggregate>Repository` trong `infrastructure/persistence` **luôn** là
+  triển khai JPA của contract đó. Theo §6.4, nó thường là một Spring Data
+  interface extends cả `JpaRepository<...>` và domain contract, nên không có
+  class nào phát sinh thêm. Khi persistence model tách riêng là hợp lý, nó là
+  một class `@Repository` delegate sang `<Xxx>EntityRepository` và thực hiện
+  mapping.
+- `<Xxx>EntityRepository` là Spring Data interface tầng thấp trên persistence
+  model tách riêng. Nó **không được** inject ra ngoài
+  `infrastructure/persistence`.
 
 Quy ước bổ sung:
 
@@ -204,8 +417,9 @@ Quy ước bổ sung:
 
 ## 6. Domain model
 
-Domain object biểu diễn trạng thái và behavior nghiệp vụ. Nó không phải model
-persistence hoặc HTTP.
+Domain object biểu diễn trạng thái và behavior nghiệp vụ. Nó trả lời *business
+cho phép điều gì*. Nó không bao giờ là model HTTP. Việc nó có đồng thời là
+persistence model hay không được quyết định theo §6.4.
 
 ### 6.1 Khởi tạo và invariant
 
@@ -272,6 +486,68 @@ contract chuẩn.
 - Inject `Clock` vào application code có behavior phụ thuộc thời gian.
 - Không gọi trực tiếp `Instant.now()` trong business logic cần test xác định.
 - Chỉ chuyển sang timezone người dùng tại API hoặc presentation boundary.
+
+### 6.3 Một repository cho mỗi aggregate root
+
+Repository contract thuộc về **aggregate root**, và chỉ thuộc về aggregate root.
+Nó nằm trong `domain` và có tên `<Aggregate>Repository`.
+
+```text
+domain
+├── Order              # aggregate root
+├── OrderItem          # nằm trong Order aggregate
+├── ShippingAddress    # nằm trong Order aggregate
+└── OrderRepository    # repository duy nhất của aggregate này
+```
+
+- **Không được** tạo repository cho entity hoặc value object nằm bên trong một
+  aggregate khác — không có `OrderItemRepository`, không có
+  `ShippingAddressRepository`.
+- Contract nói bằng domain type và domain language. Nó **không được** expose
+  `Pageable`, `Specification`, `EntityManager`, JPA entity hoặc bất kỳ Spring
+  Data type nào.
+- Load và save aggregate như một khối. Không cho caller sửa entity bên trong qua
+  cửa sau.
+- Read model trải qua nhiều aggregate là **query concern**, không phải
+  repository: đặt nó sau một application query service và giữ SQL hoặc
+  projection trong `infrastructure/persistence`.
+
+### 6.4 Pragmatic JPA mapping
+
+Project này **không** yêu cầu domain object luôn phải tách khỏi JPA mapping.
+
+Khi domain model và persistence model về cơ bản cùng một hình dạng, và JPA
+annotation không làm méo domain behavior, aggregate **có thể** mang mapping
+`jakarta.persistence` trực tiếp:
+
+```text
+domain/model/Order.java   có @Entity
+```
+
+Trong trường hợp đó, `Jpa<Aggregate>Repository` thường là một Spring Data
+interface duy nhất extends cả `JpaRepository<...>` và domain contract. Không có
+model tách riêng và không có mapper.
+
+Chỉ tách thành `Order` + `OrderEntity` + mapper khi có lý do thật:
+
+- schema legacy hoặc do hệ thống khác sở hữu;
+- persistence model khác domain model một cách đáng kể;
+- nhiều storage model cho cùng một aggregate;
+- aggregate phức tạp mà nhu cầu persistence làm méo domain;
+- read model hoặc query model đặc thù.
+
+**Không được** tạo ba object và hai mapper cho một CRUD model đơn giản nếu không
+có lý do nào ở trên.
+
+Hai giới hạn luôn áp dụng:
+
+- Concern HTTP và Jackson **không được** leak vào `domain`. Không
+  `@JsonProperty`, `@JsonIgnore`, servlet hoặc Spring Web type trên aggregate.
+- Aggregate có JPA mapping vẫn phải bảo vệ invariant (§6.1). Constructor
+  no-argument và setter mà Hibernate yêu cầu phải là `protected` hoặc
+  package-private, và mutation vẫn đi qua business method.
+
+Ghi lại lựa chọn này trong mô tả pull request khi module tách hai model.
 
 ---
 
@@ -375,8 +651,9 @@ Không dùng dotted key khi common exception handler resolve bằng
   rule đó.
 - Application service chuyển domain violation hoặc application failure thành
   module-specific exception extends `ResponseException`.
-- Adapter chuyển infrastructure exception thành application/module error có ý
-  nghĩa khi caller có thể xử lý. Phải giữ original cause.
+- Infrastructure implementation chuyển technology exception thành
+  application/module error có ý nghĩa khi caller có thể xử lý. Phải giữ original
+  cause.
 - Controller thông thường không tạo hoặc translate business exception.
 - Không throw `IllegalArgumentException`, `RuntimeException` hoặc
   `NullPointerException` để biểu diễn business failure.
@@ -424,7 +701,7 @@ Class cần log dùng SLF4J, thông thường qua Lombok:
 
 @Slf4j(topic = "ROLE-SERVICE")
 @Service
-public class RoleService implements RoleManagementUseCase {
+public class RoleCommandService {
   // ...
 }
 ```
@@ -498,7 +775,8 @@ field hoặc transformation rule.
 
 Dùng mapper riêng khi:
 
-- mapping giữa domain và JPA entity;
+- persistence model tách riêng và aggregate phải được map sang nó (xem §6.4 —
+  phần lớn aggregate không cần điều này);
 - mapping có nhiều field, nested value, conversion hoặc ignored field;
 - mapping được tái sử dụng;
 - API model và application model cần thay đổi độc lập.
@@ -586,14 +864,19 @@ app:
 
 ## 11. Persistence và transaction
 
-Persistence adapter chuyển đổi giữa domain model và database model.
+`infrastructure/persistence` sở hữu toàn bộ database concern của một module:
+JPA mapping, các Spring Data interface, và phần triển khai các domain repository
+contract.
 
 ### 11.1 Quy tắc entity
 
-- Mọi JPA entity tách riêng khỏi domain model.
-- Mọi JPA entity extends `AuditableEntity` khi common base phù hợp.
-- Mọi JPA entity **bắt buộc** kế thừa hoặc khai báo trạng thái soft delete
-  bằng `Instant deletedAt`, map tới cột SQL `deleted_at`.
+Đọc §6.4 trước để quyết định module có cần persistence model tách riêng hay
+không. Các quy tắc dưới đây áp dụng cho class nào mang JPA mapping.
+
+- Persistence model tách riêng chỉ được tạo khi có lý do liệt kê ở §6.4.
+- Mọi class có JPA mapping extends `AuditableEntity` khi common base phù hợp.
+- Mọi class có JPA mapping **bắt buộc** kế thừa hoặc khai báo trạng thái soft
+  delete bằng `Instant deletedAt`, map tới cột SQL `deleted_at`.
 - Nếu `AuditableEntity` đã khai báo `deletedAt`, không được khai báo lại field
   này trong entity con.
 - Tên Java chuẩn là `deletedAt`; tên cột SQL là `deleted_at`.
@@ -655,7 +938,8 @@ CREATE INDEX roles_deleted_at_idx
 ### 11.4 Transaction boundary
 
 - Đặt transaction boundary trên application service method, không đặt trên
-  controller.
+  controller và không đặt trên domain object. `domain` không bao giờ mở, commit
+  hoặc rollback transaction.
 - Dùng `@Transactional(readOnly = true)` cho read-only use case.
 - Transaction phải ngắn.
 - Không gọi HTTP, email, object storage hoặc message broker bên trong database
@@ -680,9 +964,11 @@ CREATE INDEX roles_deleted_at_idx
 
 ## 12. API layer
 
-Controller chuyển HTTP request thành application use case.
+Controller chuyển HTTP request thành application use case. Controller nằm trong
+`<module>/api` và gọi trực tiếp một concrete application service (§4.5).
 
-- Controller chỉ chứa request validation, mapping, gọi use case và tạo response.
+- Controller chỉ chứa request validation, mapping, gọi application service và
+  tạo response.
 - Business decision và transaction boundary không nằm trong controller.
 - Request/response contract dùng DTO, không dùng JPA entity hoặc domain
   aggregate.
@@ -708,12 +994,12 @@ Ví dụ:
 @RequiredArgsConstructor
 public class RoleController {
 
-  private final RoleManagementUseCase roleManagementUseCase;
+  private final RoleCommandService roleCommandService;
   private final RoleWebMapper roleWebMapper;
 
   @DeleteMapping("/{roleId}")
   public Response<Void> delete(@PathVariable UUID roleId) {
-    roleManagementUseCase.delete(roleId);
+    roleCommandService.delete(roleId);
     return Response.noContent();
   }
 }
@@ -912,35 +1198,51 @@ Reject hoặc sửa mọi change có các pattern sau nếu chưa có ngoại l�
 1. Business logic hoặc transaction trong controller.
 2. Một interface cho mọi class hoặc một interface cho mỗi method nhỏ.
 3. Package rỗng hoặc placeholder type chỉ để giống sơ đồ.
-4. Domain code import Spring, JPA, Jackson, servlet hoặc HTTP type.
-5. Domain exception chứa HTTP status hoặc response-format detail.
-6. Controller advice mới trùng chức năng common exception handler.
-7. Business failure dùng bare runtime exception.
-8. Log trước mọi `throw` hoặc log cùng exception ở mọi layer.
-9. Nuốt exception rồi trả `null` hoặc sentinel value.
-10. ModelMapper, BeanUtils, Dozer, Orika hoặc reflection field copy.
-11. Thay managed JPA entity thay vì update có chủ đích.
-12. Field injection bằng `@Autowired`.
-13. `System.out.println`, `printStackTrace` hoặc log nối chuỗi.
-14. Log token, password, secret, full PII, request body hoặc file data.
-15. User-facing message hard-code ngoài i18n.
-16. Error enum name không có prefix module.
-17. Numeric business error code bị trùng.
-18. Thiếu error key ở file tiếng Anh hoặc tiếng Việt.
-19. Controller trả JPA entity hoặc domain aggregate.
-20. Sửa Flyway migration đã apply.
-21. `ddl-auto` đặt thành `create`, `update`, `create-drop` ngoài local experiment
+4. Package `adapter/in`, `adapter/out`, `port/in` hoặc `port/out` mới.
+5. Interface `<Capability>UseCase` mới, hoặc type `*RepositoryPort`,
+   `*StoragePort`, `*PersistenceAdapter` mới.
+6. Dùng suffix `Port` hoặc `Adapter` làm naming convention mặc định.
+7. Repository cho entity hoặc value object nằm bên trong một aggregate khác.
+8. Expose Spring Data type (`Pageable`, `Specification`, `EntityManager`,
+   entity) trên domain repository contract.
+9. Application service phụ thuộc JPA entity, Spring Data repository, HTTP
+   client, broker client hoặc object-storage client.
+10. Module đọc hoặc ghi persistence model hoặc persistence implementation của
+    module khác.
+11. Persistence model tách riêng kèm mapper cho một CRUD aggregate đơn giản mà
+    không có lý do theo §6.4.
+12. Tạo `Command`, `Query` hoặc `Result` cho boundary chỉ có một giá trị đơn
+    giản, trái §4.7.
+13. Domain code import Spring, Jackson, servlet hoặc HTTP type, hoặc thêm JPA
+    mapping vào aggregate ngoài các điều kiện ở §6.4.
+14. Domain exception chứa HTTP status hoặc response-format detail.
+15. Controller advice mới trùng chức năng common exception handler.
+16. Business failure dùng bare runtime exception.
+17. Log trước mọi `throw` hoặc log cùng exception ở mọi layer.
+18. Nuốt exception rồi trả `null` hoặc sentinel value.
+19. ModelMapper, BeanUtils, Dozer, Orika hoặc reflection field copy.
+20. Thay managed JPA entity thay vì update có chủ đích.
+21. Field injection bằng `@Autowired`.
+22. `System.out.println`, `printStackTrace` hoặc log nối chuỗi.
+23. Log token, password, secret, full PII, request body hoặc file data.
+24. User-facing message hard-code ngoài i18n.
+25. Error enum name không có prefix module.
+26. Numeric business error code bị trùng.
+27. Thiếu error key ở file tiếng Anh hoặc tiếng Việt.
+28. Controller trả JPA entity hoặc domain aggregate.
+29. Sửa Flyway migration đã apply.
+30. `ddl-auto` đặt thành `create`, `update`, `create-drop` ngoài local experiment
     có thể xóa bỏ.
-22. JPA entity không có `deletedAt` và `deleted_at`.
-23. Business read không loại row soft-deleted.
-24. Application service gọi repository hard-delete method.
-25. Dùng `EAGER` để che N+1 hoặc session-boundary problem.
-26. Gọi network hoặc object storage trong database transaction dài.
-27. Page size, executor, queue, retry hoặc file memory load không giới hạn.
-28. `MultipartFile.getBytes()`, `Files.readAllBytes()` hoặc tương đương trên
+31. JPA entity không có `deletedAt` và `deleted_at`.
+32. Business read không loại row soft-deleted.
+33. Application service gọi repository hard-delete method.
+34. Dùng `EAGER` để che N+1 hoặc session-boundary problem.
+35. Gọi network hoặc object storage trong database transaction dài.
+36. Page size, executor, queue, retry hoặc file memory load không giới hạn.
+37. `MultipartFile.getBytes()`, `Files.readAllBytes()` hoặc tương đương trên
     content không giới hạn.
-29. Secret có default configuration không an toàn.
-30. Thêm framework hoặc infrastructure mới khi chưa có requirement được duyệt.
+38. Secret có default configuration không an toàn.
+39. Thêm framework hoặc infrastructure mới khi chưa có requirement được duyệt.
 
 ---
 
@@ -948,8 +1250,14 @@ Reject hoặc sửa mọi change có các pattern sau nếu chưa có ngoại l�
 
 - [ ] Đã đọc source, test, `AGENTS.md`, `LIBRARY.md` liên quan.
 - [ ] Change dùng thiết kế nhỏ nhất nhưng vẫn bảo vệ boundary có thật.
-- [ ] Domain code không phụ thuộc Spring, JPA, Jackson, servlet hoặc HTTP.
-- [ ] Interface mới đại diện cho inbound/outbound boundary có thật.
+- [ ] Domain code không phụ thuộc Spring, Jackson, servlet hoặc HTTP; mọi JPA
+  mapping trên aggregate thoả §6.4.
+- [ ] Interface mới bảo vệ một boundary thật liệt kê ở §4.5.
+- [ ] Không có `adapter/in|out`, `port/in|out`, `*UseCase`, `*RepositoryPort`
+  hoặc `*PersistenceAdapter` mới được thêm vào.
+- [ ] Hướng dependency theo §4.2, và không module nào truy cập infrastructure
+  của module khác.
+- [ ] Mỗi aggregate root có tối đa một repository contract trong `domain`.
 - [ ] Mọi entity mới kế thừa hoặc khai báo `deletedAt` map tới `deleted_at`.
 - [ ] Business read dùng `deleted_at IS NULL`, trừ màn hình thùng rác rõ ràng.
 - [ ] Uniqueness của live data dùng partial unique index phù hợp.

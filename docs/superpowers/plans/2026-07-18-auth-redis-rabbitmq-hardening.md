@@ -1,6 +1,27 @@
 # Auth Register Infra Hardening Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+<!-- prettier-ignore -->
+> [!WARNING]
+> **LEGACY ARCHITECTURE NOTICE — SUPERSEDED ARCHITECTURE GUIDANCE**
+>
+> Tài liệu này được tạo trước quyết định chuyển sang Pragmatic Modular DDD.
+> Các package `adapter/*`, `port/*`, `*UseCase`, `*Port` và `*Adapter` trong tài
+> liệu này mô tả legacy implementation và **không còn là architecture guidance**.
+>
+> This document predates the migration to Pragmatic Modular DDD. Every
+> `adapter/in`, `adapter/out`, `port/in`, `port/out`, `*UseCase`,
+> `*RepositoryPort`, and `*PersistenceAdapter` reference below records the
+> legacy implementation **as it was actually built**. It is a historical record,
+> not an instruction. Do not reproduce this layout, naming, or interface
+> structure in new code or in a refactor.
+>
+> [`RULE.md`](../../../RULE.md) §4 is the source of truth for architecture. The
+> business behavior, API contracts, and security requirements described here
+> remain valid; only the structural guidance is superseded.
+
+> **PLAN COMPLETED — DO NOT RE-EXECUTE.** Every task in this plan was implemented and merged. Its package layout and type names follow the legacy Hexagonal structure and are superseded by `RULE.md` §4. Kept for history only.
+>
+> <sub>Original agent instruction, retained verbatim for the record: **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.</sub>
 
 **Goal:** Replace the Caffeine-backed register/resend throttle with a cluster-wide Redis sliding-window rate limiter, move email verification tokens from PostgreSQL to Redis-only storage, and move audit-log recording and verification-email sending from direct synchronous port calls to RabbitMQ-published events consumed by an in-process listener.
 
