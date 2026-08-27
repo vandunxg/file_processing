@@ -1,5 +1,24 @@
 # Auth Login Design
 
+<!-- prettier-ignore -->
+> [!WARNING]
+> **LEGACY ARCHITECTURE NOTICE — SUPERSEDED ARCHITECTURE GUIDANCE**
+>
+> Tài liệu này được tạo trước quyết định chuyển sang Pragmatic Modular DDD.
+> Các package `adapter/*`, `port/*`, `*UseCase`, `*Port` và `*Adapter` trong tài
+> liệu này mô tả legacy implementation và **không còn là architecture guidance**.
+>
+> This document predates the migration to Pragmatic Modular DDD. Every
+> `adapter/in`, `adapter/out`, `port/in`, `port/out`, `*UseCase`,
+> `*RepositoryPort`, and `*PersistenceAdapter` reference below records the
+> legacy implementation **as it was actually built**. It is a historical record,
+> not an instruction. Do not reproduce this layout, naming, or interface
+> structure in new code or in a refactor.
+>
+> [`RULE.md`](../../../RULE.md) §4 is the source of truth for architecture. The
+> business behavior, API contracts, and security requirements described here
+> remain valid; only the structural guidance is superseded.
+
 **Goal:** Deliver password-based login, refresh-token rotation, server-side session tracking, and self-service session revocation as the second slice of the `auth` module, building on the register/verify-email foundation.
 
 **Scope in:** `POST /login`, `POST /refresh`, `POST /logout`, `POST /sessions/revoke-all`, `GET /me`, `GET /sessions`, `DELETE /sessions/{sid}`. Wires the JWT resource server to accept the tokens this feature issues and reject revoked ones.

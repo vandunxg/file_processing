@@ -22,25 +22,25 @@ and operational monitoring.
 Use the following documents as the authoritative requirements set. Read the
 focused documents first and use the master SRS to resolve missing context.
 
-1. [`00-README.md`](./00-README.md) explains the handoff package and reading
+1. [`00-README.md`](./docs/requirement/00-README.md) explains the handoff package and reading
    order.
-2. [`01-BRD-business-context.md`](./01-BRD-business-context.md) defines the
+2. [`01-BRD-business-context.md`](./docs/requirement/01-BRD-business-context.md) defines the
    problem, goals, scope, stakeholders, and actors.
-3. [`02-domain-model-and-business-rules.md`](./02-domain-model-and-business-rules.md)
+3. [`02-domain-model-and-business-rules.md`](./docs/requirement/02-domain-model-and-business-rules.md)
    defines aggregates, invariants, state transitions, CSV rules, transaction
    semantics, and audit requirements.
-4. [`03-functional-specification.md`](./03-functional-specification.md) defines
+4. [`03-functional-specification.md`](./docs/requirement/03-functional-specification.md) defines
    the five features, use cases, API behavior, authorization rules, acceptance
    criteria, and error catalog.
-5. [`04-non-functional-requirements.md`](./04-non-functional-requirements.md)
+5. [`04-non-functional-requirements.md`](./docs/requirement/04-non-functional-requirements.md)
    defines performance, memory, reliability, security, observability,
    shutdown, recovery, and retention constraints.
-6. [`05-test-and-developer-handover.md`](./05-test-and-developer-handover.md)
+6. [`05-test-and-developer-handover.md`](./docs/requirement/05-test-and-developer-handover.md)
    defines acceptance scenarios, implementation phases, required deliverables,
    review questions, and the Definition of Done.
-7. [`requirements-traceability-matrix.csv`](./requirements-traceability-matrix.csv)
+7. [`requirements-traceability-matrix.csv`](./docs/requirement/requirements-traceability-matrix.csv)
    maps requirements to use cases, acceptance criteria, and test types.
-8. [`99-master-BA-SRS.md`](./99-master-BA-SRS.md) is the consolidated reference.
+8. [`99-master-BA-SRS.md`](./docs/requirement/99-master-BA-SRS.md) is the consolidated reference.
 
 When two focused documents appear inconsistent, compare the same section in
 `99-master-BA-SRS.md`. Do not silently choose a behavior. Record the conflict
@@ -92,7 +92,10 @@ them:
 
 ## Required technology baseline
 
-Build a modular monolith with moderate DDD boundaries. Use the following
+Build a modular monolith using **Pragmatic Modular DDD**: package by business
+module, with `api` / `application` / `domain` / `infrastructure` layers inside
+each module. [`RULE.md` §4](./RULE.md) is the normative definition of that
+architecture and of every naming and dependency rule. Use the following
 technology baseline unless the repository already contains an approved choice:
 
 - Java 21 or newer.
@@ -111,7 +114,23 @@ interface for every class. Keep controllers free of business logic.
 
 ## Architectural boundaries
 
-Keep two logical bounded contexts inside one application.
+<!-- prettier-ignore -->
+> [!IMPORTANT]
+> **Architecture target:** Pragmatic Modular DDD, defined normatively in
+> [`RULE.md` §4](./RULE.md).
+>
+> **Legacy implementation:** parts of `src/main/java` still use a Hexagonal
+> `adapter/in`, `adapter/out`, `application/port/in`, `application/port/out`
+> layout with `*UseCase`, `*RepositoryPort`, and `*PersistenceAdapter` types.
+> That code is being migrated. It is not architecture guidance, and no new
+> code may extend it.
+>
+> This file defines **business behavior**. When a structural question arises,
+> `RULE.md` decides it. When `RULE.md` appears to conflict with a business
+> rule stated here, the business rule wins.
+
+Keep two logical bounded contexts inside one application. Each is a business
+module with its own `api`, `application`, `domain`, and `infrastructure`.
 
 ### File Import context
 
@@ -125,9 +144,11 @@ This context owns `Customer`, its business identity `externalId`, normalized
 customer fields, and the most recent import job that changed the record.
 
 Do not collapse both contexts into one large service class. Cross-context work
-must use explicit application services or ports where an actual boundary is
-useful. Avoid ceremonial abstractions that do not protect a rule or support a
-real substitution.
+goes through the other context's application service, or through a domain or
+application event when asynchronous decoupling has real value. One context
+**MUST NOT** read or write the other context's persistence model or persistence
+implementation. Avoid ceremonial abstractions that do not protect a rule or
+support a real substitution.
 
 ## Actors and authorization
 
@@ -873,7 +894,7 @@ unavailability, and report-download failures.
 
 ## Testing and traceability
 
-Use [`requirements-traceability-matrix.csv`](./requirements-traceability-matrix.csv)
+Use [`requirements-traceability-matrix.csv`](./docs/requirement/requirements-traceability-matrix.csv)
 to connect implementation and tests to the approved requirements.
 
 At minimum, automate these acceptance scenarios:
@@ -962,9 +983,12 @@ Apply these rules to every code change.
 9. Preserve sanitized errors, trace correlation, metrics, and audit effects.
 10. Avoid speculative frameworks, abstractions, or services outside the
     approved scope.
-11. Update OpenAPI, diagrams, ADRs, runbooks, and this file when a technical
+11. Follow the module layout, dependency direction, naming, and interface rules
+    in `RULE.md` §4 to §6. Do not extend the legacy Hexagonal structure, even
+    inside a module that still contains it.
+12. Update OpenAPI, diagrams, ADRs, runbooks, and this file when a technical
     decision changes how agents must work.
-12. Do not silently reinterpret an approved business rule. Raise a change
+13. Do not silently reinterpret an approved business rule. Raise a change
     request when the requested implementation conflicts with the specification.
 
 ## Patterns to reject during review
@@ -991,6 +1015,14 @@ approved justification:
 - Assuming `CompletableFuture.orTimeout()` stops the underlying operation.
 - Adding Kafka, CQRS, Event Sourcing, microservices, or an interface for every
   class without an approved requirement.
+- New `adapter/in`, `adapter/out`, `port/in`, or `port/out` packages, or new
+  `*UseCase`, `*RepositoryPort`, `*StoragePort`, or `*PersistenceAdapter` types.
+  These belong to the legacy Hexagonal layout being migrated away.
+- One context reading the other context's persistence model, Spring Data
+  repository, or persistence implementation.
+- A repository for an entity that lives inside another aggregate, for example a
+  `ProcessingAttemptRepository` when `ProcessingAttempt` belongs to the
+  `ProcessingJob` aggregate.
 
 ## Definition of Done
 
@@ -1019,6 +1051,8 @@ and the implementation preserves the following project-wide guarantees:
 - The Tech Lead accepts all required ADRs.
 - The implementation does not add unnecessary messaging, CQRS, Event Sourcing,
   or abstraction layers.
+- Every module added or changed follows the `api` / `application` / `domain` /
+  `infrastructure` layout and the dependency rules in `RULE.md` §4.
 
 ## Review focus
 

@@ -56,6 +56,14 @@ Pick modules by what you need — each is a separate Maven artifact, not a monol
 
 ## Cross-cutting conventions (apply to every module)
 
+- **`*Adapter` names below are this library's own API, not a project naming
+  convention.** `common-client` ships classes such as `BankAdapter`,
+  `CloudFlareAdapter`, and `MikrotikPartnerAdapter`; this document records them
+  verbatim because that is what the published artifact exposes. The
+  `file_processing` service itself is **Pragmatic Modular DDD** and **MUST NOT**
+  use `Adapter` or `Port` as a naming suffix — see [`RULE.md` §4.6](./RULE.md).
+  Likewise, "port" elsewhere in this document means a TCP/SMTP port, never a
+  Hexagonal port.
 - **Null-safety**: every package is `@NullMarked` (JSpecify) — parameters/returns are non-null by default; explicit `@Nullable` marks the exceptions. Trust the annotations; don't add defensive null checks the type system already rules out.
 - **Auto-configuration, not component-scanning — except in `common-web`**: since `2.0.0`, `common-persistence`, `common-cache`, `common-amqp`, `common-email`, and `common-client` register every bean through exactly one `@AutoConfiguration` class per module (listed in each module's `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`), with every bean method `@ConditionalOnMissingBean` — **define your own bean of the same type in your service to override/replace any library-provided bean**, no exclusion/profile juggling needed. **`common-web` is the exception**: only `TokenCacheAutoConfiguration` is a real auto-configuration there; everything else (`WebSecurityConfig`, `JacksonConfiguration`, `ExceptionHandleAdvice`, the security filters, etc.) still carries `@Component`/`@Configuration`/`@ControllerAdvice` and needs the consumer's `@SpringBootApplication` to scan (or `@Import`) package `com.vandunxg.common.web` — see the `common-web` section below for the
   full checklist.

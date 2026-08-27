@@ -1,5 +1,24 @@
 # Auth Register Design
 
+<!-- prettier-ignore -->
+> [!WARNING]
+> **LEGACY ARCHITECTURE NOTICE — SUPERSEDED ARCHITECTURE GUIDANCE**
+>
+> Tài liệu này được tạo trước quyết định chuyển sang Pragmatic Modular DDD.
+> Các package `adapter/*`, `port/*`, `*UseCase`, `*Port` và `*Adapter` trong tài
+> liệu này mô tả legacy implementation và **không còn là architecture guidance**.
+>
+> This document predates the migration to Pragmatic Modular DDD. Every
+> `adapter/in`, `adapter/out`, `port/in`, `port/out`, `*UseCase`,
+> `*RepositoryPort`, and `*PersistenceAdapter` reference below records the
+> legacy implementation **as it was actually built**. It is a historical record,
+> not an instruction. Do not reproduce this layout, naming, or interface
+> structure in new code or in a refactor.
+>
+> [`RULE.md`](../../../RULE.md) §4 is the source of truth for architecture. The
+> business behavior, API contracts, and security requirements described here
+> remain valid; only the structural guidance is superseded.
+
 **Goal:** Deliver self-service registration, email verification, and verification-email resend in accordance with AUTH-UC-02 through AUTH-UC-04.
 
 **Scope:** The implementation first replaces the current Auth stubs with the required domain and persistence foundation, then delivers the three public endpoints. Login, JWT issuance, refresh sessions, password reset, and administrative user management remain outside this delivery.

@@ -1,6 +1,27 @@
 # Auth Register — Remaining Work (Persistence + Use Cases + Web)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: `superpowers:subagent-driven-development`. Steps use checkbox (`- [ ]`) syntax for tracking.
+<!-- prettier-ignore -->
+> [!WARNING]
+> **LEGACY ARCHITECTURE NOTICE — SUPERSEDED ARCHITECTURE GUIDANCE**
+>
+> Tài liệu này được tạo trước quyết định chuyển sang Pragmatic Modular DDD.
+> Các package `adapter/*`, `port/*`, `*UseCase`, `*Port` và `*Adapter` trong tài
+> liệu này mô tả legacy implementation và **không còn là architecture guidance**.
+>
+> This document predates the migration to Pragmatic Modular DDD. Every
+> `adapter/in`, `adapter/out`, `port/in`, `port/out`, `*UseCase`,
+> `*RepositoryPort`, and `*PersistenceAdapter` reference below records the
+> legacy implementation **as it was actually built**. It is a historical record,
+> not an instruction. Do not reproduce this layout, naming, or interface
+> structure in new code or in a refactor.
+>
+> [`RULE.md`](../../../RULE.md) §4 is the source of truth for architecture. The
+> business behavior, API contracts, and security requirements described here
+> remain valid; only the structural guidance is superseded.
+
+> **PLAN COMPLETED — DO NOT RE-EXECUTE.** Every task in this plan was implemented and merged. Its package layout and type names follow the legacy Hexagonal structure and are superseded by `RULE.md` §4. Kept for history only.
+>
+> <sub>Original agent instruction, retained verbatim for the record: **For agentic workers:** REQUIRED SUB-SKILL: `superpowers:subagent-driven-development`. Steps use checkbox (`- [ ]`) syntax for tracking.</sub>
 
 **Context:** The domain foundation for register/verify/resend is already implemented and committed (`User`, `Role`, `UserRole`, `EmailVerificationToken`, `PasswordPolicy`, `AuthErrorCode`, `AuthDomainException` in `auth/domain/`), proven by `RegisterDomainTest` and `PasswordPolicyTest`. Flyway migrations `V202607170900`-`V202607170906` already create the full schema (`auth_users`, `role`, `role_permission`, `user_role`, `audit_logs`, seed data, `auth_email_verification_tokens`) and are on disk (untracked, not yet `git add`ed). Test infra (`PostgresIntegrationTest`, `PostgresTestContainerBase`, `application-test.yml`) already exists.
 
