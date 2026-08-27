@@ -8,12 +8,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Locale;
-import java.util.ResourceBundle;
 import java.util.UUID;
 
-import com.vandunxg.file_processing.auth.domain.exception.AuthDomainException;
-import com.vandunxg.file_processing.auth.domain.exception.AuthErrorCode;
+import com.vandunxg.file_processing.auth.domain.exception.AuthRule;
+import com.vandunxg.file_processing.auth.domain.exception.AuthRuleViolation;
 import org.junit.jupiter.api.Test;
 
 class RegisterDomainTest {
@@ -78,9 +76,9 @@ class RegisterDomainTest {
     user.verifyEmail(NOW.plusSeconds(1));
 
     assertThatThrownBy(() -> user.verifyEmail(NOW.plusSeconds(2)))
-        .isInstanceOf(AuthDomainException.class)
-        .extracting("error")
-        .isEqualTo(AuthErrorCode.USER_ALREADY_VERIFIED);
+        .isInstanceOf(AuthRuleViolation.class)
+        .extracting("rule")
+        .isEqualTo(AuthRule.USER_ALREADY_VERIFIED);
   }
 
   @Test
@@ -189,9 +187,9 @@ class RegisterDomainTest {
             "ip-hash");
 
     assertThatThrownBy(() -> token.consume(NOW.plus(Duration.ofMinutes(15))))
-        .isInstanceOf(AuthDomainException.class)
-        .extracting("error")
-        .isEqualTo(AuthErrorCode.EMAIL_VERIFICATION_TOKEN_INVALID);
+        .isInstanceOf(AuthRuleViolation.class)
+        .extracting("rule")
+        .isEqualTo(AuthRule.EMAIL_VERIFICATION_TOKEN_UNUSABLE);
   }
 
   @Test
@@ -208,24 +206,9 @@ class RegisterDomainTest {
 
     assertThat(token.getUsedAt()).isEqualTo(NOW.plusSeconds(1));
     assertThatThrownBy(() -> token.consume(NOW.plusSeconds(2)))
-        .isInstanceOf(AuthDomainException.class)
-        .extracting("error")
-        .isEqualTo(AuthErrorCode.EMAIL_VERIFICATION_TOKEN_INVALID);
-  }
-
-  @Test
-  void authErrorCodesAreUniqueAndHaveLocalizedMessages() {
-    ResourceBundle english = ResourceBundle.getBundle("i18n.messages", Locale.ENGLISH);
-    ResourceBundle vietnamese =
-        ResourceBundle.getBundle("i18n.messages", Locale.forLanguageTag("vi"));
-
-    assertThat(Arrays.stream(AuthErrorCode.values()).map(AuthErrorCode::getCode).toList())
-        .doesNotHaveDuplicates();
-    assertThat(AuthErrorCode.USER_ALREADY_VERIFIED.getCode()).isEqualTo(40907);
-    for (AuthErrorCode error : AuthErrorCode.values()) {
-      assertThat(english.containsKey(error.getName())).isTrue();
-      assertThat(vietnamese.containsKey(error.getName())).isTrue();
-    }
+        .isInstanceOf(AuthRuleViolation.class)
+        .extracting("rule")
+        .isEqualTo(AuthRule.EMAIL_VERIFICATION_TOKEN_UNUSABLE);
   }
 
   private static Role operatorRole() {
@@ -240,8 +223,8 @@ class RegisterDomainTest {
     assertThatThrownBy(
             () ->
                 User.register("operator", "operator@example.com", "Operator", "hashed", role, NOW))
-        .isInstanceOf(AuthDomainException.class)
-        .extracting("error")
-        .isEqualTo(AuthErrorCode.INVALID_ROLE);
+        .isInstanceOf(AuthRuleViolation.class)
+        .extracting("rule")
+        .isEqualTo(AuthRule.ROLE_NOT_ASSIGNABLE);
   }
 }

@@ -160,8 +160,9 @@ actually needs.
 │   ├── dto/response/
 │   └── mapper/
 ├── application/                  # use-case orchestration, transaction boundary
-│   ├── <Capability>CommandService.java
-│   ├── <Capability>QueryService.java
+│   ├── <Xxx>Properties.java      # typed module settings, visible to both layers
+│   ├── service/                  # <Capability>CommandService / <Capability>QueryService
+│   ├── capability/               # contracts infrastructure implements (EmailSender, ...)
 │   ├── command/
 │   ├── query/
 │   ├── result/
@@ -515,9 +516,21 @@ domain
   other Spring Data type.
 - Load and save the aggregate as a whole. Do not let callers mutate an inner
   entity through a side door.
-- A read model that spans aggregates is a **query concern**, not a repository:
-  put it behind an application query service and keep the SQL or projection in
+- A read model is a **query concern**, not a repository: put it behind an
+  application query service and keep the SQL or projection in
   `infrastructure/persistence`.
+- Paginated search is a read model. `count(query)` and `search(query)` speak
+  `PagingQuery`, which is an application type, so they **MUST NOT** sit on the
+  `domain` contract — that would make `domain` depend on `application`. Declare
+  them on `application/capability/<Aggregate>SearchRepository` instead. One
+  `Jpa<Aggregate>Repository` class normally implements both contracts, so no
+  extra implementation appears:
+
+```text
+domain/UserRepository                              # aggregate: load, save, invariants
+application/capability/UserSearchRepository        # read model: count(query), search(query)
+infrastructure/persistence/JpaUserRepository       # implements both
+```
 
 ### 6.4 Pragmatic JPA mapping
 
@@ -657,9 +670,32 @@ Do not use dotted keys when the common exception handler resolves by
 ### 7.4 Exceptions by layer
 
 - Domain code throws a pure domain rule violation only when the domain object
-  itself enforces the rule.
+  itself enforces the rule. "Pure" means it names the violated rule and nothing
+  else: no HTTP status, no numeric code, no i18n key. The shape is a
+  `<Module>Rule` enum plus a `<Module>RuleViolation extends RuntimeException`
+  in `domain/exception`.
 - Application services translate a domain violation or application failure
-  into a module-specific exception that extends `ResponseException`.
+  into a module-specific exception that extends `ResponseException`. Keep the
+  rule-to-error mapping in one place next to the error enum, and translate at
+  the call site so the mapping stays visible:
+
+```java
+// application/exception/AuthErrorCode.java
+public static AuthErrorCode from(AuthRule rule) {
+  return switch (rule) {
+    case ROLE_NOT_ASSIGNABLE -> ROLE_INVALID;
+    case USER_ALREADY_VERIFIED -> USER_ALREADY_VERIFIED;
+    // ...
+  };
+}
+
+// application/service/RegistrationCommandService.java
+try {
+  user.verifyEmail(now);
+} catch (AuthRuleViolation violation) {
+  throw AuthException.of(violation);
+}
+```
 - Infrastructure implementations translate technology-specific exceptions into
   a meaningful application/module error when callers can act on it. Preserve the
   original cause.
@@ -989,9 +1025,15 @@ Controllers translate HTTP into an application use case. They live in
 - Enforce bounded pagination at the request boundary.
 - Unbounded list, search, and completion endpoints **MUST** follow the common
   paging convention: a request DTO extends `PagingRequest`, the controller
-  parameter uses `@ValidatePaging(sortModel = Entity.class)`, the application
-  query extends `PagingQuery`, the repository exposes `count(query)` and
-  `search(query)`, and the controller returns `PagingResponse<T>`.
+  parameter uses `@ValidatePaging(sortModel = <Xxx>Entity.class)`, the
+  application query extends `PagingQuery`, an
+  `application/capability/<Aggregate>SearchRepository` exposes `count(query)`
+  and `search(query)` (§6.3), and the controller returns `PagingResponse<T>`.
+- `@ValidatePaging` builds its sort allow-list by reflecting over
+  `@jakarta.persistence.Column` fields, so `sortModel` **MUST** be the
+  JPA-mapped class of the same module. This is the only place `api` may name a
+  persistence model, and only as validation metadata — never as a parameter,
+  return type, or field.
 - Do not force paging onto bounded catalogs, enum lists, JWKS, `/me`, or
   current-user scoped lists unless product behavior explicitly requires it.
 - Do not trust proxy forwarding headers unless the deployment config defines
@@ -1242,6 +1284,11 @@ is documented:
 17. Logging before every throw or logging the same exception at every layer.
 18. Swallowing an exception and returning `null` or a sentinel value.
 19. ModelMapper, BeanUtils, Dozer, Orika, or reflection-based field copying.
+19a. A hand-written field-by-field copy — a builder chain or constructor call
+    reading getters off one source object — inside a service, repository,
+    controller, or a `from(...)` factory on a DTO, where §9.1 calls for a
+    MapStruct mapper. Assembling an object from several sources or from
+    scalars is not a mapping and stays in the caller.
 20. Replacing a managed JPA entity instead of updating it intentionally.
 21. Field injection with `@Autowired`.
 22. `System.out.println`, `printStackTrace`, or string-concatenated logs.

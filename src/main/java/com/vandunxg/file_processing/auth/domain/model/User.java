@@ -9,8 +9,8 @@ import java.util.UUID;
 
 import com.vandunxg.common.models.domain.AuditableDomain;
 import com.vandunxg.common.utils.IdUtils;
-import com.vandunxg.file_processing.auth.domain.exception.AuthDomainException;
-import com.vandunxg.file_processing.auth.domain.exception.AuthErrorCode;
+import com.vandunxg.file_processing.auth.domain.exception.AuthRule;
+import com.vandunxg.file_processing.auth.domain.exception.AuthRuleViolation;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
 
@@ -51,7 +51,7 @@ public class User extends AuditableDomain {
         || operatorRole.isDeleted()
         || !operatorRole.isActive()
         || !"OPERATOR".equals(operatorRole.getCode())) {
-      throw new AuthDomainException(AuthErrorCode.INVALID_ROLE);
+      throw new AuthRuleViolation(AuthRule.ROLE_NOT_ASSIGNABLE);
     }
     return User.builder()
         .id(IdUtils.nextId())
@@ -80,7 +80,7 @@ public class User extends AuditableDomain {
         || adminRole.isDeleted()
         || !adminRole.isActive()
         || !"ADMIN".equals(adminRole.getCode())) {
-      throw new AuthDomainException(AuthErrorCode.INVALID_ROLE);
+      throw new AuthRuleViolation(AuthRule.ROLE_NOT_ASSIGNABLE);
     }
     return User.builder()
         .id(IdUtils.nextId())
@@ -115,7 +115,7 @@ public class User extends AuditableDomain {
       throw new IllegalArgumentException("A user requires a password, role, and creation time");
     }
     if (roles.stream().anyMatch(role -> role == null || !role.isActive())) {
-      throw new AuthDomainException(AuthErrorCode.INVALID_ROLE);
+      throw new AuthRuleViolation(AuthRule.ROLE_NOT_ASSIGNABLE);
     }
     return User.builder()
         .id(IdUtils.nextId())
@@ -148,7 +148,7 @@ public class User extends AuditableDomain {
 
   public void verifyEmail(Instant now) {
     if (status != UserStatus.PENDING_VERIFY) {
-      throw new AuthDomainException(AuthErrorCode.USER_ALREADY_VERIFIED);
+      throw new AuthRuleViolation(AuthRule.USER_ALREADY_VERIFIED);
     }
     this.status = UserStatus.ACTIVE;
     this.emailVerifiedAt = now;
@@ -203,7 +203,7 @@ public class User extends AuditableDomain {
         || passwordHash.isBlank()
         || now == null
         || (!isActive() && !isPendingVerify())) {
-      throw new AuthDomainException(AuthErrorCode.PASSWORD_RESET_NOT_ALLOWED);
+      throw new AuthRuleViolation(AuthRule.PASSWORD_RESET_NOT_ALLOWED);
     }
     this.passwordHash = passwordHash;
     this.credentialVersion += 1;
@@ -231,7 +231,7 @@ public class User extends AuditableDomain {
       throw new IllegalArgumentException("Email, display name, and at least one role are required");
     }
     if (roles.stream().anyMatch(role -> role == null || !role.isActive())) {
-      throw new AuthDomainException(AuthErrorCode.INVALID_ROLE);
+      throw new AuthRuleViolation(AuthRule.ROLE_NOT_ASSIGNABLE);
     }
     this.email = normalize(email);
     this.normalizedEmail = normalize(email);
@@ -241,7 +241,7 @@ public class User extends AuditableDomain {
 
   public void disable() {
     if (isDeleted()) {
-      throw new AuthDomainException(AuthErrorCode.USER_NOT_FOUND);
+      throw new AuthRuleViolation(AuthRule.USER_ALREADY_DELETED);
     }
     this.status = UserStatus.DISABLED;
   }

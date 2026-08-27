@@ -1,12 +1,12 @@
 package com.vandunxg.file_processing.configuration.security;
 
+import java.util.List;
+
 import com.vandunxg.common.web.config.SpringSecurityAuditorAware;
 import com.vandunxg.common.web.security.ForbiddenTokenFilter;
 import com.vandunxg.common.web.security.NoHandlerFoundFilter;
 import com.vandunxg.common.web.security.RegexPermissionEvaluator;
 import com.vandunxg.common.web.support.CustomAuthenticationEntryPoint;
-import com.vandunxg.file_processing.auth.configuration.filter.ActionLoggingFilter;
-import com.vandunxg.file_processing.auth.configuration.filter.CustomAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NullMarked;
@@ -80,8 +80,7 @@ public class SecurityConfiguration {
   private final Converter<org.springframework.security.oauth2.jwt.Jwt, AbstractAuthenticationToken>
       jwtAuthenticationConverter;
   private final JwtDecoder jwtDecoder;
-  private final ActionLoggingFilter actionLoggingFilter;
-  private final CustomAuthenticationFilter customAuthenticationFilter;
+  private final List<SecurityFilterChainContributor> securityFilterChainContributors;
   private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
   private final NoHandlerFoundFilter noHandlerFoundFilter;
   private final ForbiddenTokenFilter forbiddenTokenFilter;
@@ -122,8 +121,9 @@ public class SecurityConfiguration {
 
     http.addFilterAfter(noHandlerFoundFilter, BearerTokenAuthenticationFilter.class);
     http.addFilterAfter(forbiddenTokenFilter, BearerTokenAuthenticationFilter.class);
-    http.addFilterAfter(customAuthenticationFilter, BearerTokenAuthenticationFilter.class);
-    http.addFilterAfter(actionLoggingFilter, CustomAuthenticationFilter.class);
+    for (SecurityFilterChainContributor contributor : securityFilterChainContributors) {
+      contributor.contribute(http);
+    }
 
     return http.build();
   }

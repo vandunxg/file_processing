@@ -618,9 +618,10 @@ phải bị từ chối.
 > nghĩa normative tại [`RULE.md` §4](../../RULE.md). Đây **không phải** Hexagonal
 > / ports-and-adapters.
 >
-> Package `auth/adapter/*` và `auth/application/port/*` hiện có trong
-> `src/main/java` là **legacy implementation đang chờ migrate**. Không mở rộng
-> thêm cấu trúc đó. Mọi requirement dưới đây mô tả cấu trúc **target**.
+> Module `auth` đã được migrate sang cấu trúc target: `auth/api`,
+> `auth/application`, `auth/domain`, `auth/infrastructure`. Package
+> `auth/adapter/*` và `auth/application/port/*` không còn tồn tại. Không tạo
+> lại cấu trúc đó.
 >
 > Việc đổi cấu trúc và tên class **không** làm thay đổi bất kỳ hợp đồng
 > authentication, authorization, token, session hoặc audit nào trong tài liệu
@@ -658,13 +659,13 @@ flowchart LR
     App --> Domain[domain: model + policy]
     App --> UserRepo[UserRepository]
     App --> RoleRepo[RoleRepository]
-    App --> SessionRepo[RefreshSessionRepository]
+    App --> SessionRepo[SessionRepository]
     App --> ResetRepo[PasswordResetTokenRepository]
     App --> VerifyRepo[EmailVerificationTokenRepository]
     App --> AuditRepo[AuditLogRepository]
-    App --> TokenIssuer[AccessTokenIssuer]
+    App --> TokenIssuer[TokenIssuer]
     App --> Hasher[PasswordHasher]
-    App --> Throttle[LoginThrottle]
+    App --> Throttle[AuthThrottle]
     App --> CvCache[CredentialVersionCache]
     App --> Mailer[EmailSender]
     UserRepo --> Jpa[infrastructure/persistence: JPA + PostgreSQL]
@@ -673,81 +674,78 @@ flowchart LR
     ResetRepo --> Jpa
     VerifyRepo --> Jpa
     AuditRepo --> Jpa
-    TokenIssuer --> Jwt[infrastructure/security: NimbusRsaAccessTokenIssuer]
+    TokenIssuer --> Jwt[infrastructure/security: NimbusTokenIssuer]
     Hasher --> Bcrypt[infrastructure/security: BcryptPasswordHasher]
     Throttle --> Redis[infrastructure/cache: Redis]
     CvCache --> Redis
     Mailer --> Smtp[infrastructure/email: MailServiceEmailSender]
 ```
 
-Các contract `UserRepository`, `RoleRepository`, `RefreshSessionRepository`,
+Các contract `UserRepository`, `RoleRepository`, `SessionRepository`,
 `PasswordResetTokenRepository`, `EmailVerificationTokenRepository`,
-`AuditLogRepository` thuộc `domain`. Các contract `AccessTokenIssuer`,
-`PasswordHasher`, `LoginThrottle`, `CredentialVersionCache`, `EmailSender` là
-capability hạ tầng, khai báo ở nơi consumer sử dụng chúng và được
+`AuditLogRepository`, `ActionLogRepository` thuộc `domain`. Các contract
+`TokenIssuer`, `PasswordHasher`, `AuthThrottle`, `CredentialVersionCache`,
+`EmailSender`, `AuthMetrics`, các `*EventPublisher` và các `*SearchRepository`
+nằm ở `application/capability` — nơi consumer sử dụng chúng — và được
 `infrastructure` triển khai.
 
 ### 10.3 Cấu trúc package
 
 ```text
 com.vandunxg.file_processing.auth
-├── api
-│   ├── AuthController, AdminUserController, AdminRoleController,
-│   │   AdminPermissionController, AdminAuditLogController,
-│   │   MeSessionController
+├── api                       AuthController, CurrentUserController,
+│   │                         CurrentUserSessionController, JwksController,
+│   │                         UserManagementController, RoleManagementController,
+│   │                         AuditLogController, ActionLogController
 │   ├── dto/request           *Request DTO
 │   ├── dto/response          *Response DTO
 │   └── mapper                *WebMapper (MapStruct)
 ├── application
-│   ├── AdminBootstrapService, RegistrationCommandService,
-│   │   AuthenticationCommandService, SessionCommandService,
-│   │   SessionQueryService, PasswordCommandService,
-│   │   CurrentUserQueryService, UserAdminCommandService,
-│   │   UserAdminQueryService, RoleAdminCommandService,
-│   │   RoleAdminQueryService, PermissionCatalogQueryService,
-│   │   AuditLogQueryService, RequestAuthenticationService
-│   ├── command               LoginCommand, RegisterCommand, …
-│   ├── query                 UserSearchQuery, RoleSearchQuery,
-│   │                         SessionSearchQuery, AuditLogSearchQuery
-│   ├── result                LoginResult, TokenPairResult, UserSummaryResult
-│   └── exception             AuthException (extends ResponseException)
+│   ├── AuthProperties        typed @ConfigurationProperties (app.auth.*)
+│   ├── AuditTrail            ghi audit event sau commit
+│   ├── AfterCommit           chạy side effect sau khi transaction commit
+│   ├── service               *CommandService / *QueryService (xem §10.4)
+│   ├── capability            contract cho infrastructure (xem §10.5)
+│   ├── command, query, result
+│   └── exception             AuthErrorCode, AuthException
 ├── domain
 │   ├── model                 User, Role, RolePermission, UserRole,
-│   │                         UserStatus, ActiveStatus,
-│   │                         ResourceCode, RoleCategory (enum seed),
-│   │                         RefreshSession, RefreshToken,
+│   │                         UserStatus, ActiveStatus, ResourceCode,
+│   │                         Session, RevocationReason,
 │   │                         PasswordResetToken, EmailVerificationToken,
-│   │                         AuditLog, AuditLogDomain, OperationType
-│   ├── policy                PasswordPolicy, LoginLockPolicy,
-│   │                         LastActiveAdminPolicy, PermissionExpression
-│   │                         (helper build "resource:action" string)
-│   ├── event                 (domain event sau commit; V1 có thể bỏ trống)
-│   ├── UserRepository, RoleRepository, RefreshSessionRepository,
+│   │                         AuditLog, AuditLogDomain, ActionLog, OperationType
+│   ├── policy                PasswordPolicy
+│   ├── event                 SendVerificationEmailEvent
+│   ├── UserRepository, RoleRepository, SessionRepository,
 │   │   PasswordResetTokenRepository, EmailVerificationTokenRepository,
-│   │   AuditLogRepository
-│   └── exception             AuthErrorCode, AuthDomainException
+│   │   AuditLogRepository, ActionLogRepository
+│   └── exception             AuthRule, AuthRuleViolation (thuần domain)
 └── infrastructure
-    ├── persistence           *Entity, *EntityRepository,
+    ├── persistence           *Entity, *EntityRepository (+Custom),
     │                         *PersistenceMapper (MapStruct),
     │                         JpaUserRepository, JpaRoleRepository,
-    │                         JpaRefreshSessionRepository,
+    │                         JpaSessionRepository,
     │                         JpaPasswordResetTokenRepository,
-    │                         JpaEmailVerificationTokenRepository,
-    │                         JpaAuditLogRepository
-    ├── security              NimbusRsaAccessTokenIssuer, JwkKeyRing,
-    │                         JwksController (RestController public),
-    │                         BcryptPasswordHasher,
-    │                         JwtAuthenticationConverter,
-    │                         CustomAuthenticationEntryPoint,
-    │                         RateLimitInterceptor,
-    │                         CredentialVersionValidator
-    ├── cache                 RedisCredentialVersionCache, RedisLoginThrottle
-    ├── email                 MailServiceEmailSender (dùng MailService),
-    │                         template resources/templates/email/*.html
+    │                         JpaAuditLogRepository, JpaActionLogRepository,
+    │                         PostgresBootstrapAdminLock
+    ├── security              NimbusTokenIssuer, BcryptPasswordHasher,
+    │                         SecureRefreshTokenGenerator,
+    │                         SecureVerificationTokenGenerator,
+    │                         MetricsJwtDecoder, PasswordChangeTokenDecoder,
+    │                         CredentialVersionJwtValidator,
+    │                         SessionAllowListJwtValidator,
+    │                         CustomAuthenticationFilter, ActionLoggingFilter,
+    │                         AuthSecurityFilterChainContributor
+    ├── cache                 RedisCredentialVersionCache, RedisAuthThrottle,
+    │                         RedisEmailVerificationTokenRepository
+    ├── messaging             Rabbit*EventPublisher, *EventListener
+    ├── email                 MailServiceEmailSender (dùng MailService)
+    ├── metrics               MicrometerAuthMetrics
+    ├── scheduling            AuthCleanupScheduler
     ├── bootstrap             BootstrapAdminListener (@EventListener)
-    └── config                AuthProperties (typed @ConfigurationProperties),
-                              AuthSecurityConfiguration,
-                              JwkKeyRingConfiguration, RateLimitConfiguration
+    └── config                AuthConfiguration, AuthAmqpConfiguration,
+                              AuthRedisConfiguration, AuthPersistenceConfiguration,
+                              JwtConfiguration
 ```
 
 Chỉ tạo package và class mà module thực sự cần. Không tạo folder rỗng để giống
@@ -761,49 +759,89 @@ service chịu trách nhiệm; cột thứ hai là các operation trên service 
 Controller, security filter và listener gọi trực tiếp các service này. **Không**
 tạo một interface `*UseCase` cho mỗi operation.
 
-| Application service             | Operation bắt buộc                                                                                                                             |
-|---------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------|
-| `AdminBootstrapService`         | Tạo Admin đầu tiên khi hệ thống trống                                                                                                          |
-| `RegistrationCommandService`    | Đăng ký tài khoản tự phục vụ + gửi email verify; xác thực email bằng token; gửi lại email xác thực                                              |
-| `AuthenticationCommandService`  | Đăng nhập bằng username hoặc email; hoàn tất đổi mật khẩu lần đầu                                                                              |
-| `SessionCommandService`         | Rotation refresh token + cấp access token mới; revoke một session; revoke toàn bộ session; revoke một phiên của chính mình                      |
-| `SessionQueryService`           | Xem danh sách phiên của mình                                                                                                                   |
-| `PasswordCommandService`        | Đổi mật khẩu chủ động; yêu cầu reset password (gửi email); đặt lại password bằng token                                                          |
-| `CurrentUserQueryService`       | Trả thông tin principal `/me`                                                                                                                  |
-| `UserAdminCommandService`       | Admin tạo user; cập nhật profile + role; disable/enable/unlock; đặt password tạm thời                                                           |
-| `UserAdminQueryService`         | Admin tìm kiếm user; xem chi tiết user                                                                                                         |
-| `RoleAdminCommandService`       | Tạo role non-const; cập nhật role + permission + propagate xuống role con; set/gỡ `roleInheritedId` (cycle detection); chuyển ACTIVE/INACTIVE; xoá role non-const không có user; xoá nhiều role |
-| `RoleAdminQueryService`         | Admin tìm kiếm role; autocomplete role                                                                                                         |
-| `PermissionCatalogQueryService` | Trả `ResourcePermissionResponse[]` từ enum; trả danh sách `ResourceCode` với i18n                                                               |
-| `AuditLogQueryService`          | Đọc audit của một role; Admin đọc audit log                                                                                                    |
-| `RequestAuthenticationService`  | Xác thực credential version cho security filter                                                                                                |
+| Application service             | Operation bắt buộc                                                                                                                                         |
+|---------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `AdminBootstrapService`         | Tạo Admin đầu tiên khi hệ thống trống                                                                                                                      |
+| `RegistrationCommandService`    | Đăng ký tài khoản tự phục vụ + gửi email verify; xác thực email bằng token; gửi lại email xác thực                                                          |
+| `AuthenticationCommandService`  | Đăng nhập bằng username hoặc email                                                                                                                          |
+| `PasswordCommandService`        | Đổi mật khẩu chủ động; hoàn tất đổi mật khẩu lần đầu; yêu cầu reset password (gửi email); đặt lại password bằng token                                       |
+| `SessionCommandService`         | Rotation refresh token + cấp access token mới (kèm reuse detection); logout; revoke một session; revoke toàn bộ session của một user                        |
+| `SessionQueryService`           | Xem danh sách phiên của mình                                                                                                                                |
+| `CurrentUserQueryService`       | Trả thông tin principal `/me`                                                                                                                               |
+| `UserAdminCommandService`       | Admin tạo user; cập nhật profile + role; disable/enable/unlock; đặt password tạm thời                                                                       |
+| `UserAdminQueryService`         | Admin tìm kiếm user; xem chi tiết user                                                                                                                      |
+| `RoleAdminCommandService`       | Tạo role non-const; cập nhật role + permission + propagate xuống role con; set/gỡ `roleInheritedId` (cycle detection); chuyển ACTIVE/INACTIVE; xoá role non-const không có user |
+| `RoleAdminQueryService`         | Admin tìm kiếm role; xem chi tiết role                                                                                                                      |
+| `PermissionCatalogQueryService` | Trả `ResourcePermissionResponse[]` từ enum; trả danh sách `ResourceCode` với i18n                                                                           |
+| `AuditLogQueryService`          | Đọc audit log                                                                                                                                               |
+| `ActionLogQueryService`         | Đọc action log                                                                                                                                              |
+| `RequestAuthenticationService`  | Xác thực credential version cho security filter                                                                                                             |
+
+Hai collaborator nội bộ của tầng application, không phải use case:
+
+| Collaborator         | Trách nhiệm                                                                    |
+|----------------------|--------------------------------------------------------------------------------|
+| `AuthorityService`   | Gộp permission của user theo role và role inheritance                          |
+| `AuthCleanupService` | Job dọn token và session đã hết hạn/thu hồi theo retention                     |
+| `AuditTrail`         | Ghi audit event sau commit; lỗi broker chỉ log, không làm fail use case         |
 
 Việc gom operation vào service theo capability là bắt buộc về mặt tổ chức, còn
 số lượng service cụ thể có thể điều chỉnh khi một service phình quá lớn. Tách
 `<Capability>CommandService` / `<Capability>QueryService` theo `RULE.md` §4.7.
 
+`PasswordCommandService` giữ cả "đổi mật khẩu chủ động" và "hoàn tất đổi mật
+khẩu lần đầu" vì hai flow dùng chung toàn bộ policy, kiểm tra reuse và quy tắc
+revoke session; tách chúng sang hai service sẽ nhân đôi logic đó.
+
 ### 10.5 Contract bắt buộc mà infrastructure phải triển khai
 
 Repository theo aggregate root (`RULE.md` §6.3), khai báo trong `domain`:
 
-| Contract (`domain`)                    | Trách nhiệm                                                                                       |
-|----------------------------------------|---------------------------------------------------------------------------------------------------|
-| `UserRepository`                       | Lưu, truy vấn, lock user; và gán/gỡ role của user (`user_role` nằm trong `User` aggregate)         |
-| `RoleRepository`                       | CRUD role; gán/gỡ permission (`role_permission` nằm trong `Role` aggregate, không phải catalog table) |
-| `RefreshSessionRepository`             | Tạo, rotate, revoke session và refresh token (`RefreshToken` nằm trong `RefreshSession` aggregate) |
-| `PasswordResetTokenRepository`         | Tạo, consume, dọn dẹp reset token                                                                 |
-| `EmailVerificationTokenRepository`      | Tạo, consume, dọn dẹp verification token                                                          |
-| `AuditLogRepository`                   | Ghi và đọc audit event                                                                            |
+| Contract (`domain`)                | Trách nhiệm                                                                                          |
+|------------------------------------|------------------------------------------------------------------------------------------------------|
+| `UserRepository`                   | Lưu, truy vấn, lock user; và gán/gỡ role của user (`user_role` nằm trong `User` aggregate)            |
+| `RoleRepository`                   | CRUD role; gán/gỡ permission (`role_permission` nằm trong `Role` aggregate, không phải catalog table) |
+| `SessionRepository`                | Tạo, rotate, revoke session và refresh token (`RefreshToken` nằm trong aggregate `Session`)           |
+| `PasswordResetTokenRepository`     | Tạo, consume, dọn dẹp reset token                                                                    |
+| `EmailVerificationTokenRepository` | Tạo, consume, dọn dẹp verification token                                                             |
+| `AuditLogRepository`               | Ghi audit event                                                                                      |
+| `ActionLogRepository`              | Ghi action log                                                                                       |
+
+Aggregate được đặt tên theo ngôn ngữ nghiệp vụ và API công khai (`/me/sessions`,
+claim `sid`, `SessionResponse`) nên là `Session`, không phải `RefreshSession`;
+bảng vật lý `auth_refresh_sessions` là chi tiết persistence.
+
+Read model có phân trang thuộc tầng application, không nằm trên aggregate
+repository (`RULE.md` §6.3) — cùng một class `Jpa<Aggregate>Repository`
+implement cả hai contract:
+
+| Contract (`application/capability`) | Trách nhiệm                                    |
+|-------------------------------------|------------------------------------------------|
+| `UserSearchRepository`              | `count(UserSearchQuery)` / `search(...)`       |
+| `RoleSearchRepository`              | `count(RoleSearchQuery)` / `search(...)`       |
+| `AuditLogSearchRepository`          | `count(AuditLogSearchQuery)` / `search(...)`   |
+| `ActionLogSearchRepository`         | `count(ActionLogSearchQuery)` / `search(...)`  |
 
 Capability hạ tầng có boundary thật, được `infrastructure` triển khai:
 
-| Contract                   | Trách nhiệm                                       | Triển khai target             |
-|----------------------------|---------------------------------------------------|-------------------------------|
-| `PasswordHasher`           | Hash, verify, kiểm tra rehash                     | `BcryptPasswordHasher`        |
-| `AccessTokenIssuer`        | Phát hành và verify JWT (access, password change) | `NimbusRsaAccessTokenIssuer`  |
-| `CredentialVersionCache`   | Cache credential version                          | `RedisCredentialVersionCache` |
-| `LoginThrottle`            | Rate limit theo IP và username                    | `RedisLoginThrottle`          |
-| `EmailSender`              | Gửi email (verify, reset password)                | `MailServiceEmailSender`      |
+| Contract (`application/capability`)  | Trách nhiệm                                       | Triển khai                             |
+|-------------------------------------|---------------------------------------------------|----------------------------------------|
+| `PasswordHasher`                    | Hash và verify password                           | `BcryptPasswordHasher`                 |
+| `TokenIssuer`                       | Phát hành JWT (access, password change)           | `NimbusTokenIssuer`                    |
+| `RefreshTokenGenerator`             | Sinh refresh token opaque                         | `SecureRefreshTokenGenerator`          |
+| `VerificationTokenGenerator`        | Sinh verification / reset token                   | `SecureVerificationTokenGenerator`     |
+| `CredentialVersionCache`            | Cache credential version                          | `RedisCredentialVersionCache`          |
+| `AuthThrottle`                      | Rate limit theo IP, username và identifier        | `RedisAuthThrottle`                    |
+| `EmailSender`                       | Gửi email (verify, reset password)                | `MailServiceEmailSender`               |
+| `AuthMetrics`                       | Counter cho các outcome bảo mật                   | `MicrometerAuthMetrics`                |
+| `BootstrapAdminLock`                | Lock serialize bootstrap admin đầu tiên           | `PostgresBootstrapAdminLock`           |
+| `ActionLogEventPublisher`           | Publish action log ra broker                      | `RabbitActionLogEventPublisher`        |
+| `AuditLogEventPublisher`            | Publish audit event ra broker                     | `RabbitAuditLogEventPublisher`         |
+| `VerificationEmailEventPublisher`   | Publish yêu cầu gửi email xác thực                | `RabbitVerificationEmailEventPublisher`|
+
+Tên contract theo `RULE.md` §4.6 (`TokenIssuer`, `AuthThrottle`), không dùng
+`AccessTokenIssuer` / `LoginThrottle`: throttle phục vụ cả login, register,
+resend, forgot-password và refresh nên `AuthThrottle` mô tả đúng phạm vi.
 
 Mỗi contract trên tồn tại vì nó cô lập một hệ thống ngoài hoặc một thuật toán
 bảo mật có thể thay thế — không phải vì template kiến trúc.
@@ -3245,7 +3283,7 @@ Triển khai theo 7 phase để giảm rủi ro.
 
 - Bootstrap Admin `@EventListener(ApplicationReadyEvent)`.
 - Login use case (username hoặc email).
-- `NimbusRsaAccessTokenIssuer` + JwkKeyRing + JWKS endpoint.
+- `NimbusTokenIssuer` + JwkKeyRing + JWKS endpoint.
 - Custom `JwtAuthenticationConverter` → `UserAuthentication`.
 - `CredentialVersionValidator`.
 - Spring Security filter chain (thay thế bản hiện có).

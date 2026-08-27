@@ -2,7 +2,6 @@ package com.vandunxg.file_processing.auth.application.result;
 
 import java.util.UUID;
 
-import com.vandunxg.file_processing.auth.domain.model.User;
 import com.vandunxg.file_processing.auth.domain.model.UserStatus;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -16,9 +15,4 @@ public class RegisterResult {
   private final String email;
   private final String displayName;
   private final UserStatus status;
-
-  public static RegisterResult from(User user) {
-    return new RegisterResult(
-        user.getId(), user.getUsername(), user.getEmail(), user.getDisplayName(), user.getStatus());
-  }
 }

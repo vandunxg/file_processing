@@ -159,8 +159,9 @@ phải template folder bắt buộc. Chỉ tạo package và type mà module th�
 │   ├── dto/response/
 │   └── mapper/
 ├── application/                  # orchestration use case, transaction boundary
-│   ├── <Capability>CommandService.java
-│   ├── <Capability>QueryService.java
+│   ├── <Xxx>Properties.java      # typed setting của module, cả 2 tầng đều thấy
+│   ├── service/                  # <Capability>CommandService / <Capability>QueryService
+│   ├── capability/               # contract cho infrastructure triển khai (EmailSender, ...)
 │   ├── command/
 │   ├── query/
 │   ├── result/
@@ -508,9 +509,21 @@ domain
   Data type nào.
 - Load và save aggregate như một khối. Không cho caller sửa entity bên trong qua
   cửa sau.
-- Read model trải qua nhiều aggregate là **query concern**, không phải
-  repository: đặt nó sau một application query service và giữ SQL hoặc
-  projection trong `infrastructure/persistence`.
+- Read model là **query concern**, không phải repository: đặt nó sau một
+  application query service và giữ SQL hoặc projection trong
+  `infrastructure/persistence`.
+- Search có phân trang là read model. `count(query)` và `search(query)` nói
+  bằng `PagingQuery` — một application type — nên **không được** nằm trên
+  contract ở `domain`, vì như vậy `domain` sẽ phụ thuộc `application`. Khai báo
+  chúng ở `application/capability/<Aggregate>SearchRepository`. Một class
+  `Jpa<Aggregate>Repository` thường implement cả hai contract nên không sinh
+  thêm implementation:
+
+```text
+domain/UserRepository                              # aggregate: load, save, invariant
+application/capability/UserSearchRepository        # read model: count(query), search(query)
+infrastructure/persistence/JpaUserRepository       # implement cả hai
+```
 
 ### 6.4 Pragmatic JPA mapping
 
@@ -648,9 +661,31 @@ Không dùng dotted key khi common exception handler resolve bằng
 ### 7.4 Exception theo từng layer
 
 - Domain code chỉ throw pure domain rule violation khi chính domain object enforce
-  rule đó.
+  rule đó. "Pure" nghĩa là nó chỉ nêu tên rule bị vi phạm: không HTTP status,
+  không numeric code, không i18n key. Hình dạng chuẩn là enum `<Module>Rule` cộng
+  `<Module>RuleViolation extends RuntimeException` trong `domain/exception`.
 - Application service chuyển domain violation hoặc application failure thành
-  module-specific exception extends `ResponseException`.
+  module-specific exception extends `ResponseException`. Giữ mapping
+  rule → error ở một chỗ cạnh error enum, và translate ngay tại call site để
+  mapping luôn nhìn thấy được:
+
+```java
+// application/exception/AuthErrorCode.java
+public static AuthErrorCode from(AuthRule rule) {
+  return switch (rule) {
+    case ROLE_NOT_ASSIGNABLE -> ROLE_INVALID;
+    case USER_ALREADY_VERIFIED -> USER_ALREADY_VERIFIED;
+    // ...
+  };
+}
+
+// application/service/RegistrationCommandService.java
+try {
+  user.verifyEmail(now);
+} catch (AuthRuleViolation violation) {
+  throw AuthException.of(violation);
+}
+```
 - Infrastructure implementation chuyển technology exception thành
   application/module error có ý nghĩa khi caller có thể xử lý. Phải giữ original
   cause.
@@ -978,9 +1013,15 @@ Controller chuyển HTTP request thành application use case. Controller nằm t
 - Giới hạn pagination ngay tại request boundary.
 - Endpoint list, search và completion có dữ liệu không giới hạn **MUST** theo
   convention paging chung: request DTO extends `PagingRequest`, controller
-  parameter dùng `@ValidatePaging(sortModel = Entity.class)`, application query
-  extends `PagingQuery`, repository có `count(query)` và `search(query)`, và
+  parameter dùng `@ValidatePaging(sortModel = <Xxx>Entity.class)`, application
+  query extends `PagingQuery`,
+  `application/capability/<Aggregate>SearchRepository` có `count(query)` và
+  `search(query)` (§6.3), và
   controller trả `PagingResponse<T>`.
+- `@ValidatePaging` dựng allow-list sort bằng reflection trên các field có
+  `@jakarta.persistence.Column`, nên `sortModel` **MUST** là class JPA của cùng
+  module. Đây là chỗ duy nhất `api` được phép gọi tên persistence model, và chỉ
+  như validation metadata — không dùng làm parameter, return type hay field.
 - Không ép paging cho bounded catalog, enum list, JWKS, `/me`, hoặc list chỉ
   trong phạm vi current-user nếu product behavior chưa yêu cầu rõ.
 - Không tin proxy forwarding header nếu deployment chưa cấu hình trusted proxy.
@@ -1221,6 +1262,11 @@ Reject hoặc sửa mọi change có các pattern sau nếu chưa có ngoại l�
 17. Log trước mọi `throw` hoặc log cùng exception ở mọi layer.
 18. Nuốt exception rồi trả `null` hoặc sentinel value.
 19. ModelMapper, BeanUtils, Dozer, Orika hoặc reflection field copy.
+19a. Copy field-by-field viết tay — builder chain hoặc constructor đọc getter
+    từ một source object — nằm trong service, repository, controller hoặc
+    factory `from(...)` trên DTO, trong khi §9.1 yêu cầu MapStruct mapper.
+    Dựng object từ nhiều nguồn hoặc từ các giá trị scalar không phải mapping
+    và vẫn để ở caller.
 20. Thay managed JPA entity thay vì update có chủ đích.
 21. Field injection bằng `@Autowired`.
 22. `System.out.println`, `printStackTrace` hoặc log nối chuỗi.

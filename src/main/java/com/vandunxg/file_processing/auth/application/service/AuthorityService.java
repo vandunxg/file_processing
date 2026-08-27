@@ -9,7 +9,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import com.vandunxg.file_processing.auth.application.port.out.RoleRepositoryPort;
+import com.vandunxg.file_processing.auth.domain.RoleRepository;
 import com.vandunxg.file_processing.auth.domain.model.Role;
 import com.vandunxg.file_processing.auth.domain.model.User;
 import lombok.RequiredArgsConstructor;
@@ -19,14 +19,14 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class AuthorityService {
 
-  private final RoleRepositoryPort roleRepositoryPort;
+  private final RoleRepository roleRepository;
 
   public List<String> permissionsFor(User user) {
     if (user == null || user.getRoles() == null || user.getRoles().isEmpty()) {
       return List.of();
     }
     Map<UUID, Role> roles =
-        roleRepositoryPort.findAll().stream()
+        roleRepository.findAll().stream()
             .collect(Collectors.toMap(Role::getId, Function.identity()));
     Set<String> authorities = new LinkedHashSet<>();
     user.getRoles().stream()
