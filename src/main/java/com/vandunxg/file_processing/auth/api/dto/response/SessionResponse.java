@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 public record SessionResponse(
     @Schema(description = "Session id") UUID sessionId,
+    @Schema(description = "Device label the client supplied at login") String deviceName,
     @Schema(description = "User agent captured at creation") String userAgent,
     @Schema(description = "Session creation time") Instant createdAt,
     @Schema(description = "Last time this session was used to refresh or renew tokens")

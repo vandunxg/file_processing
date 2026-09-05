@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Duration;
 
 import com.vandunxg.file_processing.auth.application.AuthProperties;
+import com.vandunxg.file_processing.auth.infrastructure.security.RetryAfterHeader;
 import com.vandunxg.file_processing.testsupport.AuthPropertiesFixture;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -106,6 +107,6 @@ class RedisAuthThrottleIT {
                 defaults.redis().credentialVersion(),
                 defaults.redis().userSessions()),
             defaults.amqp());
-    return new RedisAuthThrottle(stringRedisTemplate, script, withPrefix);
+    return new RedisAuthThrottle(stringRedisTemplate, script, withPrefix, new RetryAfterHeader());
   }
 }

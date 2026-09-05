@@ -108,7 +108,7 @@ public class UserAdminCommandService {
     User saved = userRepository.save(user);
     if (rolesChanged) {
       userRepository.replaceRoles(userId, roleIds, now);
-      revokeAndInvalidateAfterCommit(saved, now);
+      revokeAndInvalidateAfterCommit(saved, RevocationReason.ROLE_CHANGED, now);
       auditTrail.recordAfterCommit(audit(actorId, userId, OperationType.ROLE_ASSIGNED, now));
     } else {
       auditTrail.recordAfterCommit(audit(actorId, userId, OperationType.UPDATE, now));
@@ -132,7 +132,7 @@ public class UserAdminCommandService {
     }
     user.invalidateCredentials();
     User saved = userRepository.save(user);
-    revokeAndInvalidateAfterCommit(saved, now);
+    revokeAndInvalidateAfterCommit(saved, RevocationReason.DISABLED, now);
     auditTrail.recordAfterCommit(audit(actorId, userId, OperationType.ACCOUNT_DISABLED, now));
     return saved;
   }
@@ -147,7 +147,7 @@ public class UserAdminCommandService {
     user.enable();
     user.invalidateCredentials();
     User saved = userRepository.save(user);
-    revokeAndInvalidateAfterCommit(saved, now);
+    revokeAndInvalidateAfterCommit(saved, RevocationReason.ADMIN_REVOKED, now);
     auditTrail.recordAfterCommit(audit(actorId, userId, OperationType.ACCOUNT_ENABLED, now));
     return saved;
   }
@@ -173,7 +173,7 @@ public class UserAdminCommandService {
     Instant now = Instant.now(clock);
     user.resetTemporaryPassword(passwordHasher.hash(temporaryPassword), now);
     userRepository.save(user);
-    revokeAndInvalidateAfterCommit(user, now);
+    revokeAndInvalidateAfterCommit(user, RevocationReason.PASSWORD_RESET, now);
     auditTrail.recordAfterCommit(
         audit(actorId, userId, OperationType.PASSWORD_RESET_COMPLETED, now));
   }
@@ -212,8 +212,8 @@ public class UserAdminCommandService {
     return user.getRoles().stream().map(Role::getId).collect(Collectors.toSet());
   }
 
-  private void revokeAndInvalidateAfterCommit(User user, Instant now) {
-    sessionRepository.revokeAllForUser(user.getId(), RevocationReason.ADMIN, now);
+  private void revokeAndInvalidateAfterCommit(User user, RevocationReason reason, Instant now) {
+    sessionRepository.revokeAllForUser(user.getId(), reason, now);
     AfterCommit.run(() -> credentialVersionCache.invalidate(user.getId()));
   }
 

@@ -111,7 +111,7 @@ class RoleAdminCommandServiceTest {
     verify(sessionRepository)
         .revokeAllForUsers(
             eq(List.of(userId)),
-            eq(com.vandunxg.file_processing.auth.domain.model.RevocationReason.ADMIN),
+            eq(com.vandunxg.file_processing.auth.domain.model.RevocationReason.PERMISSION_CHANGED),
             any());
     verify(userRepository, never()).findByIdForUpdate(any(UUID.class));
     verifyNoInteractions(credentialVersionCache);

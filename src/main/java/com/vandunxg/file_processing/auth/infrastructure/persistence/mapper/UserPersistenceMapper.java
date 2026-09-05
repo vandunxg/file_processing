@@ -27,8 +27,6 @@ public interface UserPersistenceMapper extends EntityMapper<User, UserEntity> {
   @Mapping(target = "lastModifiedAt", ignore = true) // audit-managed by JPA auditing listener
   @Mapping(target = "createdBy", ignore = true) // audit-managed by JPA auditing listener
   @Mapping(target = "lastModifiedBy", ignore = true) // audit-managed by JPA auditing listener
-  @Mapping(target = "lastFailedLoginAt", ignore = true) // domain doesn't track this yet
-  @Mapping(target = "lastLoginAt", ignore = true) // domain doesn't track this yet
   UserEntity toEntity(User domain);
 
   @Override

@@ -43,6 +43,8 @@ public class User extends AuditableDomain {
   @Builder.Default private Set<Role> roles = Set.of();
   private boolean mustChangePassword;
   private int failedLoginCount;
+  private Instant lastFailedLoginAt;
+  private Instant lastLoginAt;
   private Instant lockedUntil;
   private int credentialVersion;
   private Instant passwordChangedAt;
@@ -190,9 +192,30 @@ public class User extends AuditableDomain {
       this.lockedUntil = null;
     }
     this.failedLoginCount += 1;
+    this.lastFailedLoginAt = now;
     if (this.failedLoginCount >= maxFailures) {
       this.lockedUntil = now.plus(lockDuration);
     }
+  }
+
+  /** Records a login that passed every check, for the admin views and incident review. */
+  public void recordSuccessfulLogin(Instant now) {
+    if (now == null) {
+      throw new IllegalArgumentException("now must not be null");
+    }
+    this.lastLoginAt = now;
+  }
+
+  /**
+   * Replaces the stored hash with an equivalent one at the current cost. The password itself is
+   * unchanged, so this deliberately does not touch {@code credentialVersion} — re-hashing must not
+   * log the user out of their other sessions.
+   */
+  public void rehashPassword(String passwordHash) {
+    if (passwordHash == null || passwordHash.isBlank()) {
+      throw new IllegalArgumentException("passwordHash must not be null or blank");
+    }
+    this.passwordHash = passwordHash;
   }
 
   public void resetFailedLogin() {

@@ -49,7 +49,6 @@ public class SessionCommandService {
 
   private static final String TOKEN_TYPE = "Bearer";
   private static final String IP_THROTTLE_PREFIX = "refresh:ip:";
-  private static final Duration IP_WINDOW = Duration.ofHours(1);
 
   private final AuthThrottle authThrottle;
   private final SessionRepository sessionRepository;
@@ -73,7 +72,9 @@ public class SessionCommandService {
   public LoginResult refresh(RefreshTokenCommand command) {
     String ipHash = hashIp(command.ipAddress());
     if (!authThrottle.tryConsume(
-        IP_THROTTLE_PREFIX + ipHash, authProperties.login().refreshIpMaxPerHour(), IP_WINDOW)) {
+        IP_THROTTLE_PREFIX + ipHash,
+        authProperties.login().refreshIpMaxPerWindow(),
+        authProperties.login().refreshIpWindow())) {
       authMetrics.refreshRateLimited();
       log.warn("[refresh] rate limited by ip");
       throw new AuthException(AuthErrorCode.AUTH_RATE_LIMITED);
@@ -205,7 +206,7 @@ public class SessionCommandService {
       throw new AuthException(AuthErrorCode.AUTH_SESSION_NOT_FOUND);
     }
 
-    sessionRepository.revoke(command.sessionId(), RevocationReason.USER_TRIGGERED, now);
+    sessionRepository.revoke(command.sessionId(), RevocationReason.USER_REVOKED, now);
 
     auditTrail.recordAfterCommit(
         audit(
@@ -242,7 +243,7 @@ public class SessionCommandService {
     Instant now = Instant.now(clock);
     user.bumpCredentialVersion(now);
     userRepository.save(user);
-    credentialVersionCache.invalidate(command.userId());
+    AfterCommit.run(() -> credentialVersionCache.invalidate(command.userId()));
 
     RevocationReason reason =
         command.reason() == null ? RevocationReason.USER_TRIGGERED : command.reason();

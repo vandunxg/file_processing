@@ -22,6 +22,7 @@ public interface SessionResultMapper {
 
   @Mapping(target = "sessionId", source = "session.id")
   @Mapping(target = "createdAt", source = "session.issuedAt")
+  @Mapping(target = "deviceName", source = "session.deviceName")
   @Mapping(target = "userAgent", source = "session.userAgent")
   @Mapping(target = "lastUsedAt", source = "session.lastUsedAt")
   @Mapping(target = "expiresAt", source = "session.expiresAt")

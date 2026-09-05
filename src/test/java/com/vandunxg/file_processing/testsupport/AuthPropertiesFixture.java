@@ -19,7 +19,15 @@ public final class AuthPropertiesFixture {
         new AuthProperties.Password("bcrypt", 10, 8, 128),
         new AuthProperties.Register(5),
         new AuthProperties.Login(
-            20, 5, Duration.ofMinutes(15), 60, 5, Duration.ofMinutes(15), Duration.ofMinutes(15)),
+            20,
+            Duration.ofHours(1),
+            5,
+            Duration.ofMinutes(15),
+            60,
+            Duration.ofMinutes(1),
+            5,
+            Duration.ofMinutes(15),
+            Duration.ofMinutes(15)),
         new AuthProperties.Refresh(Duration.ofHours(168)),
         new AuthProperties.Session(Duration.ofMinutes(5)),
         new AuthProperties.Jwt(

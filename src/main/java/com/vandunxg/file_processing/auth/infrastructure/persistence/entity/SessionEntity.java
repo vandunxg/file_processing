@@ -39,6 +39,9 @@ public class SessionEntity extends AuditableEntity {
   @Column(name = "credential_version", nullable = false)
   private int credentialVersion;
 
+  @Column(name = "device_name", length = 100)
+  private String deviceName;
+
   @Column(name = "user_agent", length = 255)
   private String userAgent;
 

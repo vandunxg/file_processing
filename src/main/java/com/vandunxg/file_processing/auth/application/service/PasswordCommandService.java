@@ -164,7 +164,7 @@ public class PasswordCommandService {
       throw AuthException.of(violation);
     }
     userRepository.save(user);
-    sessionRepository.revokeAllForUser(user.getId(), RevocationReason.PASSWORD_CHANGED, now);
+    sessionRepository.revokeAllForUser(user.getId(), RevocationReason.PASSWORD_RESET, now);
     // Same after-commit treatment as change(): invalidating inline would let a Redis outage roll
     // back a password reset that is otherwise complete, stranding the user on a one-shot email
     // link.

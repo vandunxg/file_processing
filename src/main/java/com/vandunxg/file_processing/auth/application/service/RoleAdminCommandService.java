@@ -251,7 +251,7 @@ public class RoleAdminCommandService {
       List<UUID> batch =
           userIds.subList(from, Math.min(from + INVALIDATION_BATCH_SIZE, userIds.size()));
       userRepository.bumpCredentialVersionFor(batch);
-      sessionRepository.revokeAllForUsers(batch, RevocationReason.ADMIN, now);
+      sessionRepository.revokeAllForUsers(batch, RevocationReason.PERMISSION_CHANGED, now);
     }
     AfterCommit.run(() -> userIds.forEach(credentialVersionCache::invalidate));
   }

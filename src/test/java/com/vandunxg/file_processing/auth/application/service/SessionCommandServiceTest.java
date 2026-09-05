@@ -104,6 +104,7 @@ class SessionCommandServiceTest {
             sessionId,
             userId,
             1,
+            null,
             "JUnit",
             null,
             NOW.minus(Duration.ofMinutes(1)),
@@ -140,6 +141,7 @@ class SessionCommandServiceTest {
             sessionId,
             userId,
             1,
+            null,
             "JUnit",
             null,
             NOW.minus(Duration.ofMinutes(1)),
@@ -189,9 +191,11 @@ class SessionCommandServiceTest {
     AuthProperties.Login login =
         new AuthProperties.Login(
             100,
+            Duration.ofHours(1),
             100,
             Duration.ofMinutes(15),
             100,
+            Duration.ofMinutes(1),
             5,
             Duration.ofMinutes(15),
             Duration.ofMinutes(15));

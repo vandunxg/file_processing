@@ -211,16 +211,19 @@ app:
       max-length: 128
 
     login:
-      ip-max-per-hour: ${AUTH_LOGIN_IP_MAX_PER_HOUR:20}
+      # Defaults follow auth-module-requirements 8.4.
+      ip-max-per-window: ${AUTH_LOGIN_IP_MAX_PER_WINDOW:5}
+      ip-window: ${AUTH_LOGIN_IP_WINDOW:PT15M}
       username-max-per-window: ${AUTH_LOGIN_USERNAME_MAX_PER_WINDOW:5}
       username-window: ${AUTH_LOGIN_USERNAME_WINDOW:PT15M}
-      refresh-ip-max-per-hour: ${AUTH_REFRESH_IP_MAX_PER_HOUR:60}
+      refresh-ip-max-per-window: ${AUTH_REFRESH_IP_MAX_PER_WINDOW:60}
+      refresh-ip-window: ${AUTH_REFRESH_IP_WINDOW:PT1M}
       max-failures: 5
       failure-window: PT15M
       lock-duration: PT15M
 
     refresh:
-      token-ttl: ${AUTH_REFRESH_TOKEN_TTL:PT168H}
+      token-ttl: ${AUTH_REFRESH_TOKEN_TTL:PT720H} # 30 days, per requirements 8.5
       cookie-secure: ${AUTH_REFRESH_COOKIE_SECURE:true}
 
     session:

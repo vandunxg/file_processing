@@ -50,10 +50,12 @@ app:
       min-length: 8
       max-length: 128
     login:
-      ip-max-per-hour: 20
+      ip-max-per-window: 20
+      ip-window: PT1H
       username-max-per-window: 5
       username-window: PT15M
-      refresh-ip-max-per-hour: 60
+      refresh-ip-max-per-window: 60
+      refresh-ip-window: PT1M
       max-failures: 5
       failure-window: PT15M
       lock-duration: PT15M

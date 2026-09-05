@@ -44,7 +44,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j(topic = "AUTH-LOGIN")
 public class AuthenticationCommandService {
 
-  private static final Duration IP_WINDOW = Duration.ofHours(1);
   private static final String IP_THROTTLE_PREFIX = "login:ip:";
   private static final String USER_THROTTLE_PREFIX = "login:user:";
   private static final String TOKEN_TYPE = "Bearer";
@@ -76,7 +75,9 @@ public class AuthenticationCommandService {
     String normalizedUsername = User.normalize(command.username());
 
     if (!authThrottle.tryConsume(
-        IP_THROTTLE_PREFIX + ipHash, authProperties.login().ipMaxPerHour(), IP_WINDOW)) {
+        IP_THROTTLE_PREFIX + ipHash,
+        authProperties.login().ipMaxPerWindow(),
+        authProperties.login().ipWindow())) {
       authMetrics.loginRateLimited();
       log.warn("[login] rate limited by ip");
       throw new AuthException(AuthErrorCode.AUTH_RATE_LIMITED);
@@ -93,11 +94,16 @@ public class AuthenticationCommandService {
     User user =
         userRepository
             .findByNormalizedIdentifier(normalizedUsername)
-            .orElseThrow(
+            .orElseGet(
                 () -> {
+                  // Verify against a hash nobody owns before rejecting. Returning here without
+                  // doing the bcrypt work would make an unknown identifier answer in microseconds
+                  // while a wrong password takes the full cost, and that gap is measurable from
+                  // outside — it tells an attacker which usernames exist.
+                  passwordHasher.matches(command.password(), passwordHasher.dummyHash());
                   authMetrics.loginInvalidCredentials();
                   log.warn("[login] user not found username={}", normalizedUsername);
-                  return new AuthException(AuthErrorCode.AUTH_INVALID_CREDENTIALS);
+                  throw new AuthException(AuthErrorCode.AUTH_INVALID_CREDENTIALS);
                 });
 
     Instant now = Instant.now(clock);
@@ -105,7 +111,9 @@ public class AuthenticationCommandService {
     if (user.isLocked(now)) {
       authMetrics.loginLocked();
       log.warn("[login] account locked userId={}", user.getId());
-      throw new AuthException(AuthErrorCode.AUTH_ACCOUNT_LOCKED);
+      // Generic on purpose: naming the lock-out confirms the account exists. Spec 8.4 and 43.4
+      // require the locked case to be indistinguishable from a wrong password.
+      throw new AuthException(AuthErrorCode.AUTH_INVALID_CREDENTIALS);
     }
     if (!passwordHasher.matches(command.password(), user.getPasswordHash())) {
       recordFailedLogin(user, now, ipHash);
@@ -125,6 +133,13 @@ public class AuthenticationCommandService {
     }
 
     user.resetFailedLogin();
+    if (passwordHasher.needsRehash(user.getPasswordHash())) {
+      // The password is known-good right here, and this is the only moment we hold it in the
+      // clear, so a cost increase can only be applied now.
+      log.info("[login] rehashing password at the current cost userId={}", user.getId());
+      user.rehashPassword(passwordHasher.hash(command.password()));
+    }
+    user.recordSuccessfulLogin(now);
     User saved = userRepository.save(user);
     AuditLog auditLog =
         audit(saved.getId(), OperationType.LOGIN_SUCCEEDED, now, ipHash)
@@ -154,6 +169,7 @@ public class AuthenticationCommandService {
             IdUtils.nextId(),
             saved.getId(),
             saved.getCredentialVersion(),
+            command.deviceName(),
             command.userAgent(),
             ipHash,
             now,

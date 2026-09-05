@@ -102,7 +102,7 @@ class UserAdminCommandServiceTest {
     verify(sessionRepository)
         .revokeAllForUser(
             eq(userId),
-            eq(com.vandunxg.file_processing.auth.domain.model.RevocationReason.ADMIN),
+            eq(com.vandunxg.file_processing.auth.domain.model.RevocationReason.ADMIN_REVOKED),
             eq(NOW));
     TransactionSynchronizationManager.getSynchronizations()
         .forEach(TransactionSynchronization::afterCommit);

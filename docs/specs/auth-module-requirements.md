@@ -1031,8 +1031,7 @@ Domain method: `UserRole(UUID userId, UUID roleId)`, `void delete(Instant now)`,
 
 | Thuộc tính            | Kiểu       | Ghi chú                                    |
 |-----------------------|------------|--------------------------------------------|
-| `id`                  | UUID       | PK                                         |
-| `familyId`            | UUID       | Token family                               |
+| `id`                  | UUID       | PK. **Cũng chính là `familyId`** — xem ghi chú dưới bảng |
 | `userId`              | UUID       | FK user                                    |
 | `credentialVersion`   | int        | Snapshot lúc tạo                           |
 | `deviceName`          | String?    | Do client gửi (giới hạn 100)               |
@@ -1042,8 +1041,13 @@ Domain method: `UserRole(UUID userId, UUID roleId)`, `void delete(Instant now)`,
 | `absoluteExpiresAt`   | Instant    |                                            |
 | `lastRefreshedAt`     | Instant?   |                                            |
 | `revokedAt`           | Instant?   |                                            |
-| `revocationReason`    | Enum?      | `USER_LOGOUT`, `LOGOUT_ALL`, `USER_REVOKED`, `PASSWORD_CHANGED`, `PASSWORD_RESET`, `ROLE_CHANGED`, `PERMISSION_CHANGED`, `DISABLED`, `TOKEN_REUSE_DETECTED`, `ADMIN_REVOKED`, `EXPIRED` |
+| `revocationReason`    | Enum?      | `LOGOUT`, `USER_TRIGGERED`, `USER_REVOKED`, `PASSWORD_CHANGED`, `PASSWORD_RESET`, `ROLE_CHANGED`, `PERMISSION_CHANGED`, `DISABLED`, `TOKEN_REUSE`, `ADMIN_REVOKED`, `EXPIRED`, và `ADMIN` (deprecated, chỉ còn trong dữ liệu cũ) |
 | `version`             | Long       | Optimistic locking                         |
+
+Không có cột `family_id` riêng: mỗi session sở hữu đúng một token family, và
+`RefreshToken` đã khoá theo `session_id`. Thêm một khoá thứ hai luôn bằng
+`session_id` chỉ tạo thêm chỗ để lệch nhau. §43.6 vẫn thoả — refresh giữ nguyên
+`sessionId` và chỉ đổi `tokenId`.
 
 ### 11.6 Entity `RefreshToken` (con của session)
 
@@ -1136,18 +1140,25 @@ public enum AuditLogDomain {
 ```java
 public enum OperationType {
   CREATE, UPDATE, DELETE, ACTIVATED, DEACTIVATED,
-  LOGIN_SUCCESS, LOGIN_FAILED,
-  LOGOUT, LOGOUT_ALL,
+  LOGIN_SUCCEEDED, LOGIN_FAILED,
+  LOGOUT, SESSION_REVOKED, ALL_SESSIONS_REVOKED,
   TOKEN_REFRESHED, TOKEN_REUSE_DETECTED,
   PASSWORD_CHANGED, PASSWORD_RESET_REQUESTED, PASSWORD_RESET_COMPLETED,
-  ACCOUNT_LOCKED, ACCOUNT_UNLOCKED, ACCOUNT_DISABLED, ACCOUNT_ENABLED,
+  ACCOUNT_LOCKED_OUT, ACCOUNT_UNLOCKED, ACCOUNT_DISABLED, ACCOUNT_ENABLED,
   ROLE_ASSIGNED, ROLE_REVOKED,
-  ROLE_PERMISSION_UPDATED,
+  ROLE_PERMISSION_UPDATED, ROLE_INHERITANCE_UPDATED,
   EMAIL_VERIFICATION_REQUESTED, EMAIL_VERIFIED,
   USER_REGISTERED,
   ADMIN_BOOTSTRAPPED
 }
 ```
+
+Ba tên khác bản thiết kế ban đầu và **code là nguồn chân lý**: `LOGIN_SUCCESS`
+→ `LOGIN_SUCCEEDED` (đồng bộ thì quá khứ với `LOGIN_FAILED`), `LOGOUT_ALL` →
+`ALL_SESSIONS_REVOKED` và `ACCOUNT_LOCKED` → `ACCOUNT_LOCKED_OUT` (phân biệt
+với trạng thái `lockedUntil`). Thêm `SESSION_REVOKED` và
+`ROLE_INHERITANCE_UPDATED` cho hai thao tác chưa có giá trị riêng. Giá trị này
+được lưu xuống DB và lộ ra API audit — đổi tiếp là breaking change.
 
 ### 11.12 Enum `UserStatus`
 

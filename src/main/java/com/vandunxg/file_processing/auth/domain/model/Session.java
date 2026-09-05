@@ -24,6 +24,7 @@ public class Session extends AuditableDomain {
   private UUID id;
   private UUID userId;
   private int credentialVersion;
+  private String deviceName;
   private String userAgent;
   private String ipAddressHash;
   private Instant issuedAt;
@@ -38,6 +39,7 @@ public class Session extends AuditableDomain {
       UUID id,
       UUID userId,
       int credentialVersion,
+      String deviceName,
       String userAgent,
       String ipAddressHash,
       Instant now,
@@ -56,6 +58,7 @@ public class Session extends AuditableDomain {
         .id(id)
         .userId(userId)
         .credentialVersion(credentialVersion)
+        .deviceName(deviceName)
         .userAgent(userAgent)
         .ipAddressHash(ipAddressHash)
         .issuedAt(now)

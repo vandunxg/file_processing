@@ -23,4 +23,11 @@ public class LoginRequest extends Request {
   @Schema(description = "Raw account password", example = "StrongPassw0rd!", format = "password")
   @NotBlank
   private String password;
+
+  @Schema(
+      description = "Client-supplied device label, shown in the user's session list",
+      example = "Chrome on Windows",
+      maxLength = 100)
+  @Size(max = 100)
+  private String deviceName;
 }

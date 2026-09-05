@@ -279,6 +279,7 @@ class AdminManagementControllerIT extends AuthIntegrationTestBase {
             UUID.randomUUID(),
             saved.getId(),
             saved.getCredentialVersion(),
+            null,
             "JUnit",
             null,
             now,

@@ -383,7 +383,7 @@ class PasswordCommandServiceTest {
       assertThat(user.getFailedLoginCount()).isZero();
       assertThat(user.getLockedUntil()).isNull();
       verify(sessionRepository)
-          .revokeAllForUser(eq(userId), eq(RevocationReason.PASSWORD_CHANGED), eq(NOW));
+          .revokeAllForUser(eq(userId), eq(RevocationReason.PASSWORD_RESET), eq(NOW));
       // Deferred like change() does: invalidating inline would let a Redis outage roll the whole
       // reset back and strand the user on a one-shot email link.
       verifyNoInteractions(credentialVersionCache, auditLogEventPublisher);

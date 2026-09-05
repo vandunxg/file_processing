@@ -178,30 +178,59 @@ class AuthenticationCommandServiceTest {
   }
 
   @Test
-  void loginThrowsInvalidCredentialsWhenUserNotFound() {
+  void loginBurnsADummyVerificationWhenTheIdentifierDoesNotExist() {
     when(authThrottle.tryConsume(anyString(), anyInt(), any(Duration.class))).thenReturn(true);
     when(userRepository.findByNormalizedIdentifier(USERNAME)).thenReturn(Optional.empty());
+    when(passwordHasher.dummyHash()).thenReturn("{bcrypt}$2a$12$dummy");
 
     assertThatThrownBy(() -> authenticationCommandService.login(loginCommand()))
         .isInstanceOf(AuthException.class)
         .extracting("error")
         .isEqualTo(AuthErrorCode.AUTH_INVALID_CREDENTIALS);
 
-    verifyNoInteractions(passwordHasher, sessionRepository, tokenIssuer);
+    // The bcrypt work happens even though there is nothing to verify against: skipping it would
+    // answer an unknown identifier far faster than a wrong password and leak which names exist.
+    verify(passwordHasher).matches(PASSWORD, "{bcrypt}$2a$12$dummy");
+    verifyNoInteractions(sessionRepository, tokenIssuer);
     verify(authMetrics).loginInvalidCredentials();
   }
 
   @Test
-  void loginThrowsAccountLockedWhenUserIsLocked() {
+  void loginRehashesAPasswordStoredAtAWeakerCostAndRecordsTheLogin() {
+    User user = activeUser();
+    when(authThrottle.tryConsume(anyString(), anyInt(), any(Duration.class))).thenReturn(true);
+    when(userRepository.findByNormalizedIdentifier(USERNAME)).thenReturn(Optional.of(user));
+    when(passwordHasher.matches(PASSWORD, PASSWORD_HASH)).thenReturn(true);
+    when(passwordHasher.needsRehash(PASSWORD_HASH)).thenReturn(true);
+    when(passwordHasher.hash(PASSWORD)).thenReturn("{bcrypt}$2a$14$stronger");
+    when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(refreshTokenGenerator.generate()).thenReturn("refresh-token");
+    when(tokenIssuer.issue(any(), any(), anyInt(), any(), any(), any()))
+        .thenReturn(new TokenIssuer.IssuedAccessToken("access-token", NOW, NOW.plusSeconds(900)));
+
+    authenticationCommandService.login(loginCommand());
+
+    // Login is the only moment the raw password is available, so a cost increase can only be
+    // applied here. It must not disturb the credential version: re-hashing is not a credential
+    // change and must not sign the user out of their other sessions.
+    assertThat(user.getPasswordHash()).isEqualTo("{bcrypt}$2a$14$stronger");
+    assertThat(user.getCredentialVersion()).isEqualTo(1);
+    assertThat(user.getLastLoginAt()).isEqualTo(NOW);
+  }
+
+  @Test
+  void loginHidesTheLockOutBehindTheGenericFailure() {
     User user = activeUser();
     user.registerFailedLogin(NOW.minusSeconds(30), 1, Duration.ofMinutes(15));
     when(authThrottle.tryConsume(anyString(), anyInt(), any(Duration.class))).thenReturn(true);
     when(userRepository.findByNormalizedIdentifier(USERNAME)).thenReturn(Optional.of(user));
 
+    // Requirements 8.4 and 43.4: a locked account must answer like a wrong password. Naming the
+    // lock-out would confirm to an attacker that the account exists.
     assertThatThrownBy(() -> authenticationCommandService.login(loginCommand()))
         .isInstanceOf(AuthException.class)
         .extracting("error")
-        .isEqualTo(AuthErrorCode.AUTH_ACCOUNT_LOCKED);
+        .isEqualTo(AuthErrorCode.AUTH_INVALID_CREDENTIALS);
 
     verifyNoInteractions(passwordHasher, sessionRepository, tokenIssuer);
     verify(authMetrics).loginLocked();
@@ -383,9 +412,11 @@ class AuthenticationCommandServiceTest {
     AuthProperties.Login login =
         new AuthProperties.Login(
             100,
+            Duration.ofHours(1),
             100,
             Duration.ofMinutes(15),
             100,
+            Duration.ofMinutes(1),
             5,
             Duration.ofMinutes(15),
             Duration.ofMinutes(15));

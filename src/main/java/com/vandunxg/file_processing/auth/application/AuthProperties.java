@@ -92,11 +92,18 @@ public record AuthProperties(
 
   public record Register(int maxAttemptsPerHour) {}
 
+  /**
+   * Every limit carries its own window. Baking "per hour" into the name and hard-coding an hour at
+   * the call site made the refresh limit 60 per hour where the spec asks for 60 per minute, which
+   * is 60x stricter and locks out everyone sharing an office IP.
+   */
   public record Login(
-      int ipMaxPerHour,
+      int ipMaxPerWindow,
+      Duration ipWindow,
       int usernameMaxPerWindow,
       Duration usernameWindow,
-      int refreshIpMaxPerHour,
+      int refreshIpMaxPerWindow,
+      Duration refreshIpWindow,
       int maxFailures,
       Duration failureWindow,
       Duration lockDuration) {}

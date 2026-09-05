@@ -5,6 +5,7 @@ import java.util.UUID;
 
 public record SessionResult(
     UUID sessionId,
+    String deviceName,
     String userAgent,
     Instant createdAt,
     Instant lastUsedAt,
