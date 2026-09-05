@@ -93,7 +93,7 @@ springdoc:
     persist-authorization: true
 
   packages-to-scan:
-    - com.vandunxg.file_processing.auth.adapter.in.web
+    - com.vandunxg.file_processing.auth.api
 
   paths-to-match:
     - ${app.api.prefix}/${app.api.version}/**

@@ -3,7 +3,7 @@ package com.vandunxg.file_processing.testsupport;
 import java.time.Duration;
 import java.util.List;
 
-import com.vandunxg.file_processing.auth.configuration.AuthProperties;
+import com.vandunxg.file_processing.auth.application.AuthProperties;
 
 /**
  * Central test-side factory for {@link AuthProperties}. Every test that needs an {@code

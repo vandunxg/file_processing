@@ -4,8 +4,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
-import com.vandunxg.file_processing.auth.domain.exception.AuthDomainException;
-import com.vandunxg.file_processing.auth.domain.exception.AuthErrorCode;
+import com.vandunxg.file_processing.auth.domain.exception.AuthRule;
+import com.vandunxg.file_processing.auth.domain.exception.AuthRuleViolation;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
@@ -59,7 +59,7 @@ public class PasswordResetToken {
 
   public void consume(Instant now) {
     if (!isUsableAt(now)) {
-      throw new AuthDomainException(AuthErrorCode.PASSWORD_RESET_TOKEN_INVALID);
+      throw new AuthRuleViolation(AuthRule.PASSWORD_RESET_TOKEN_UNUSABLE);
     }
     this.usedAt = now;
   }

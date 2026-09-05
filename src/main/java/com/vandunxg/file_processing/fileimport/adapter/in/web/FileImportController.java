@@ -7,7 +7,7 @@ import java.util.Locale;
 import java.util.UUID;
 
 import com.vandunxg.common.models.dto.response.Response;
-import com.vandunxg.file_processing.auth.configuration.security.AuthenticatedUser;
+import com.vandunxg.file_processing.configuration.security.AuthenticatedUser;
 import com.vandunxg.file_processing.fileimport.application.command.UploadFileCommand;
 import com.vandunxg.file_processing.fileimport.application.port.in.UploadFileUseCase;
 import com.vandunxg.file_processing.fileimport.application.result.UploadFileResult;
