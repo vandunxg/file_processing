@@ -165,7 +165,10 @@ public class PasswordCommandService {
     }
     userRepository.save(user);
     sessionRepository.revokeAllForUser(user.getId(), RevocationReason.PASSWORD_CHANGED, now);
-    credentialVersionCache.invalidate(user.getId());
+    // Same after-commit treatment as change(): invalidating inline would let a Redis outage roll
+    // back a password reset that is otherwise complete, stranding the user on a one-shot email
+    // link.
+    invalidateCacheAfterCommit(user.getId());
     authMetrics.passwordResetCompleted();
 
     auditTrail.recordAfterCommit(
@@ -245,13 +248,7 @@ public class PasswordCommandService {
   }
 
   private static AuditLog audit(UUID userId, OperationType operation, Instant now, String ipHash) {
-    return AuditLog.builder()
-        .id(IdUtils.nextId())
-        .domain(AuditLogDomain.AUTH)
-        .objectId(userId)
-        .operation(operation)
-        .changedBy(userId)
-        .changedAt(now)
+    return AuditTrail.entry(AuditLogDomain.AUTH, userId, operation, userId, now)
         .ipAddress(ipHash)
         .build();
   }

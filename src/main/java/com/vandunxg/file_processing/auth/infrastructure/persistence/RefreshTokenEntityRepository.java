@@ -38,6 +38,21 @@ public interface RefreshTokenEntityRepository extends JpaRepository<RefreshToken
       """)
   int revokeAllForSession(@Param("sessionId") UUID sessionId, @Param("now") Instant now);
 
+  /**
+   * Revokes every live refresh token belonging to the given users in one statement, so a role
+   * change does not have to walk their sessions one at a time.
+   */
+  @Modifying
+  @Query(
+      """
+      UPDATE RefreshTokenEntity t
+      SET t.revokedAt = :now
+      WHERE t.revokedAt IS NULL
+        AND t.sessionId IN (SELECT s.id FROM SessionEntity s WHERE s.userId IN :userIds)
+      """)
+  int revokeAllForUsers(
+      @Param("userIds") java.util.Collection<UUID> userIds, @Param("now") Instant now);
+
   @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query("DELETE FROM RefreshTokenEntity t WHERE t.sessionId IN :sessionIds")
   int deleteAllBySessionIdIn(@Param("sessionIds") java.util.List<UUID> sessionIds);

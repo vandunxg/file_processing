@@ -7,7 +7,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import com.vandunxg.common.utils.IdUtils;
 import com.vandunxg.file_processing.auth.application.AfterCommit;
 import com.vandunxg.file_processing.auth.application.AuditTrail;
 import com.vandunxg.file_processing.auth.application.capability.CredentialVersionCache;
@@ -219,13 +218,6 @@ public class UserAdminCommandService {
   }
 
   private static AuditLog audit(UUID actorId, UUID userId, OperationType operation, Instant now) {
-    return AuditLog.builder()
-        .id(IdUtils.nextId())
-        .domain(AuditLogDomain.USER)
-        .objectId(userId)
-        .operation(operation)
-        .changedBy(actorId)
-        .changedAt(now)
-        .build();
+    return AuditTrail.entry(AuditLogDomain.USER, userId, operation, actorId, now).build();
   }
 }

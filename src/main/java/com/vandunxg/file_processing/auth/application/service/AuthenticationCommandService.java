@@ -62,7 +62,15 @@ public class AuthenticationCommandService {
   private final AuthProperties authProperties;
   private final Clock clock;
 
-  @Transactional
+  /**
+   * A rejected login still has to persist what it learned. {@link AuthException} is unchecked, so
+   * the default rollback rule would discard the failed-login counter written by {@link
+   * #recordFailedLogin} — and with it the lock-out that protects against brute force — the moment
+   * the credentials are refused. Every write on a rejecting path here is one we want kept, so
+   * failures of this type commit instead of rolling back. Keeping the commit also lets the
+   * after-commit audit events (LOGIN_FAILED, ACCOUNT_LOCKED_OUT) fire at all.
+   */
+  @Transactional(noRollbackFor = AuthException.class)
   public LoginResult login(LoginCommand command) {
     String ipHash = hashIp(command.ipAddress());
     String normalizedUsername = User.normalize(command.username());
@@ -205,13 +213,6 @@ public class AuthenticationCommandService {
 
   private static AuditLog.AuditLogBuilder<?, ?> audit(
       UUID userId, OperationType operation, Instant now, String ipHash) {
-    return AuditLog.builder()
-        .id(IdUtils.nextId())
-        .domain(AuditLogDomain.AUTH)
-        .objectId(userId)
-        .operation(operation)
-        .changedBy(userId)
-        .changedAt(now)
-        .ipAddress(ipHash);
+    return AuditTrail.entry(AuditLogDomain.AUTH, userId, operation, userId, now).ipAddress(ipHash);
   }
 }

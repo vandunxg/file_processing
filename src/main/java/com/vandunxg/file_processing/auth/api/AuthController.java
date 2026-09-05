@@ -3,7 +3,6 @@ package com.vandunxg.file_processing.auth.api;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
-import java.util.Objects;
 import java.util.UUID;
 
 import com.vandunxg.common.models.dto.response.Response;
@@ -13,17 +12,16 @@ import com.vandunxg.file_processing.auth.api.dto.response.LoginResponse;
 import com.vandunxg.file_processing.auth.api.dto.response.RegisterResponse;
 import com.vandunxg.file_processing.auth.api.mapper.AuthWebMapper;
 import com.vandunxg.file_processing.auth.application.AuthProperties;
+import com.vandunxg.file_processing.auth.application.capability.PasswordChangeTokenReader;
 import com.vandunxg.file_processing.auth.application.capability.RefreshTokenGenerator;
 import com.vandunxg.file_processing.auth.application.command.LogoutCommand;
 import com.vandunxg.file_processing.auth.application.command.RefreshTokenCommand;
 import com.vandunxg.file_processing.auth.application.exception.AuthErrorCode;
 import com.vandunxg.file_processing.auth.application.exception.AuthException;
-import com.vandunxg.file_processing.auth.application.service.*;
 import com.vandunxg.file_processing.auth.application.service.AuthenticationCommandService;
 import com.vandunxg.file_processing.auth.application.service.PasswordCommandService;
 import com.vandunxg.file_processing.auth.application.service.RegistrationCommandService;
 import com.vandunxg.file_processing.auth.application.service.SessionCommandService;
-import com.vandunxg.file_processing.auth.infrastructure.security.PasswordChangeTokenDecoder;
 import com.vandunxg.file_processing.configuration.security.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -41,7 +39,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -61,7 +58,7 @@ public class AuthController {
   private final AuthenticationCommandService authenticationCommandService;
   private final SessionCommandService sessionCommandService;
   private final AuthWebMapper webMapper;
-  private final PasswordChangeTokenDecoder passwordChangeTokenDecoder;
+  private final PasswordChangeTokenReader passwordChangeTokenReader;
   private final RefreshTokenGenerator refreshTokenGenerator;
   private final AuthProperties authProperties;
 
@@ -140,9 +137,8 @@ public class AuthController {
       @Valid @RequestBody ChangePasswordRequest request,
       @RequestHeader(value = "Authorization", required = false) String authorization,
       HttpServletRequest http) {
-    Jwt jwt = passwordChangeTokenDecoder.decode(authorization);
-    passwordCommandService.complete(
-        webMapper.toCommand(request, subjectAsUuid(jwt), clientIp(http)));
+    UUID userId = passwordChangeTokenReader.readUserId(authorization);
+    passwordCommandService.complete(webMapper.toCommand(request, userId, clientIp(http)));
   }
 
   @Operation(
@@ -240,10 +236,6 @@ public class AuthController {
       return null;
     }
     return ua.length() > 255 ? ua.substring(0, 255) : ua;
-  }
-
-  private static UUID subjectAsUuid(Jwt jwt) {
-    return UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
   }
 
   private void setAuthCookies(HttpServletResponse response, String refreshToken) {

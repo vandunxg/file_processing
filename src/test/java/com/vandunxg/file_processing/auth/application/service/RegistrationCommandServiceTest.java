@@ -240,8 +240,13 @@ class RegistrationCommandServiceTest {
           tokenRepository, auditLogEventPublisher, verificationEmailEventPublisher);
     }
 
+    /**
+     * A failure that is not one of the two uniqueness constraints must surface as itself. Reporting
+     * an infrastructure error as "username already exists" sends the caller off to pick a different
+     * username for an account name that was never taken.
+     */
     @Test
-    void registerDefaultsToUsernameAlreadyExistsWhenConstraintNameIsUnparseable() {
+    void registerRethrowsAnIntegrityFailureThatIsNotADuplicate() {
       RegisterCommand command = validCommand();
       givenThrottleAllows();
       givenNoExistingUsernameOrEmail();
@@ -249,6 +254,24 @@ class RegistrationCommandServiceTest {
       when(passwordHasher.hash(command.password())).thenReturn("{bcrypt}hashed");
       when(userRepository.save(any(User.class)))
           .thenThrow(new DataIntegrityViolationException("connection reset by peer"));
+
+      assertThatThrownBy(() -> registrationCommandService.register(command))
+          .isInstanceOf(DataIntegrityViolationException.class)
+          .isNotInstanceOf(AuthException.class);
+    }
+
+    @Test
+    void registerReportsADuplicateUsernameFromItsConstraintName() {
+      RegisterCommand command = validCommand();
+      givenThrottleAllows();
+      givenNoExistingUsernameOrEmail();
+      when(roleRepository.findByCode("OPERATOR")).thenReturn(Optional.of(operatorRole()));
+      when(passwordHasher.hash(command.password())).thenReturn("{bcrypt}hashed");
+      when(userRepository.save(any(User.class)))
+          .thenThrow(
+              new DataIntegrityViolationException(
+                  "duplicate key value violates unique constraint"
+                      + " \"auth_users_normalized_username_uk\""));
 
       assertThatThrownBy(() -> registrationCommandService.register(command))
           .isInstanceOf(AuthException.class)

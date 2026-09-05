@@ -38,6 +38,21 @@ public interface SessionEntityRepository extends JpaRepository<SessionEntity, UU
       @Param("now") Instant now,
       @Param("reason") com.vandunxg.file_processing.auth.domain.model.RevocationReason reason);
 
+  /** Batch form of {@link #revokeAllForUser}, for role changes that hit many users at once. */
+  @Modifying
+  @Query(
+      """
+      UPDATE SessionEntity s
+      SET s.revokedAt = :now, s.revokedReason = :reason
+      WHERE s.userId IN :userIds
+        AND s.revokedAt IS NULL
+        AND s.deletedAt IS NULL
+      """)
+  int revokeAllForUsers(
+      @Param("userIds") java.util.Collection<UUID> userIds,
+      @Param("now") Instant now,
+      @Param("reason") com.vandunxg.file_processing.auth.domain.model.RevocationReason reason);
+
   @Query(
       value =
           """

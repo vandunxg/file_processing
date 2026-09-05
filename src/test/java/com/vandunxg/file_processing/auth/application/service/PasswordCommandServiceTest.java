@@ -384,11 +384,13 @@ class PasswordCommandServiceTest {
       assertThat(user.getLockedUntil()).isNull();
       verify(sessionRepository)
           .revokeAllForUser(eq(userId), eq(RevocationReason.PASSWORD_CHANGED), eq(NOW));
-      verify(credentialVersionCache).invalidate(userId);
-      verifyNoInteractions(auditLogEventPublisher);
+      // Deferred like change() does: invalidating inline would let a Redis outage roll the whole
+      // reset back and strand the user on a one-shot email link.
+      verifyNoInteractions(credentialVersionCache, auditLogEventPublisher);
 
       runAfterCommit();
 
+      verify(credentialVersionCache).invalidate(userId);
       ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
       verify(auditLogEventPublisher).publish(auditCaptor.capture());
       assertThat(auditCaptor.getValue().getOperation())

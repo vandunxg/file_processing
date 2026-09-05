@@ -265,6 +265,29 @@ module A       -> module B JPA entity/repository implementation
 If a forbidden dependency seems necessary, redesign the boundary instead of
 adding a shortcut.
 
+### Allowed: `api` reads its own module's domain model
+
+`api` may accept a domain model or enum from **its own module** and map it to a
+response DTO. It must not call domain behavior, and must never serialize a
+domain model as the response body.
+
+This is deliberate, not a gap. A response DTO plus a MapStruct mapper with
+`unmappedTargetPolicy = ERROR` already fails the build when an aggregate field
+is renamed, so inserting a `Result` record that mirrors the response one-for-one
+moves where the compiler reports that error without changing what it catches.
+Per **Interface decision rule**, add a `Result` only when it carries
+composition or computation the aggregate does not have — `LoginResult` (tokens
+plus expiry from the issuer) and `SessionResult` (`current` relative to the
+caller's session) qualify; a field-for-field copy of the response does not.
+
+### Allowed: `api` referencing a JPA entity as a paging sort model
+
+`@ValidatePaging(sortModel = X.class)` builds its allow-list by reflecting over
+`@jakarta.persistence.Column` fields, so it only accepts a JPA entity. Domain
+models carry no persistence annotations and would produce an empty allow-list
+that rejects every `sortBy`. Use the entity, and keep the reference confined to
+that annotation.
+
 ## Module ownership and communication
 
 Every business concept has one owner:

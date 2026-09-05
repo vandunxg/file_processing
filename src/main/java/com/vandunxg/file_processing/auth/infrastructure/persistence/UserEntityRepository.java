@@ -1,5 +1,6 @@
 package com.vandunxg.file_processing.auth.infrastructure.persistence;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -7,7 +8,9 @@ import java.util.UUID;
 import com.vandunxg.file_processing.auth.infrastructure.persistence.entity.UserEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -31,6 +34,20 @@ public interface UserEntityRepository
 
   @Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
   Optional<UserEntity> findWithLockByIdAndDeletedAtIsNull(UUID id);
+
+  /**
+   * Bumps the credential version of a batch of users in one statement. Used when a role change
+   * invalidates every holder's tokens: loading and locking each user instead would hold one row
+   * lock per member of the role for the whole transaction.
+   */
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query(
+      """
+      UPDATE UserEntity u
+      SET u.credentialVersion = u.credentialVersion + 1
+      WHERE u.id IN :userIds AND u.deletedAt IS NULL
+      """)
+  int bumpCredentialVersionFor(@Param("userIds") Collection<UUID> userIds);
 
   @Query(
       "select count(u) from UserEntity u join UserRoleEntity ur on ur.userId = u.id "

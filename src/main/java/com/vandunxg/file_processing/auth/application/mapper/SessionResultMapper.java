@@ -25,9 +25,13 @@ public interface SessionResultMapper {
   @Mapping(target = "userAgent", source = "session.userAgent")
   @Mapping(target = "lastUsedAt", source = "session.lastUsedAt")
   @Mapping(target = "expiresAt", source = "session.expiresAt")
+  // Guarded on session too: MapStruct only skips the whole mapping when *both* sources are null,
+  // so an expression that dereferences session directly throws for (null, non-null).
   @Mapping(
       target = "current",
-      expression = "java(currentSessionId != null && currentSessionId.equals(session.getId()))")
+      expression =
+          "java(session != null && currentSessionId != null"
+              + " && currentSessionId.equals(session.getId()))")
   SessionResult toResult(Session session, UUID currentSessionId);
 
   default List<SessionResult> toResults(List<Session> sessions, UUID currentSessionId) {

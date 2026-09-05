@@ -190,7 +190,7 @@ customer, user, role, permission, hoặc audit.
 User có `status = PENDING_VERIFY` có thể:
 
 - Gọi endpoint xác thực email và gửi lại email xác thực.
-- Đăng nhập → nhận thông báo `EMAIL_VERIFICATION_REQUIRED` (không nhận token).
+- Đăng nhập → nhận thông báo `AUTH_EMAIL_VERIFICATION_REQUIRED` (không nhận token).
 - Gọi quên mật khẩu.
 
 User `PENDING_VERIFY` không được cấp access token cho API nghiệp vụ.
@@ -315,7 +315,7 @@ Rule trạng thái:
 
 - User `DISABLED` không login hoặc refresh được.
 - User `PENDING_VERIFY` không nhận access token cho API nghiệp vụ; login trả
-  `EMAIL_VERIFICATION_REQUIRED`.
+  `AUTH_EMAIL_VERIFICATION_REQUIRED`.
 - User có `lockedUntil > now` không login được.
 - Hết `lockedUntil`, user có thể login mà không cần Admin unlock.
 - User có `mustChangePassword = true` chỉ nhận password change token khi login.
@@ -1236,7 +1236,7 @@ Chuẩn theo `ErrorResponse` của `common-models`:
   "status": "FAIL",
   "code": 40101,
   "message": "Thông tin đăng nhập không hợp lệ",
-  "error": "INVALID_CREDENTIALS",
+  "error": "AUTH_INVALID_CREDENTIALS",
   "data": null,
   "timestamp": 1721213456789
 }
@@ -1359,9 +1359,9 @@ biệt username tồn tại hay không.
 ```
 
 **Luồng ngoại lệ:**
-- Username hoặc email trùng → `409 USERNAME_ALREADY_EXISTS` /
-  `EMAIL_ALREADY_EXISTS`. Response không phân biệt cho anonymous rate-limit.
-- Password không đạt policy → `422 PASSWORD_POLICY_VIOLATION`.
+- Username hoặc email trùng → `409 AUTH_USERNAME_ALREADY_EXISTS` /
+  `AUTH_EMAIL_ALREADY_EXISTS`. Response không phân biệt cho anonymous rate-limit.
+- Password không đạt policy → `422 AUTH_PASSWORD_POLICY_VIOLATION`.
 - Rate limit → `429 AUTH_RATE_LIMITED`.
 
 **Acceptance criteria:**
@@ -1393,7 +1393,7 @@ biệt username tồn tại hay không.
 
 **Luồng ngoại lệ:**
 - Token không tồn tại, hết hạn, hoặc đã dùng → `410
-  EMAIL_VERIFICATION_TOKEN_INVALID`.
+  AUTH_EMAIL_VERIFICATION_TOKEN_INVALID`.
 - User không `PENDING_VERIFY` → `409 USER_ALREADY_VERIFIED`.
 
 **Acceptance criteria:**
@@ -1456,7 +1456,7 @@ biệt username tồn tại hay không.
 7. Nếu fail: tăng `failedLoginCount`, cập nhật `lastFailedLoginAt`, áp dụng
    lock policy khi đạt ngưỡng, ghi audit `LOGIN_FAILED`, trả generic fail.
 8. Nếu password hash cần rehash → rehash và cập nhật.
-9. Nếu user `PENDING_VERIFY` → trả `403 EMAIL_VERIFICATION_REQUIRED`.
+9. Nếu user `PENDING_VERIFY` → trả `403 AUTH_EMAIL_VERIFICATION_REQUIRED`.
 10. Nếu `mustChangePassword = true` → phát hành password change token, không
     tạo refresh session, trả `200` với `passwordChangeToken`.
 11. Ngược lại:
@@ -1508,7 +1508,7 @@ biệt username tồn tại hay không.
 {
   "success": false,
   "code": 40301,
-  "error": "EMAIL_VERIFICATION_REQUIRED",
+  "error": "AUTH_EMAIL_VERIFICATION_REQUIRED",
   "message": "Vui lòng xác thực email trước khi đăng nhập."
 }
 ```
@@ -1519,7 +1519,7 @@ biệt username tồn tại hay không.
 - AUTH-AC-05.3: Năm lần sai liên tiếp khóa tài khoản 15 phút.
 - AUTH-AC-05.4: Login thành công xoá failed counter.
 - AUTH-AC-05.5: User `DISABLED` nhận generic fail.
-- AUTH-AC-05.6: User `PENDING_VERIFY` nhận `EMAIL_VERIFICATION_REQUIRED`.
+- AUTH-AC-05.6: User `PENDING_VERIFY` nhận `AUTH_EMAIL_VERIFICATION_REQUIRED`.
 - AUTH-AC-05.7: User `mustChangePassword` chỉ nhận password change token.
 - AUTH-AC-05.8: Rate limit theo IP trả `429`.
 - AUTH-AC-05.9: Password và token không xuất hiện trong log hoặc audit.
@@ -1592,7 +1592,7 @@ biệt username tồn tại hay không.
   2. Revoke toàn bộ family (`revocationReason = TOKEN_REUSE_DETECTED`).
   3. Ghi audit `TOKEN_REUSE_DETECTED`.
    4. Tăng metric `auth_events_total{operation="refresh",outcome="reused"}`.
-  5. Trả `401 REFRESH_TOKEN_REUSED`.
+  5. Trả `401 AUTH_REFRESH_TOKEN_REUSED`.
   6. Không phát hành token mới.
 
 **Xử lý concurrency:**
@@ -1606,7 +1606,7 @@ biệt username tồn tại hay không.
 - AUTH-AC-07.3: Hai request đồng thời chỉ một request thành công.
 - AUTH-AC-07.4: User `DISABLED` hoặc `cv` không khớp không refresh được.
 - AUTH-AC-07.5: Refresh token hết hạn trả `401 REFRESH_TOKEN_EXPIRED`.
-- AUTH-AC-07.6: CSRF sai trả `403 CSRF_TOKEN_INVALID`.
+- AUTH-AC-07.6: CSRF sai trả `403 AUTH_CSRF_TOKEN_INVALID`.
 
 ## 22. AUTH-UC-08 — Đăng xuất phiên hiện tại
 
@@ -1693,7 +1693,7 @@ hoặc security key.
 
 **Acceptance criteria:**
 - AUTH-AC-11.1: Current password đúng + new hợp lệ đổi thành công.
-- AUTH-AC-11.2: Current password sai trả `400 CURRENT_PASSWORD_INVALID`.
+- AUTH-AC-11.2: Current password sai trả `400 AUTH_CURRENT_PASSWORD_INVALID`.
 - AUTH-AC-11.3: Password mới không đạt policy trả `422`.
 - AUTH-AC-11.4: Sau đổi password, toàn bộ token cũ bị vô hiệu hóa.
 
@@ -1761,7 +1761,7 @@ hoặc security key.
 **Acceptance criteria:**
 - AUTH-AC-13.1: Token hợp lệ đặt được password mới.
 - AUTH-AC-13.2: Token hết hạn hoặc đã dùng trả `410
-  PASSWORD_RESET_TOKEN_INVALID`.
+  AUTH_PASSWORD_RESET_TOKEN_INVALID`.
 - AUTH-AC-13.3: Password mới không đạt policy trả `422`.
 - AUTH-AC-13.4: Sau reset, toàn bộ session cũ bị revoke.
 - AUTH-AC-13.5: Token cũ không dùng lại được.
@@ -2595,78 +2595,101 @@ Cookie header.
 
 ## 42. Danh mục error code
 
-Convention: `{httpStatus}{2-digit-module=01}{2-digit-seq}`.
+Convention: `{httpStatus}{2-digit-seq}` (RULE.md §7.2). Tên hằng và mã số dưới
+đây là **contract công khai**: client có thể switch theo `error` (tên) hoặc
+`code` (số) trong `ErrorResponse`. Đổi bất kỳ dòng nào là breaking change.
 
-### 42.1 Authentication
+Nguồn sự thật là `auth/application/exception/AuthErrorCode.java`; test
+`AuthErrorCodeTest.publishedCodesAreNotRenumbered` pin toàn bộ bảng này.
 
-| Code                             | HTTP | Ý nghĩa                                              |
-|----------------------------------|-----:|------------------------------------------------------|
-| `INVALID_CREDENTIALS`            |  401 | Credential không hợp lệ hoặc account không cho login |
-| `EMAIL_VERIFICATION_REQUIRED`    |  403 | Cần verify email trước khi login                     |
-| `AUTH_RATE_LIMITED`              |  429 | Vượt rate limit                                      |
-| `AUTH_TOKEN_REQUIRED`            |  401 | Thiếu access token                                   |
-| `ACCESS_TOKEN_INVALID`           |  401 | Token không hợp lệ                                   |
-| `ACCESS_TOKEN_EXPIRED`           |  401 | Token hết hạn                                        |
-| `ACCESS_TOKEN_REVOKED`           |  401 | Token bị vô hiệu hóa                                 |
-| `PASSWORD_CHANGE_TOKEN_INVALID`  |  401 | Token đổi password không hợp lệ                      |
-| `PASSWORD_CHANGE_REQUIRED`       |  403 | Chỉ được hoàn tất đổi password                       |
-| `REFRESH_TOKEN_REQUIRED`         |  401 | Thiếu refresh token                                  |
-| `REFRESH_TOKEN_INVALID`          |  401 | Refresh token không hợp lệ                           |
-| `REFRESH_TOKEN_EXPIRED`          |  401 | Refresh token hết hạn                                |
-| `REFRESH_TOKEN_REVOKED`          |  401 | Session đã revoke                                    |
-| `REFRESH_TOKEN_REUSED`           |  401 | Token cũ bị tái sử dụng                              |
-| `CSRF_TOKEN_INVALID`             |  403 | CSRF token không hợp lệ                              |
+### 42.0 Quyết định tương thích API — migrate sang DDD
+
+Khi enum chuyển từ `domain/exception` sang `application/exception`, mọi hằng
+được thêm tiền tố module (`INVALID_CREDENTIALS` → `AUTH_INVALID_CREDENTIALS`,
+`INVALID_ROLE` → `ROLE_INVALID`, …) và **hai mã số đã publish bị đánh lại**:
+
+| Hằng                                  | Mã cũ | Mã mới | Lý do                                       |
+|---------------------------------------|------:|-------:|---------------------------------------------|
+| `AUTH_PASSWORD_POLICY_VIOLATION`      | 40001 |  42202 | Mã cũ mang tiền tố 400 nhưng trả HTTP 422   |
+| `AUTH_PASSWORD_CONFIRMATION_MISMATCH` | 40003 |  42203 | Mã cũ mang tiền tố 400 nhưng trả HTTP 422   |
+
+RULE.md §7.2 cấm đánh số lại mã đã publish nếu không có quyết định tương thích
+API. Đây là quyết định đó: **chấp nhận breaking change**, vì hai mã cũ vi phạm
+định dạng `{httpStatus}{2-digit-seq}` mà §7.1 quy định và không thể vừa giữ
+nguyên vừa đúng chuẩn. Mọi mã còn lại giữ nguyên số. Client cần cập nhật trước
+khi deploy.
+
+### 42.1 Authentication và session
+
+| Code                                | Số    | HTTP | Ý nghĩa                                         |
+|-------------------------------------|------:|-----:|-------------------------------------------------|
+| `AUTH_INVALID_CREDENTIALS`          | 40101 |  401 | Credential sai, hoặc account không được login   |
+| `AUTH_REFRESH_TOKEN_INVALID`        | 40102 |  401 | Refresh token sai, hết hạn, hoặc đã revoke      |
+| `AUTH_REFRESH_TOKEN_REUSED`         | 40103 |  401 | Token cũ bị dùng lại — cả family bị revoke      |
+| `AUTH_PASSWORD_CHANGE_TOKEN_INVALID`| 40106 |  401 | Token đổi password sai, hết hạn, hoặc stale     |
+| `AUTH_ACCOUNT_LOCKED`               | 40301 |  403 | Account đang bị khoá tạm                        |
+| `AUTH_EMAIL_VERIFICATION_REQUIRED`  | 40302 |  403 | Cần verify email trước khi login                |
+| `AUTH_CSRF_TOKEN_INVALID`           | 40303 |  403 | Double-submit CSRF không khớp                   |
+| `AUTH_SESSION_NOT_FOUND`            | 40402 |  404 | Session không tồn tại                           |
+| `AUTH_RATE_LIMITED`                 | 42901 |  429 | Vượt rate limit                                 |
 
 ### 42.2 Password
 
-| Code                              | HTTP | Ý nghĩa                              |
-|-----------------------------------|-----:|--------------------------------------|
-| `CURRENT_PASSWORD_INVALID`        |  400 | Password hiện tại sai                |
-| `PASSWORD_CONFIRMATION_MISMATCH`  |  422 | Xác nhận password không khớp         |
-| `PASSWORD_POLICY_VIOLATION`       |  422 | Password không đạt policy            |
-| `PASSWORD_REUSE_NOT_ALLOWED`      |  409 | Password mới trùng password hiện tại |
-| `PASSWORD_RESET_TOKEN_INVALID`    |  410 | Reset token hết hạn hoặc đã dùng     |
-| `EMAIL_VERIFICATION_TOKEN_INVALID`|  410 | Verify token hết hạn hoặc đã dùng    |
+| Code                                  | Số    | HTTP | Ý nghĩa                                  |
+|---------------------------------------|------:|-----:|------------------------------------------|
+| `AUTH_EMAIL_VERIFICATION_TOKEN_INVALID`| 40002 |  400 | Verify token sai, hết hạn, hoặc đã dùng  |
+| `AUTH_PASSWORD_SAME_AS_CURRENT`       | 40004 |  400 | Password mới trùng password hiện tại     |
+| `AUTH_PASSWORD_RESET_TOKEN_INVALID`   | 40005 |  400 | Reset token sai, hết hạn, hoặc đã dùng   |
+| `AUTH_PASSWORD_RESET_NOT_ALLOWED`     | 40006 |  400 | Account không được phép reset password   |
+| `AUTH_CURRENT_PASSWORD_INVALID`       | 40007 |  400 | Password hiện tại sai                    |
+| `AUTH_PASSWORD_REUSE_NOT_ALLOWED`     | 40904 |  409 | Password mới phải khác password hiện tại |
+| `AUTH_PASSWORD_POLICY_VIOLATION`      | 42202 |  422 | Password không đạt policy                |
+| `AUTH_PASSWORD_CONFIRMATION_MISMATCH` | 42203 |  422 | Xác nhận password không khớp             |
 
 ### 42.3 User management
 
-| Code                            | HTTP | Ý nghĩa                                     |
-|---------------------------------|-----:|---------------------------------------------|
-| `USER_NOT_FOUND`                |  404 | Không tìm thấy user                         |
-| `USERNAME_ALREADY_EXISTS`       |  409 | Username đã tồn tại                         |
-| `EMAIL_ALREADY_EXISTS`          |  409 | Email đã tồn tại                            |
-| `USER_ALREADY_VERIFIED`         |  409 | User đã verify email                        |
-| `INVALID_ROLE`                  |  422 | Role không hỗ trợ (không tồn tại)           |
-| `USER_MUST_HAVE_ROLE`           |  422 | User phải có ít nhất một role               |
-| `LAST_ACTIVE_ADMIN_REQUIRED`    |  409 | Không thể loại bỏ Admin cuối cùng           |
-| `USER_ALREADY_DISABLED`         |  200 | Trạng thái idempotent                       |
-| `USER_ALREADY_ACTIVE`           |  200 | Trạng thái idempotent                       |
-| `USER_CONCURRENTLY_MODIFIED`    |  409 | Optimistic locking conflict                 |
+| Code                           | Số    | HTTP | Ý nghĩa                             |
+|--------------------------------|------:|-----:|-------------------------------------|
+| `USER_NOT_FOUND`               | 40401 |  404 | Không tìm thấy user                 |
+| `AUTH_USERNAME_ALREADY_EXISTS` | 40902 |  409 | Username đã tồn tại                 |
+| `AUTH_EMAIL_ALREADY_EXISTS`    | 40903 |  409 | Email đã tồn tại                    |
+| `USER_ALREADY_VERIFIED`        | 40907 |  409 | Email đã được verify                |
+| `AUTH_LAST_ACTIVE_ADMIN`       | 40912 |  409 | Phải còn ít nhất một Admin ACTIVE   |
 
 ### 42.4 Role management
 
-| Code                                | HTTP | Ý nghĩa                                     |
-|-------------------------------------|-----:|---------------------------------------------|
-| `ROLE_NOT_FOUND`                    |  404 | Không tìm thấy role                         |
-| `ROLE_CODE_ALREADY_EXISTS`          |  409 | Role code trùng                             |
-| `ROLE_IS_CONST_CANNOT_DELETE`       |  409 | Không thể xoá role hệ thống (`is_const`)    |
-| `ROLE_IS_CONST_CANNOT_MODIFY_CODE`  |  409 | Không thể đổi code của role hệ thống        |
-| `ROLE_DELETE_INVALID`               |  409 | Role đang ACTIVE hoặc còn user, không xoá được |
-| `ROLE_STILL_ASSIGNED`               |  409 | Còn user thuộc role                         |
-| `ROLE_IS_ACTIVATED`                 |  409 | Role đã ACTIVE — idempotent với message rõ  |
-| `ROLE_IS_INACTIVATED`               |  409 | Role đã INACTIVE — idempotent với message rõ|
-| `ROLE_MISSING_REQUIRED_PERMISSION`  |  409 | Role ADMIN thiếu `(ALL, MANAGE)`            |
-| `ROLE_INHERITANCE_CYCLE`            |  409 | Chain kế thừa tạo vòng lặp                  |
-| `ROLE_INHERITED_NOT_FOUND`          |  404 | Role cha (roleInheritedId) không tồn tại    |
-| `INVALID_RESOURCE_CODE`             |  422 | Resource code không có trong enum           |
-| `INVALID_ACTION`                    |  422 | Action không có trong enum                  |
+| Code                       | Số    | HTTP | Ý nghĩa                                |
+|----------------------------|------:|-----:|----------------------------------------|
+| `ROLE_NOT_FOUND`           | 40403 |  404 | Không tìm thấy role                    |
+| `ROLE_CODE_ALREADY_EXISTS` | 40908 |  409 | Role code đã tồn tại                   |
+| `ROLE_INHERITANCE_CYCLE`   | 40909 |  409 | Chain kế thừa tạo vòng lặp             |
+| `ROLE_STILL_ASSIGNED`      | 40910 |  409 | Còn user thuộc role                    |
+| `ROLE_IS_CONST`            | 40911 |  409 | Role hệ thống không đổi được kiểu này  |
+| `ROLE_IS_ACTIVE`           | 40913 |  409 | Role phải INACTIVE trước khi xoá       |
+| `ROLE_INVALID`             | 42201 |  422 | Role không hợp lệ hoặc không gán được  |
 
-### 42.5 Authorization
+### 42.5 Chưa hiện thực
 
-| Code                 | HTTP | Ý nghĩa                                   |
-|----------------------|-----:|-------------------------------------------|
-| `ACCESS_DENIED`      |  403 | Principal thiếu role hoặc permission      |
-| `RESOURCE_NOT_FOUND` |  404 | Không tồn tại hoặc không thuộc quyền user |
+Những tên dưới đây từng nằm trong thiết kế nhưng **chưa có** trong
+`AuthErrorCode`. Luồng tương ứng đang gộp vào một mã tổng quát hơn — đừng
+implement client theo chúng, và khi thêm thì phải cấp mã số mới theo §42.0.
+
+- Access token: `AUTH_TOKEN_REQUIRED`, `ACCESS_TOKEN_INVALID`,
+  `ACCESS_TOKEN_EXPIRED`, `ACCESS_TOKEN_REVOKED`, `PASSWORD_CHANGE_REQUIRED`
+  — hiện resource server trả 401 chuẩn OAuth2 qua entry point chung.
+- Refresh token: `REFRESH_TOKEN_REQUIRED`, `REFRESH_TOKEN_EXPIRED`,
+  `REFRESH_TOKEN_REVOKED` — hiện gộp vào `AUTH_REFRESH_TOKEN_INVALID` để
+  không tiết lộ lý do từ chối.
+- User: `USER_MUST_HAVE_ROLE`, `USER_ALREADY_DISABLED`, `USER_ALREADY_ACTIVE`,
+  `USER_CONCURRENTLY_MODIFIED` — hiện `USER_MUST_HAVE_ROLE` gộp vào
+  `ROLE_INVALID`, hai trạng thái idempotent trả 200 không kèm error.
+- Role: `ROLE_IS_CONST_CANNOT_DELETE`, `ROLE_IS_CONST_CANNOT_MODIFY_CODE`,
+  `ROLE_DELETE_INVALID`, `ROLE_IS_ACTIVATED`, `ROLE_IS_INACTIVATED`,
+  `ROLE_MISSING_REQUIRED_PERMISSION`, `ROLE_INHERITED_NOT_FOUND`,
+  `INVALID_RESOURCE_CODE`, `INVALID_ACTION` — hiện gộp vào `ROLE_IS_CONST`,
+  `ROLE_IS_ACTIVE`, `ROLE_NOT_FOUND`, `ROLE_INVALID`.
+- Authorization: `ACCESS_DENIED`, `RESOURCE_NOT_FOUND` — do `common-web` xử lý,
+  không thuộc `AuthErrorCode`.
 
 ## 43. Yêu cầu bảo mật
 

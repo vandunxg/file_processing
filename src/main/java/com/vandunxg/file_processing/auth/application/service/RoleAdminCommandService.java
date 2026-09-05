@@ -3,6 +3,7 @@ package com.vandunxg.file_processing.auth.application.service;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -10,7 +11,6 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import com.vandunxg.common.models.enums.Action;
-import com.vandunxg.common.utils.IdUtils;
 import com.vandunxg.file_processing.auth.application.AfterCommit;
 import com.vandunxg.file_processing.auth.application.AuditTrail;
 import com.vandunxg.file_processing.auth.application.capability.CredentialVersionCache;
@@ -43,6 +43,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class RoleAdminCommandService {
+
+  /** How many users one credential-invalidation statement covers. */
+  private static final int INVALIDATION_BATCH_SIZE = 500;
 
   private final RoleRepository roleRepository;
   private final UserRepository userRepository;
@@ -228,31 +231,32 @@ public class RoleAdminCommandService {
     return roleRepository.findAll().stream().collect(Collectors.toMap(Role::getId, role -> role));
   }
 
+  /**
+   * Burns the credentials of everyone holding the changed roles.
+   *
+   * <p>Done in bounded batches of {@value #INVALIDATION_BATCH_SIZE} rather than user by user: a
+   * widely-held role such as OPERATOR would otherwise take one {@code SELECT … FOR UPDATE} plus one
+   * save per member and hold every one of those row locks until the transaction ends. One
+   * after-commit callback covers the whole set for the same reason — the old code registered one
+   * per user.
+   */
   private void invalidateUsersFor(Set<UUID> roleIds) {
     Instant now = Instant.now(clock);
-    roleRepository.findActiveUserIdsByRoleIds(roleIds).stream()
-        .distinct()
-        .forEach(
-            userId ->
-                userRepository
-                    .findByIdForUpdate(userId)
-                    .ifPresent(
-                        user -> {
-                          user.invalidateCredentials();
-                          userRepository.save(user);
-                          sessionRepository.revokeAllForUser(userId, RevocationReason.ADMIN, now);
-                          AfterCommit.run(() -> credentialVersionCache.invalidate(userId));
-                        }));
+    List<UUID> userIds =
+        roleRepository.findActiveUserIdsByRoleIds(roleIds).stream().distinct().toList();
+    if (userIds.isEmpty()) {
+      return;
+    }
+    for (int from = 0; from < userIds.size(); from += INVALIDATION_BATCH_SIZE) {
+      List<UUID> batch =
+          userIds.subList(from, Math.min(from + INVALIDATION_BATCH_SIZE, userIds.size()));
+      userRepository.bumpCredentialVersionFor(batch);
+      sessionRepository.revokeAllForUsers(batch, RevocationReason.ADMIN, now);
+    }
+    AfterCommit.run(() -> userIds.forEach(credentialVersionCache::invalidate));
   }
 
   private static AuditLog audit(UUID actorId, UUID roleId, OperationType operation, Instant now) {
-    return AuditLog.builder()
-        .id(IdUtils.nextId())
-        .domain(AuditLogDomain.ROLE)
-        .objectId(roleId)
-        .operation(operation)
-        .changedBy(actorId)
-        .changedAt(now)
-        .build();
+    return AuditTrail.entry(AuditLogDomain.ROLE, roleId, operation, actorId, now).build();
   }
 }

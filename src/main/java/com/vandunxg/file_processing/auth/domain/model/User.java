@@ -25,8 +25,18 @@ public class User extends AuditableDomain {
   private UUID id;
   private String username;
   private String normalizedUsername;
+
+  /**
+   * Deliberately holds the same canonical lower-cased value as {@link #normalizedEmail}: unlike a
+   * username, an address is not shown back with the casing the user typed. The two fields are kept
+   * separate only because uniqueness and lookup are defined on the normalized column; collapsing
+   * them is a schema decision, not a domain one.
+   */
   private String email;
+
+  /** The column uniqueness and lookup are defined on. */
   private String normalizedEmail;
+
   private String displayName;
   private String passwordHash;
   private UserStatus status;
@@ -247,12 +257,18 @@ public class User extends AuditableDomain {
   }
 
   public void enable() {
+    if (isDeleted()) {
+      throw new AuthRuleViolation(AuthRule.USER_ALREADY_DELETED);
+    }
     if (status == UserStatus.DISABLED) {
       this.status = UserStatus.ACTIVE;
     }
   }
 
   public void unlock() {
+    if (isDeleted()) {
+      throw new AuthRuleViolation(AuthRule.USER_ALREADY_DELETED);
+    }
     resetFailedLogin();
   }
 

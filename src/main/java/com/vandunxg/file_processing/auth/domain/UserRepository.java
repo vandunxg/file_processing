@@ -1,6 +1,7 @@
 package com.vandunxg.file_processing.auth.domain;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -40,8 +41,21 @@ public interface UserRepository {
   /** Narrow read for hot paths (e.g. per-request JWT validation) that only need this one field. */
   Optional<Integer> findCredentialVersionById(UUID id);
 
-  /** MUST flush immediately (saveAndFlush) so unique-constraint races surface here. */
+  /**
+   * Persists the aggregate. Implementations MUST make a uniqueness conflict on username or email
+   * observable from this call rather than deferring it to the end of the transaction, so the caller
+   * can translate a concurrent duplicate into the right error.
+   */
   User save(User user);
+
+  /**
+   * Invalidates the credentials of many users at once by advancing their credential version.
+   * Callers pass a bounded batch: this exists so a role change does not have to load and lock every
+   * holder of the role individually inside one transaction.
+   *
+   * @return how many users were updated
+   */
+  int bumpCredentialVersionFor(Collection<UUID> userIds);
 
   /** Adds one role assignment to the user aggregate. */
   UserRole assignRole(UserRole userRole);

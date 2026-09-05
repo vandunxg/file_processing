@@ -142,10 +142,16 @@ public class RegistrationCommandService {
             StrUtils.emailFormat(normalizedEmail));
         throw new AuthException(AuthErrorCode.AUTH_EMAIL_ALREADY_EXISTS);
       }
-      log.warn(
-          "[register] concurrent duplicate username detected on save username={}",
-          normalizedUsername);
-      throw new AuthException(AuthErrorCode.AUTH_USERNAME_ALREADY_EXISTS);
+      if (cause.contains("auth_users_normalized_username_uk")) {
+        log.warn(
+            "[register] concurrent duplicate username detected on save username={}",
+            normalizedUsername);
+        throw new AuthException(AuthErrorCode.AUTH_USERNAME_ALREADY_EXISTS);
+      }
+      // Any other constraint is not a duplicate registration: reporting it as one would send the
+      // caller chasing a username that is perfectly free.
+      log.error("[register] unexpected constraint violation on save", e);
+      throw e;
     }
 
     userRepository.assignRole(new UserRole(saved.getId(), operatorRole.getId()));
@@ -277,13 +283,7 @@ public class RegistrationCommandService {
   }
 
   private static AuditLog audit(UUID userId, OperationType operation, Instant now, String ipHash) {
-    return AuditLog.builder()
-        .id(IdUtils.nextId())
-        .domain(AuditLogDomain.AUTH)
-        .objectId(userId)
-        .operation(operation)
-        .changedBy(userId)
-        .changedAt(now)
+    return AuditTrail.entry(AuditLogDomain.AUTH, userId, operation, userId, now)
         .ipAddress(ipHash)
         .build();
   }

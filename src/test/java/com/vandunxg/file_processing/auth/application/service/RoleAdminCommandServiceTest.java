@@ -1,10 +1,11 @@
 package com.vandunxg.file_processing.auth.application.service;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
@@ -91,9 +92,7 @@ class RoleAdminCommandServiceTest {
     when(roleRepository.findAll()).thenReturn(List.of(role));
     when(roleRepository.findActiveUserIdsByRoleIds(java.util.Set.of(roleId)))
         .thenReturn(List.of(userId));
-    when(userRepository.findByIdForUpdate(userId)).thenReturn(java.util.Optional.of(user));
     when(roleRepository.save(any(Role.class))).thenAnswer(invocation -> invocation.getArgument(0));
-    when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
     TransactionSynchronizationManager.initSynchronization();
 
     newService()
@@ -106,12 +105,17 @@ class RoleAdminCommandServiceTest {
                 .permissions(java.util.Set.of())
                 .build());
 
-    assertThat(user.getCredentialVersion()).isEqualTo(2);
+    // Batched, not one locked read-modify-write per holder of the role: a widely-held role would
+    // otherwise hold one row lock per member for the length of the transaction.
+    verify(userRepository).bumpCredentialVersionFor(List.of(userId));
     verify(sessionRepository)
-        .revokeAllForUser(
-            eq(userId),
+        .revokeAllForUsers(
+            eq(List.of(userId)),
             eq(com.vandunxg.file_processing.auth.domain.model.RevocationReason.ADMIN),
             any());
+    verify(userRepository, never()).findByIdForUpdate(any(UUID.class));
+    verifyNoInteractions(credentialVersionCache);
+
     TransactionSynchronizationManager.getSynchronizations()
         .forEach(TransactionSynchronization::afterCommit);
     verify(credentialVersionCache).invalidate(userId);

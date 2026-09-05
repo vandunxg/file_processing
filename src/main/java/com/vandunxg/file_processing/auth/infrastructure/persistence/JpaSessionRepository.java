@@ -135,6 +135,19 @@ public class JpaSessionRepository implements SessionRepository {
   }
 
   @Override
+  @Transactional
+  public int revokeAllForUsers(
+      java.util.Collection<UUID> userIds, RevocationReason reason, Instant now) {
+    if (userIds.isEmpty()) {
+      return 0;
+    }
+    // Tokens first: once the sessions are marked revoked a crash between the two statements would
+    // leave live refresh tokens pointing at a dead session, which is the more dangerous order.
+    refreshTokenEntityRepository.revokeAllForUsers(userIds, now);
+    return sessionEntityRepository.revokeAllForUsers(userIds, now, reason);
+  }
+
+  @Override
   @Transactional(readOnly = true)
   public List<Session> listActiveByUser(UUID userId, Instant now) {
     return sessionEntityRepository

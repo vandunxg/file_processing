@@ -14,6 +14,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,11 +34,14 @@ import com.vandunxg.file_processing.auth.domain.UserRepository;
 import com.vandunxg.file_processing.auth.domain.model.RevocationReason;
 import com.vandunxg.file_processing.auth.domain.model.Session;
 import com.vandunxg.file_processing.auth.domain.model.User;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @ExtendWith(MockitoExtension.class)
 class SessionCommandServiceTest {
@@ -71,6 +75,24 @@ class SessionCommandServiceTest {
             authMetrics,
             authProperties(),
             Clock.fixed(NOW, ZoneOffset.UTC));
+    TransactionSynchronizationManager.initSynchronization();
+  }
+
+  @AfterEach
+  void tearDown() {
+    if (TransactionSynchronizationManager.isSynchronizationActive()) {
+      TransactionSynchronizationManager.clearSynchronization();
+    }
+  }
+
+  /**
+   * Drives the callbacks the service registered for after commit. Credential-cache invalidation is
+   * deferred there on purpose: Redis has no rollback, so clearing it inline would drop the cached
+   * version even on a path whose database work never landed.
+   */
+  private static void commit() {
+    new ArrayList<>(TransactionSynchronizationManager.getSynchronizations())
+        .forEach(TransactionSynchronization::afterCommit);
   }
 
   @Test
@@ -103,8 +125,10 @@ class SessionCommandServiceTest {
     verify(sessionRepository, never())
         .revokeAllForUser(any(UUID.class), eq(RevocationReason.TOKEN_REUSE), eq(NOW));
     verify(userRepository).save(user);
-    verify(credentialVersionCache).invalidate(userId);
     verify(authMetrics).refreshTokenReused();
+
+    commit();
+    verify(credentialVersionCache).invalidate(userId);
   }
 
   @Test
@@ -139,8 +163,10 @@ class SessionCommandServiceTest {
 
     assertThat(user.getCredentialVersion()).isEqualTo(2);
     verify(sessionRepository).revoke(sessionId, RevocationReason.TOKEN_REUSE, NOW);
-    verify(credentialVersionCache).invalidate(userId);
     verify(authMetrics).refreshTokenReused();
+
+    commit();
+    verify(credentialVersionCache).invalidate(userId);
   }
 
   @Test

@@ -9,7 +9,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.vandunxg.common.utils.HashUtils;
-import com.vandunxg.common.utils.IdUtils;
+import com.vandunxg.file_processing.auth.application.AfterCommit;
 import com.vandunxg.file_processing.auth.application.AuditTrail;
 import com.vandunxg.file_processing.auth.application.AuthProperties;
 import com.vandunxg.file_processing.auth.application.capability.AuthMetrics;
@@ -63,7 +63,13 @@ public class SessionCommandService {
   private final AuthProperties authProperties;
   private final Clock clock;
 
-  @Transactional
+  /**
+   * Rejecting a refresh is exactly when this method writes the most: reuse detection revokes the
+   * session and burns the whole credential version, and a credential-version mismatch revokes the
+   * stale session. {@link AuthException} is unchecked, so the default rollback rule would undo all
+   * of it and leave the attacker's session live. Failures of this type therefore commit.
+   */
+  @Transactional(noRollbackFor = AuthException.class)
   public LoginResult refresh(RefreshTokenCommand command) {
     String ipHash = hashIp(command.ipAddress());
     if (!authThrottle.tryConsume(
@@ -276,7 +282,10 @@ public class SessionCommandService {
             user -> {
               user.bumpCredentialVersion(now);
               userRepository.save(user);
-              credentialVersionCache.invalidate(userId);
+              // After commit: Redis has no rollback, so invalidating inline would drop the cached
+              // version even on a path that never persisted the bump — the reload would then put
+              // the old version straight back.
+              AfterCommit.run(() -> credentialVersionCache.invalidate(userId));
             });
 
     auditTrail.recordAfterCommit(
@@ -305,13 +314,7 @@ public class SessionCommandService {
 
   private static AuditLog.AuditLogBuilder<?, ?> audit(
       UUID objectId, OperationType operation, UUID actorId, Instant now, String ipHash) {
-    return AuditLog.builder()
-        .id(IdUtils.nextId())
-        .domain(AuditLogDomain.AUTH)
-        .objectId(objectId)
-        .operation(operation)
-        .changedBy(actorId)
-        .changedAt(now)
+    return AuditTrail.entry(AuditLogDomain.AUTH, objectId, operation, actorId, now)
         .ipAddress(ipHash);
   }
 }
