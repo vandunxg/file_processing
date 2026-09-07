@@ -1,4 +1,4 @@
-package com.vandunxg.file_processing.configuration;
+package com.vandunxg.file_processing.configuration.openapi;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -51,7 +51,8 @@ class OpenApiConfigurationTest {
 
   private static Class<?> configurationClass() {
     try {
-      return Class.forName("com.vandunxg.file_processing.configuration.OpenApiConfiguration");
+      return Class.forName(
+          "com.vandunxg.file_processing.configuration.openapi.OpenApiConfiguration");
     } catch (ClassNotFoundException ignored) {
       return null;
     }

@@ -1,4 +1,4 @@
-package com.vandunxg.file_processing.configuration;
+package com.vandunxg.file_processing.configuration.serialization;
 
 import java.time.Instant;
 
