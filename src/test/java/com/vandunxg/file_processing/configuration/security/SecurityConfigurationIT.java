@@ -61,6 +61,17 @@ class SecurityConfigurationIT extends AuthIntegrationTestBase {
     assertThat(filterChainProxy.getFilters("/api/v1/auth/login")).isEmpty();
   }
 
+  /**
+   * The root no longer installs an authentication mechanism; auth contributes it. If that
+   * contribution is lost, /api/** is still .authenticated() so the app fails closed — this asserts
+   * it did not silently fail closed.
+   */
+  @Test
+  void installsBearerTokenAuthenticationThroughAModuleContribution() {
+    assertThat(filterChainProxy.getFilters("/api/v1/me"))
+        .anyMatch(BearerTokenAuthenticationFilter.class::isInstance);
+  }
+
   /** A path no module contributed still needs a bearer token. */
   @Test
   void requiresAuthenticationForPathsNoModuleContributed() throws Exception {

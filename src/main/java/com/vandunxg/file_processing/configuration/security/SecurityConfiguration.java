@@ -13,12 +13,10 @@ import org.jspecify.annotations.NullMarked;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.convert.converter.Converter;
 import org.springframework.data.domain.AuditorAware;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.access.expression.method.DefaultMethodSecurityExpressionHandler;
 import org.springframework.security.access.expression.method.MethodSecurityExpressionHandler;
-import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.builders.WebSecurity;
@@ -26,8 +24,6 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationProvider;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 
@@ -68,9 +64,6 @@ public class SecurityConfiguration {
   private static final String ALL_MANAGER_PERMISSION = "all:manage";
 
   private final RegexPermissionEvaluator customPermissionEvaluator;
-  private final Converter<org.springframework.security.oauth2.jwt.Jwt, AbstractAuthenticationToken>
-      jwtAuthenticationConverter;
-  private final JwtDecoder jwtDecoder;
 
   /**
    * Optional on purpose: a context that loads this configuration without any business module on the
@@ -90,9 +83,6 @@ public class SecurityConfiguration {
     List<ModuleSecurityContributor> contributors =
         moduleSecurityContributors.orderedStream().toList();
     String[] modulePublicUrls = publicUrlsOf(contributors);
-
-    JwtAuthenticationProvider jwtAuthenticationProvider = new JwtAuthenticationProvider(jwtDecoder);
-    jwtAuthenticationProvider.setJwtAuthenticationConverter(jwtAuthenticationConverter);
 
     http.csrf(AbstractHttpConfigurer::disable)
         .sessionManagement(
@@ -121,10 +111,6 @@ public class SecurityConfiguration {
                   .requestMatchers(AUTHENTICATED_URLS)
                   .authenticated();
             })
-        .oauth2ResourceServer(
-            oauth2 ->
-                oauth2.authenticationManagerResolver(
-                    request -> jwtAuthenticationProvider::authenticate))
         .exceptionHandling(
             exHandling -> exHandling.authenticationEntryPoint(this.customAuthenticationEntryPoint));
 

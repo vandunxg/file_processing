@@ -5,12 +5,18 @@ import static org.mockito.Mockito.mock;
 
 import com.vandunxg.file_processing.configuration.security.ModuleSecurityContributor;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 
 class AuthSecurityContributorTest {
 
+  @SuppressWarnings("unchecked")
   private final ModuleSecurityContributor contributor =
       new AuthSecurityContributor(
-          mock(CustomAuthenticationFilter.class), mock(ActionLoggingFilter.class));
+          mock(JwtDecoder.class),
+          mock(Converter.class),
+          mock(CustomAuthenticationFilter.class),
+          mock(ActionLoggingFilter.class));
 
   /**
    * The composition root no longer knows these routes, so this list is the only place that records
