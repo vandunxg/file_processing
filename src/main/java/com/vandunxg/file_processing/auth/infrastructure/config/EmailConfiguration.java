@@ -1,4 +1,4 @@
-package com.vandunxg.file_processing.configuration;
+package com.vandunxg.file_processing.auth.infrastructure.config;
 
 import com.vandunxg.common.email.MailService;
 import com.vandunxg.common.email.config.MailSenderFactory;
