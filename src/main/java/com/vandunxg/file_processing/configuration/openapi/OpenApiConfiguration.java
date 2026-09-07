@@ -1,4 +1,4 @@
-package com.vandunxg.file_processing.configuration;
+package com.vandunxg.file_processing.configuration.openapi;
 
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
