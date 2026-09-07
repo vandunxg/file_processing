@@ -31,13 +31,22 @@ class MigrationAndSeedIT extends AuthIntegrationTestBase {
 
   @Autowired private JdbcTemplate jdbcTemplate;
 
+  /**
+   * Scoped to {@code is_const}, not a global {@code COUNT(*)}: {@code PostgresTestContainerBase}
+   * shares one static container across every IT class in the run, and other classes create ordinary
+   * roles without cleaning up ({@code JpaRoleRepositoryIT} leaves three behind). A global count
+   * therefore passes or fails purely on Failsafe's file-order. What this migration actually
+   * guarantees is the const seed pair, and {@code Role.create} always sets {@code is_const =
+   * false}, so no application path can add a row to this set.
+   */
   @Test
   void migrations_seedExactlyTwoRoles_adminAndOperatorBothConst() {
-    Integer roleCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM role", Integer.class);
+    Integer roleCount =
+        jdbcTemplate.queryForObject("SELECT COUNT(*) FROM role WHERE is_const", Integer.class);
     assertThat(roleCount).isEqualTo(2);
 
     List<Map<String, Object>> roles =
-        jdbcTemplate.queryForList("SELECT code, is_const FROM role ORDER BY code");
+        jdbcTemplate.queryForList("SELECT code, is_const FROM role WHERE is_const ORDER BY code");
 
     assertThat(roles).hasSize(2);
     assertThat(roles.get(0)).containsEntry("code", "ADMIN").containsEntry("is_const", true);
