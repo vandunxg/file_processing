@@ -1,5 +1,7 @@
 package com.vandunxg.file_processing.configuration.security;
 
+import java.util.List;
+
 import com.vandunxg.common.web.config.SpringSecurityAuditorAware;
 import com.vandunxg.common.web.security.ForbiddenTokenFilter;
 import com.vandunxg.common.web.security.NoHandlerFoundFilter;
@@ -19,6 +21,7 @@ import org.springframework.security.access.expression.method.MethodSecurityExpre
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.builders.WebSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -36,21 +39,12 @@ import org.springframework.security.web.SecurityFilterChain;
 @Slf4j(topic = "SECURITY-CONFIGURATION")
 public class SecurityConfiguration {
 
-  private static final String[] PUBLIC_URLS = {
-    "/",
-    "/health",
-    "/ready",
-    "/ws/**",
-    "/api/public/**",
-    "/api/v1/auth/register",
-    "/api/v1/auth/verify-email",
-    "/api/v1/auth/resend-verification",
-    "/api/v1/auth/forgot-password",
-    "/api/v1/auth/reset-password",
-    "/api/v1/auth/complete-password-change",
-    "/api/v1/auth/login",
-    "/api/v1/auth/refresh",
-    "/api/v1/certificate/.well-known/jwks.json"
+  /**
+   * Endpoints the application itself serves without authentication. A module's own public routes
+   * are not listed here — it declares them through {@link ModuleSecurityContributor#publicPaths()}.
+   */
+  private static final String[] PLATFORM_PUBLIC_URLS = {
+    "/", "/health", "/ready", "/ws/**", "/api/public/**"
   };
 
   private static final String[] AUTHENTICATED_URLS = {"/api/**"};
@@ -80,9 +74,10 @@ public class SecurityConfiguration {
 
   /**
    * Optional on purpose: a context that loads this configuration without any business module on the
-   * scan path should build a chain with no module filters, not fail to start on a missing bean.
+   * scan path should build a chain with no module contributions, not fail to start on a missing
+   * bean.
    */
-  private final ObjectProvider<SecurityFilterChainContributor> securityFilterChainContributors;
+  private final ObjectProvider<ModuleSecurityContributor> moduleSecurityContributors;
 
   private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
   private final NoHandlerFoundFilter noHandlerFoundFilter;
@@ -90,6 +85,12 @@ public class SecurityConfiguration {
 
   @Bean
   public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    // orderedStream() honours @Order on each contributor, so filter placement does not depend on
+    // classpath scan order once a second module starts contributing.
+    List<ModuleSecurityContributor> contributors =
+        moduleSecurityContributors.orderedStream().toList();
+    String[] modulePublicUrls = publicUrlsOf(contributors);
+
     JwtAuthenticationProvider jwtAuthenticationProvider = new JwtAuthenticationProvider(jwtDecoder);
     jwtAuthenticationProvider.setJwtAuthenticationConverter(jwtAuthenticationConverter);
 
@@ -99,22 +100,27 @@ public class SecurityConfiguration {
                 sessionAuthenticationStrategy.sessionCreationPolicy(
                     SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(
-            authorize ->
-                authorize
-                    .requestMatchers(HttpMethod.OPTIONS, "/**")
-                    .permitAll()
-                    .requestMatchers(IGNORE_URLS)
-                    .permitAll()
-                    .requestMatchers(PUBLIC_URLS)
-                    .permitAll()
-                    .requestMatchers(ACTUATOR_PROBE_URLS)
-                    .permitAll()
-                    .requestMatchers("/actuator/prometheus")
-                    .hasAuthority(ALL_MANAGER_PERMISSION)
-                    .requestMatchers("/actuator/**")
-                    .denyAll()
-                    .requestMatchers(AUTHENTICATED_URLS)
-                    .authenticated())
+            authorize -> {
+              authorize
+                  .requestMatchers(HttpMethod.OPTIONS, "/**")
+                  .permitAll()
+                  .requestMatchers(IGNORE_URLS)
+                  .permitAll()
+                  .requestMatchers(PLATFORM_PUBLIC_URLS)
+                  .permitAll();
+              if (modulePublicUrls.length > 0) {
+                authorize.requestMatchers(modulePublicUrls).permitAll();
+              }
+              authorize
+                  .requestMatchers(ACTUATOR_PROBE_URLS)
+                  .permitAll()
+                  .requestMatchers("/actuator/prometheus")
+                  .hasAuthority(ALL_MANAGER_PERMISSION)
+                  .requestMatchers("/actuator/**")
+                  .denyAll()
+                  .requestMatchers(AUTHENTICATED_URLS)
+                  .authenticated();
+            })
         .oauth2ResourceServer(
             oauth2 ->
                 oauth2.authenticationManagerResolver(
@@ -124,10 +130,7 @@ public class SecurityConfiguration {
 
     http.addFilterAfter(noHandlerFoundFilter, BearerTokenAuthenticationFilter.class);
     http.addFilterAfter(forbiddenTokenFilter, BearerTokenAuthenticationFilter.class);
-    // orderedStream() honours @Order on each contributor, so filter placement does not depend on
-    // classpath scan order once a second module starts contributing.
-    for (SecurityFilterChainContributor contributor :
-        securityFilterChainContributors.orderedStream().toList()) {
+    for (ModuleSecurityContributor contributor : contributors) {
       contributor.contribute(http);
     }
 
@@ -136,7 +139,25 @@ public class SecurityConfiguration {
 
   @Bean
   WebSecurityCustomizer webSecurityCustomizer() {
-    return web -> web.ignoring().requestMatchers(PUBLIC_URLS).requestMatchers(IGNORE_URLS);
+    // Contributors are resolved inside the lambda, not at bean construction: WebSecurity applies
+    // customizers while building the same context that builds the filter chain, so this touches
+    // contributor beans no earlier than the chain already does.
+    return web -> {
+      WebSecurity.IgnoredRequestConfigurer ignoring =
+          web.ignoring().requestMatchers(PLATFORM_PUBLIC_URLS);
+      String[] modulePublicUrls = publicUrlsOf(moduleSecurityContributors.orderedStream().toList());
+      if (modulePublicUrls.length > 0) {
+        ignoring = ignoring.requestMatchers(modulePublicUrls);
+      }
+      ignoring.requestMatchers(IGNORE_URLS);
+    };
+  }
+
+  private static String[] publicUrlsOf(List<ModuleSecurityContributor> contributors) {
+    return contributors.stream()
+        .flatMap(contributor -> contributor.publicPaths().stream())
+        .distinct()
+        .toArray(String[]::new);
   }
 
   @Bean
