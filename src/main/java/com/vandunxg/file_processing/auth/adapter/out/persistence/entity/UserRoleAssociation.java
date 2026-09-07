@@ -1,5 +1,0 @@
-package com.vandunxg.file_processing.auth.adapter.out.persistence.entity;
-
-import java.util.UUID;
-
-public record UserRoleAssociation(UUID userId, RoleEntity role) {}

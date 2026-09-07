@@ -79,7 +79,7 @@ class LoginDomainTest {
     UUID userId = UUID.randomUUID();
 
     Session session =
-        Session.issue(id, userId, 1, "curl/8", "ip-hash".repeat(9), NOW, Duration.ofDays(7));
+        Session.issue(id, userId, 1, null, "curl/8", "ip-hash".repeat(9), NOW, Duration.ofDays(7));
 
     assertThat(session.getId()).isEqualTo(id);
     assertThat(session.getUserId()).isEqualTo(userId);
@@ -98,15 +98,15 @@ class LoginDomainTest {
     UUID userId = UUID.randomUUID();
     Duration ttl = Duration.ofDays(7);
 
-    assertThatThrownBy(() -> Session.issue(null, userId, 1, "ua", null, NOW, ttl))
+    assertThatThrownBy(() -> Session.issue(null, userId, 1, null, "ua", null, NOW, ttl))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> Session.issue(id, null, 1, "ua", null, NOW, ttl))
+    assertThatThrownBy(() -> Session.issue(id, null, 1, null, "ua", null, NOW, ttl))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> Session.issue(id, userId, 0, "ua", null, NOW, ttl))
+    assertThatThrownBy(() -> Session.issue(id, userId, 0, null, "ua", null, NOW, ttl))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> Session.issue(id, userId, 1, "ua", " ", NOW, ttl))
+    assertThatThrownBy(() -> Session.issue(id, userId, 1, null, "ua", " ", NOW, ttl))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> Session.issue(id, userId, 1, "ua", null, NOW, Duration.ZERO))
+    assertThatThrownBy(() -> Session.issue(id, userId, 1, null, "ua", null, NOW, Duration.ZERO))
         .isInstanceOf(IllegalArgumentException.class);
   }
 
@@ -124,7 +124,7 @@ class LoginDomainTest {
 
   private static Session defaultSession() {
     return Session.issue(
-        UUID.randomUUID(), UUID.randomUUID(), 1, "user-agent", null, NOW, Duration.ofDays(7));
+        UUID.randomUUID(), UUID.randomUUID(), 1, null, "user-agent", null, NOW, Duration.ofDays(7));
   }
 
   private static User activeUser() {

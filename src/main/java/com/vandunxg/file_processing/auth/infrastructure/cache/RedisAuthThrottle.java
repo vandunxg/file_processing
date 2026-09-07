@@ -1,0 +1,60 @@
+package com.vandunxg.file_processing.auth.infrastructure.cache;
+
+import java.time.Duration;
+import java.util.List;
+
+import com.vandunxg.file_processing.auth.application.AuthProperties;
+import com.vandunxg.file_processing.auth.application.capability.AuthThrottle;
+import com.vandunxg.file_processing.auth.infrastructure.security.RetryAfterHeader;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.stereotype.Component;
+
+/**
+ * Cluster-wide, atomic sliding-window-counter rate limiter. Every caller passes its own budget (max
+ * + window), so a single Redis Lua script serves register, login (by-IP and by-user), and refresh
+ * throttling without duplicating adapters.
+ */
+@Component
+@RequiredArgsConstructor
+@Slf4j(topic = "AUTH-THROTTLE-REDIS")
+public class RedisAuthThrottle implements AuthThrottle {
+
+  private final StringRedisTemplate stringRedisTemplate;
+  private final RedisScript<Long> slidingWindowRateLimiterScript;
+  private final AuthProperties authProperties;
+  private final RetryAfterHeader retryAfterHeader;
+
+  @Override
+  public boolean tryConsume(String key, int maxPerWindow, Duration window) {
+    if (window == null || window.isZero() || window.isNegative()) {
+      throw new IllegalArgumentException("window must be positive");
+    }
+    String redisKey = authProperties.redis().throttle().keyPrefix() + key;
+    long windowSeconds = window.getSeconds();
+
+    Long allowed =
+        stringRedisTemplate.execute(
+            slidingWindowRateLimiterScript,
+            List.of(redisKey),
+            String.valueOf(maxPerWindow),
+            String.valueOf(windowSeconds));
+
+    boolean result = allowed != null && allowed == 1L;
+    if (!result) {
+      // Requirements 8.4: a 429 must tell the caller when to come back. Set here rather than in the
+      // application service, which has no servlet to reach for, and rather than in an exception
+      // handler, which cannot know which of the several limits was the one that tripped.
+      retryAfterHeader.set(window);
+    }
+    log.debug(
+        "[tryConsume] evaluated rate limit key={} maxPerWindow={} windowSec={} allowed={}",
+        key,
+        maxPerWindow,
+        windowSeconds,
+        result);
+    return result;
+  }
+}

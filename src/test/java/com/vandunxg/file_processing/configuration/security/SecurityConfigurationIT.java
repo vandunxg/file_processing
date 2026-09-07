@@ -2,8 +2,8 @@ package com.vandunxg.file_processing.configuration.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.vandunxg.file_processing.auth.configuration.filter.ActionLoggingFilter;
-import com.vandunxg.file_processing.auth.configuration.filter.CustomAuthenticationFilter;
+import com.vandunxg.file_processing.auth.infrastructure.security.ActionLoggingFilter;
+import com.vandunxg.file_processing.auth.infrastructure.security.CustomAuthenticationFilter;
 import com.vandunxg.file_processing.testsupport.AuthIntegrationTestBase;
 import com.vandunxg.file_processing.testsupport.PostgresIntegrationTest;
 import org.junit.jupiter.api.Test;

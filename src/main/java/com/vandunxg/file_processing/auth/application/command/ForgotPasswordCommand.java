@@ -1,12 +1,7 @@
 package com.vandunxg.file_processing.auth.application.command;
 
 import lombok.Builder;
-import lombok.Getter;
 
-@Getter
+/** Both fields are strings, so the builder is here to prevent transposing them. */
 @Builder
-public class ForgotPasswordCommand {
-
-  private final String identifier;
-  private final String ipAddress;
-}
+public record ForgotPasswordCommand(String identifier, String ipAddress) {}

@@ -2,17 +2,8 @@ package com.vandunxg.file_processing.auth.application.query;
 
 import java.util.UUID;
 
-import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
 
-@Getter
+/** Both fields are UUIDs, so the builder is here to prevent transposing them. */
 @Builder
-@NoArgsConstructor
-@AllArgsConstructor
-public class ListSessionsQuery {
-
-  private UUID userId;
-  private UUID currentSessionId;
-}
+public record ListSessionsQuery(UUID userId, UUID currentSessionId) {}

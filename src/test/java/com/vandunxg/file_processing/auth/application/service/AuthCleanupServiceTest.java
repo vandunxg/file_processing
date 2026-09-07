@@ -7,9 +7,9 @@ import static org.mockito.Mockito.when;
 import java.time.Clock;
 import java.time.Instant;
 
-import com.vandunxg.file_processing.auth.application.port.out.PasswordResetTokenRepositoryPort;
-import com.vandunxg.file_processing.auth.application.port.out.SessionRepositoryPort;
-import com.vandunxg.file_processing.auth.configuration.AuthProperties;
+import com.vandunxg.file_processing.auth.application.AuthProperties;
+import com.vandunxg.file_processing.auth.domain.PasswordResetTokenRepository;
+import com.vandunxg.file_processing.auth.domain.SessionRepository;
 import com.vandunxg.file_processing.testsupport.AuthPropertiesFixture;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,22 +22,21 @@ class AuthCleanupServiceTest {
   private static final Instant NOW = Instant.parse("2026-07-20T10:15:30Z");
   private static final Clock CLOCK = Clock.fixed(NOW, java.time.ZoneOffset.UTC);
 
-  @Mock private PasswordResetTokenRepositoryPort passwordResetTokenRepositoryPort;
-  @Mock private SessionRepositoryPort sessionRepositoryPort;
+  @Mock private PasswordResetTokenRepository passwordResetTokenRepository;
+  @Mock private SessionRepository sessionRepository;
 
   @Test
   void removesOneConfiguredBatchOfExpiredPersistedArtifacts() {
     AuthProperties properties = AuthPropertiesFixture.defaults();
     int batchSize = properties.cleanup().batchSize();
-    when(passwordResetTokenRepositoryPort.deleteExpired(NOW, batchSize)).thenReturn(2);
-    when(sessionRepositoryPort.deleteExpiredOrRevoked(NOW, batchSize)).thenReturn(3);
+    when(passwordResetTokenRepository.deleteExpired(NOW, batchSize)).thenReturn(2);
+    when(sessionRepository.deleteExpiredOrRevoked(NOW, batchSize)).thenReturn(3);
     AuthCleanupService service =
-        new AuthCleanupService(
-            passwordResetTokenRepositoryPort, sessionRepositoryPort, properties, CLOCK);
+        new AuthCleanupService(passwordResetTokenRepository, sessionRepository, properties, CLOCK);
 
     assertThat(service.cleanExpired()).isEqualTo(new AuthCleanupService.CleanupResult(2, 3));
 
-    verify(passwordResetTokenRepositoryPort).deleteExpired(NOW, batchSize);
-    verify(sessionRepositoryPort).deleteExpiredOrRevoked(NOW, batchSize);
+    verify(passwordResetTokenRepository).deleteExpired(NOW, batchSize);
+    verify(sessionRepository).deleteExpiredOrRevoked(NOW, batchSize);
   }
 }

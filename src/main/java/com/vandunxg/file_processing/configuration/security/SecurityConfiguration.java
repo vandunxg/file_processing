@@ -5,11 +5,10 @@ import com.vandunxg.common.web.security.ForbiddenTokenFilter;
 import com.vandunxg.common.web.security.NoHandlerFoundFilter;
 import com.vandunxg.common.web.security.RegexPermissionEvaluator;
 import com.vandunxg.common.web.support.CustomAuthenticationEntryPoint;
-import com.vandunxg.file_processing.auth.configuration.filter.ActionLoggingFilter;
-import com.vandunxg.file_processing.auth.configuration.filter.CustomAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NullMarked;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
@@ -80,8 +79,13 @@ public class SecurityConfiguration {
   private final Converter<org.springframework.security.oauth2.jwt.Jwt, AbstractAuthenticationToken>
       jwtAuthenticationConverter;
   private final JwtDecoder jwtDecoder;
-  private final ActionLoggingFilter actionLoggingFilter;
-  private final CustomAuthenticationFilter customAuthenticationFilter;
+
+  /**
+   * Optional on purpose: a context that loads this configuration without any business module on the
+   * scan path should build a chain with no module filters, not fail to start on a missing bean.
+   */
+  private final ObjectProvider<SecurityFilterChainContributor> securityFilterChainContributors;
+
   private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
   private final NoHandlerFoundFilter noHandlerFoundFilter;
   private final ForbiddenTokenFilter forbiddenTokenFilter;
@@ -122,8 +126,12 @@ public class SecurityConfiguration {
 
     http.addFilterAfter(noHandlerFoundFilter, BearerTokenAuthenticationFilter.class);
     http.addFilterAfter(forbiddenTokenFilter, BearerTokenAuthenticationFilter.class);
-    http.addFilterAfter(customAuthenticationFilter, BearerTokenAuthenticationFilter.class);
-    http.addFilterAfter(actionLoggingFilter, CustomAuthenticationFilter.class);
+    // orderedStream() honours @Order on each contributor, so filter placement does not depend on
+    // classpath scan order once a second module starts contributing.
+    for (SecurityFilterChainContributor contributor :
+        securityFilterChainContributors.orderedStream().toList()) {
+      contributor.contribute(http);
+    }
 
     return http.build();
   }
