@@ -44,6 +44,16 @@ public class StreamingErrorReportStore implements ErrorReportStore {
     return fileStorage.open(reportKey);
   }
 
+  @Override
+  public void discard(String reportKey) {
+    try {
+      fileStorage.delete(reportKey);
+    } catch (RuntimeException exception) {
+      // Best effort: failing to tidy up must not turn a cancellation into an error the caller sees.
+      log.warn("[report] could not discard unreferenced report key={}", reportKey, exception);
+    }
+  }
+
   @RequiredArgsConstructor
   private static final class SpooledDraft implements Draft {
 

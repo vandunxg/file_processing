@@ -20,6 +20,14 @@ public interface ErrorReportStore {
 
   InputStream openPublished(String reportKey);
 
+  /**
+   * Removes a published report nothing references any more.
+   *
+   * <p>Publishing happens before the terminal transition, so a cancellation arriving in between
+   * leaves the job cancelled and the object unreferenced. Nothing else ever deletes it.
+   */
+  void discard(String reportKey);
+
   interface Draft extends AutoCloseable {
 
     void write(ValidationIssue issue, ParsedCustomerRow originalRow);

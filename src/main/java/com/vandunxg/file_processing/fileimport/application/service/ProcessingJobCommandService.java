@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.vandunxg.file_processing.fileimport.application.capability.ErrorReportStore;
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportErrorCode;
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportException;
 import com.vandunxg.file_processing.fileimport.domain.ImportFileRepository;
@@ -33,6 +34,7 @@ public class ProcessingJobCommandService {
 
   private final ProcessingJobRepository processingJobRepository;
   private final ImportFileRepository importFileRepository;
+  private final ErrorReportStore errorReportStore;
   private final Clock clock;
 
   /** Takes ownership of the next queued job, or returns empty when there is nothing to do. */
@@ -88,6 +90,11 @@ public class ProcessingJobCommandService {
       // no report -- so the key is dropped rather than completing behind the request's back.
       job.cancel(now);
       processingJobRepository.save(job);
+      if (errorReportKey != null) {
+        // The worker had already uploaded it, and a cancelled job carries no report key, so
+        // nothing would ever reference or remove this object again.
+        errorReportStore.discard(errorReportKey);
+      }
       log.info("[complete] jobId={} cancelled after finishing its last batch", jobId);
       return;
     }

@@ -228,6 +228,26 @@ class ProcessingJobRunnerIT extends AuthIntegrationTestBase {
     assertThat(runner.runNextJob()).isFalse();
   }
 
+  @Test
+  void aCancellationThatLandsAfterTheReportIsUploadedLeavesNoObjectBehind() {
+    // The worker checks for cancellation before uploading the report, but the request can still
+    // arrive between that check and the terminal transition. The job then becomes CANCELLED and
+    // drops the key, so without this the object stays in the bucket with nothing referencing it --
+    // and nothing ever deletes it.
+    UUID jobId = queue(HEADER + validRow("CUS_01"));
+    commandService.claimNextQueued();
+    commandService.requestCancellation(jobId, ownerOf(jobId), true);
+    String reportKey = "reports/" + jobId + ".csv";
+    storage.put(reportKey, "row_number,external_id\n2,CUS_01\n");
+
+    commandService.complete(jobId, 2, 1, 1, 1, 0, reportKey);
+
+    ProcessingJob job = jobs.findById(jobId).orElseThrow();
+    assertThat(job.getStatus()).isEqualTo(JobStatus.CANCELLED);
+    assertThat(job.getErrorReportKey()).isNull();
+    assertThat(storage.keys()).doesNotContain(reportKey);
+  }
+
   private UUID ownerOf(UUID jobId) {
     return jobs.findById(jobId).orElseThrow().getOwnerId();
   }
