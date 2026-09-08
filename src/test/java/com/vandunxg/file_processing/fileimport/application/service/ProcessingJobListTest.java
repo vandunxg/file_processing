@@ -9,6 +9,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -51,7 +52,8 @@ class ProcessingJobListTest {
             importFileRepository,
             searchRepository,
             mock(ErrorReportStore.class),
-            new ProcessingJobResultMapperImpl());
+            new ProcessingJobResultMapperImpl(),
+            Clock.fixed(NOW, java.time.ZoneOffset.UTC));
   }
 
   @Test

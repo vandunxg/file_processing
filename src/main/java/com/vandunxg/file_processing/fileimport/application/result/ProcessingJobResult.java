@@ -13,10 +13,16 @@ import com.vandunxg.file_processing.fileimport.domain.model.JobStatus;
  *
  * <p>Composed from the job and its file, and it hides the storage key and the raw failure detail,
  * neither of which a client may see.
+ *
+ * <p>{@code availableActions} is computed rather than left to the client: whether a job can be
+ * cancelled, retried or downloaded depends on the state machine and on whether the original is
+ * still within retention, and a client guessing at that would offer actions that come back as
+ * conflicts.
  */
 public record ProcessingJobResult(
     UUID jobId,
     UUID fileId,
+    UUID ownerId,
     String originalFilename,
     long sizeBytes,
     JobStatus status,
@@ -34,6 +40,7 @@ public record ProcessingJobResult(
     Instant createdAt,
     boolean errorReportAvailable,
     String errorSummary,
+    List<ProcessingJobAction> availableActions,
     List<AttemptResult> attempts) {
 
   public record AttemptResult(

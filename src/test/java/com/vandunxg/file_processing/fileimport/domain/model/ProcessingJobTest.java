@@ -373,4 +373,67 @@ class ProcessingJobTest {
     assertThat(job.getStatus()).isEqualTo(JobStatus.FAILED);
     assertThat(job.getAttempts()).hasSize(4);
   }
+
+  @Test
+  void aQueuedOrRunningJobIsCancellableAndNothingElseIs() {
+    ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
+    assertThat(job.isCancellable()).isTrue();
+
+    job.claim(NOW);
+    assertThat(job.isCancellable()).isTrue();
+
+    job.requestCancellation();
+    // The request is already recorded, so offering the action again would do nothing visible.
+    assertThat(job.isCancellable()).isFalse();
+
+    job.cancel(NOW.plusSeconds(1));
+    assertThat(job.isCancellable()).isFalse();
+  }
+
+  @Test
+  void onlyAFinishedUnsuccessfulJobIsRetryable() {
+    ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
+    assertThat(job.isRetryable()).isFalse();
+
+    job.claim(NOW);
+    assertThat(job.isRetryable()).isFalse();
+
+    job.fail("DATABASE_BATCH_FAILED", "database batch failed", NOW.plusSeconds(1));
+    assertThat(job.isRetryable()).isTrue();
+  }
+
+  @Test
+  void aJobThatHasUsedItsRetryBudgetIsNoLongerRetryable() {
+    ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
+    for (int attempt = 0; attempt < 4; attempt++) {
+      job.claim(NOW);
+      job.fail("DATABASE_BATCH_FAILED", "database batch failed", NOW.plusSeconds(1));
+      if (attempt < 3) {
+        job.requestRetry(AttemptTrigger.USER_RETRY);
+      }
+    }
+
+    // The action offered to a client must agree with what a retry request would actually do.
+    assertThat(job.isRetryable()).isFalse();
+    assertThatThrownBy(() -> job.requestRetry(AttemptTrigger.USER_RETRY))
+        .isInstanceOf(ProcessingJobRuleViolation.class)
+        .extracting(exception -> ((ProcessingJobRuleViolation) exception).getRule())
+        .isEqualTo(ProcessingJobRule.RETRY_LIMIT_EXCEEDED);
+  }
+
+  @Test
+  void onlyARunThatRejectedRowsHasAReport() {
+    ProcessingJob withErrors = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
+    withErrors.claim(NOW);
+    withErrors.recordProgress(2, 1, 1, 1, 0, NOW);
+    withErrors.complete("reports/job.csv", NOW.plusSeconds(1));
+
+    ProcessingJob clean = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
+    clean.claim(NOW);
+    clean.recordProgress(2, 2, 0, 2, 0, NOW);
+    clean.complete(null, NOW.plusSeconds(1));
+
+    assertThat(withErrors.hasErrorReport()).isTrue();
+    assertThat(clean.hasErrorReport()).isFalse();
+  }
 }

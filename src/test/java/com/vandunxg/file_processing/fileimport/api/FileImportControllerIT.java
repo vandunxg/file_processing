@@ -1,5 +1,7 @@
 package com.vandunxg.file_processing.fileimport.api;
 
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -141,8 +143,38 @@ class FileImportControllerIT extends AuthIntegrationTestBase {
         .andExpect(jsonPath("$.data.originalFilename").value("mine.csv"))
         .andExpect(jsonPath("$.data.attempts").isArray())
         .andExpect(jsonPath("$.data.errorReportAvailable").value(false))
+        .andExpect(jsonPath("$.data.ownerId").value(owner.userId().toString()))
         .andExpect(jsonPath("$.data.storageKey").doesNotExist())
         .andExpect(jsonPath("$.data.errorCode").doesNotExist());
+  }
+
+  @Test
+  void theDetailViewSaysWhichActionsAreActuallyAvailable() throws Exception {
+    Caller owner = caller(OWNER_ROLE);
+    UUID jobId = queue(owner.userId(), "mine.csv", NOW);
+
+    // Queued: it can be cancelled, and nothing else -- there is no failed run to retry and no
+    // report to download.
+    mockMvc
+        .perform(
+            get("/api/v1/file-import/jobs/{jobId}", jobId)
+                .header("Authorization", "Bearer " + owner.token()))
+        .andExpect(jsonPath("$.data.availableActions", hasItem("CANCEL")))
+        .andExpect(jsonPath("$.data.availableActions", not(hasItem("RETRY"))))
+        .andExpect(jsonPath("$.data.availableActions", not(hasItem("DOWNLOAD_ERROR_REPORT"))));
+
+    mockMvc
+        .perform(
+            post("/api/v1/file-import/jobs/{jobId}/cancel", jobId)
+                .header("Authorization", "Bearer " + owner.token()))
+        .andExpect(status().isAccepted());
+
+    mockMvc
+        .perform(
+            get("/api/v1/file-import/jobs/{jobId}", jobId)
+                .header("Authorization", "Bearer " + owner.token()))
+        .andExpect(jsonPath("$.data.availableActions", hasItem("RETRY")))
+        .andExpect(jsonPath("$.data.availableActions", not(hasItem("CANCEL"))));
   }
 
   @Test

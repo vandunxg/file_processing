@@ -23,6 +23,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import org.hibernate.annotations.BatchSize;
 
 /**
  * Aggregate root for a file's processing lifecycle.
@@ -125,8 +126,16 @@ public class ProcessingJob extends AuditableEntity {
   @Column(name = "version", nullable = false)
   private Long version;
 
+  /**
+   * The whole history loads with the job: an aggregate is loaded whole, and the retry limit bounds
+   * how many attempts there can be.
+   *
+   * <p>Batched because the job list reads a page of aggregates at once, and initialising this
+   * collection one job at a time would make a page cost a query per row.
+   */
   @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
   @JoinColumn(name = "job_id", nullable = false)
+  @BatchSize(size = 100)
   @OrderBy("attemptNumber ASC")
   private List<ProcessingAttempt> attempts = new ArrayList<>();
 
@@ -356,6 +365,28 @@ public class ProcessingJob extends AuditableEntity {
 
   public List<ProcessingAttempt> getAttempts() {
     return List.copyOf(attempts);
+  }
+
+  /**
+   * Whether asking to cancel would change anything.
+   *
+   * <p>These three read the same conditions the transitions below enforce, so a client is never
+   * offered an action that would come back as a conflict. They exist here rather than in the
+   * application because the answer is the state machine's, not a view's.
+   */
+  public boolean isCancellable() {
+    return status == JobStatus.QUEUED || status == JobStatus.PROCESSING;
+  }
+
+  /** Whether a person could ask for another attempt, budget included. */
+  public boolean isRetryable() {
+    return (status == JobStatus.FAILED || status == JobStatus.CANCELLED)
+        && requestedRetries() < MAX_REQUESTED_RETRIES;
+  }
+
+  /** Whether a report of rejected rows exists to download. */
+  public boolean hasErrorReport() {
+    return status == JobStatus.COMPLETED_WITH_ERRORS && errorReportKey != null;
   }
 
   private long recoveries() {

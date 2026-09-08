@@ -1,6 +1,8 @@
 package com.vandunxg.file_processing.fileimport.application.service;
 
 import java.io.InputStream;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -35,6 +37,7 @@ public class ProcessingJobQueryService {
   private final ProcessingJobSearchRepository processingJobSearchRepository;
   private final ErrorReportStore errorReportStore;
   private final ProcessingJobResultMapper mapper;
+  private final Clock clock;
 
   /**
    * Lists jobs the caller is allowed to see.
@@ -67,7 +70,7 @@ public class ProcessingJobQueryService {
   @Transactional(readOnly = true)
   public ProcessingJobResult get(UUID jobId, UUID ownerId, boolean admin) {
     ProcessingJob job = requireVisible(jobId, ownerId, admin);
-    return mapper.toResult(job, file(job));
+    return mapper.toResult(job, file(job), Instant.now(clock));
   }
 
   /** Counters and timing only, so polling does not carry the file metadata and attempt history. */
