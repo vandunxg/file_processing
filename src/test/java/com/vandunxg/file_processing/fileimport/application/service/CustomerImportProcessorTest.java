@@ -13,9 +13,10 @@ import java.util.List;
 import java.util.Set;
 
 import com.vandunxg.file_processing.fileimport.adapter.out.persistence.CustomerUpsertResult;
-import com.vandunxg.file_processing.fileimport.application.port.out.DuplicateExternalIdTracker;
+import com.vandunxg.file_processing.fileimport.application.capability.DuplicateExternalIdTracker;
 import com.vandunxg.file_processing.fileimport.application.validation.NormalizedCustomerRow;
 import com.vandunxg.file_processing.fileimport.application.validation.ValidatedCustomerRow;
+import com.vandunxg.file_processing.fileimport.infrastructure.csv.CommonsCustomerCsvReader;
 import org.junit.jupiter.api.Test;
 
 class CustomerImportProcessorTest {
@@ -32,8 +33,9 @@ class CustomerImportProcessorTest {
 
     var result =
         new CustomerImportProcessor(
-                Clock.fixed(Instant.parse("2026-08-04T00:00:00Z"), ZoneOffset.UTC),
-                new InMemoryTracker())
+                new CommonsCustomerCsvReader(
+                    Clock.fixed(Instant.parse("2026-08-04T00:00:00Z"), ZoneOffset.UTC),
+                    new InMemoryTracker()))
             .process(
                 new ByteArrayInputStream(csv.getBytes(StandardCharsets.UTF_8)),
                 rows -> {

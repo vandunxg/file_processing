@@ -1,15 +1,13 @@
 package com.vandunxg.file_processing.fileimport.application.service;
 
 import java.io.InputStream;
-import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import com.vandunxg.file_processing.fileimport.adapter.in.csv.CsvValidationReader;
 import com.vandunxg.file_processing.fileimport.adapter.out.persistence.CustomerUpsertResult;
-import com.vandunxg.file_processing.fileimport.application.port.out.DuplicateExternalIdTracker;
+import com.vandunxg.file_processing.fileimport.application.capability.CustomerCsvReader;
 import com.vandunxg.file_processing.fileimport.application.validation.NormalizedCustomerRow;
 import com.vandunxg.file_processing.fileimport.application.validation.ValidatedCustomerRow;
 import lombok.RequiredArgsConstructor;
@@ -21,8 +19,7 @@ public class CustomerImportProcessor {
 
   private static final int BATCH_SIZE = 1_000;
 
-  private final Clock clock;
-  private final DuplicateExternalIdTracker duplicateExternalIdTracker;
+  private final CustomerCsvReader customerCsvReader;
 
   public CustomerImportResult process(
       InputStream input,
@@ -30,7 +27,7 @@ public class CustomerImportProcessor {
       Consumer<ValidatedCustomerRow> invalidRowConsumer) {
     List<NormalizedCustomerRow> batch = new ArrayList<>(BATCH_SIZE);
     Counters counters = new Counters();
-    try (var reader = new CsvValidationReader(input, clock, duplicateExternalIdTracker)) {
+    try (var reader = customerCsvReader.open(input)) {
       while (true) {
         var next = reader.next();
         if (next.isEmpty()) {
