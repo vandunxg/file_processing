@@ -43,8 +43,8 @@ public interface ProcessingJobResultMapper {
   /**
    * The actions the caller could take right now.
    *
-   * <p>Retry needs the original, so an expired retention window removes it even though the job
-   * itself is still in a retryable state.
+   * <p>Retry needs the original and the report is kept for as long as the original is, so an
+   * expired retention window removes both even though the job itself has not changed.
    */
   default List<ProcessingJobAction> availableActions(
       ProcessingJob job, ImportFile file, Instant now) {
@@ -55,7 +55,7 @@ public interface ProcessingJobResultMapper {
     if (job.isRetryable() && !file.isExpired(now)) {
       actions.add(ProcessingJobAction.RETRY);
     }
-    if (job.hasErrorReport()) {
+    if (job.hasErrorReport() && !file.isExpired(now)) {
       actions.add(ProcessingJobAction.DOWNLOAD_ERROR_REPORT);
     }
     return List.copyOf(actions);

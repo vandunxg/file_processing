@@ -6,13 +6,13 @@ import java.io.InputStream;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 import java.util.UUID;
 
 import com.vandunxg.common.models.dto.PageDTO;
 import com.vandunxg.common.models.dto.response.PagingResponse;
 import com.vandunxg.common.models.dto.response.Response;
 import com.vandunxg.common.models.validator.ValidatePaging;
+import com.vandunxg.common.web.support.SecurityUtils;
 import com.vandunxg.file_processing.configuration.security.AuthenticatedUser;
 import com.vandunxg.file_processing.fileimport.api.dto.request.ProcessingJobSearchRequest;
 import com.vandunxg.file_processing.fileimport.api.mapper.ProcessingJobWebMapper;
@@ -32,8 +32,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.PermissionEvaluator;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -52,22 +52,39 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 @RequiredArgsConstructor
 @Tag(
     name = "File import",
-    description = "Bearer access token required. `all:manage` satisfies the `self_*` permissions.")
+    description =
+        "Bearer access token required. `all:manage` satisfies every permission; `job:manage` acts"
+            + " on any owner's job.")
 public class FileImportController {
 
   /**
-   * Permissions that let a caller act on a resource somebody else owns.
+   * The permission that lets a caller act on a job somebody else owns.
    *
-   * <p>The seeded operator role only ever grants {@code *:self_*}, so anyone holding one of these
-   * is administrating rather than using their own data. Authorities in this application are {@code
-   * resource:action} permissions, never {@code ROLE_*}.
+   * <p>The seeded operator role only ever grants {@code *:self_*}, so anyone holding this is
+   * administrating rather than using their own data. Authorities here are {@code resource:action}
+   * permissions, never {@code ROLE_*}.
+   *
+   * <p>Every endpoint accepts it alongside the matching self permission, because the evaluator
+   * treats a granted permission as a pattern for the required one: {@code job:manage} does not
+   * match {@code job:self_read}, so a role granted only the manage permission would otherwise be
+   * refused at the gate and never reach the owner check at all.
    */
-  private static final Set<String> CROSS_OWNER_PERMISSIONS = Set.of("all:manage", "job:manage");
+  private static final String CROSS_OWNER_PERMISSION = "job:manage";
+
+  private static final String READ_JOB =
+      "hasPermission(null, 'job:self_read') or hasPermission(null, 'job:manage')";
+
+  private static final String UPDATE_JOB =
+      "hasPermission(null, 'job:self_update') or hasPermission(null, 'job:manage')";
+
+  private static final String READ_REPORT =
+      "hasPermission(null, 'report:self_read') or hasPermission(null, 'job:manage')";
 
   private final FileImportCommandService fileImportCommandService;
   private final ProcessingJobCommandService processingJobCommandService;
   private final ProcessingJobQueryService processingJobQueryService;
   private final ProcessingJobWebMapper processingJobWebMapper;
+  private final PermissionEvaluator permissionEvaluator;
 
   /**
    * Reads a time filter as an ISO-8601 instant.
@@ -129,74 +146,68 @@ public class FileImportController {
    * somebody else's list.
    */
   @GetMapping("/jobs")
-  @PreAuthorize("hasPermission(null, 'job:self_read')")
+  @PreAuthorize(READ_JOB)
   public PagingResponse<ProcessingJobSummaryResult> listJobs(
       @ValidatePaging(sortModel = ProcessingJob.class) ProcessingJobSearchRequest request,
       @AuthenticationPrincipal AuthenticatedUser principal) {
     PageDTO<ProcessingJobSummaryResult> page =
         processingJobQueryService.list(
-            processingJobWebMapper.toQuery(request),
-            principal.userId(),
-            canActOnAnyOwner(principal));
+            processingJobWebMapper.toQuery(request), principal.userId(), canActOnAnyOwner());
     return new PagingResponse<>(page);
   }
 
   @GetMapping("/jobs/{jobId}")
-  @PreAuthorize("hasPermission(null, 'job:self_read')")
+  @PreAuthorize(READ_JOB)
   public Response<ProcessingJobResult> getJob(
       @PathVariable UUID jobId, @AuthenticationPrincipal AuthenticatedUser principal) {
     return Response.of(
-        processingJobQueryService.get(jobId, principal.userId(), canActOnAnyOwner(principal)));
+        processingJobQueryService.get(jobId, principal.userId(), canActOnAnyOwner()));
   }
 
   /** Narrower than the detail view: counters and timing only, for polling while a job runs. */
   @GetMapping("/jobs/{jobId}/progress")
-  @PreAuthorize("hasPermission(null, 'job:self_read')")
+  @PreAuthorize(READ_JOB)
   public Response<ProcessingJobProgressResult> getProgress(
       @PathVariable UUID jobId, @AuthenticationPrincipal AuthenticatedUser principal) {
     return Response.of(
-        processingJobQueryService.getProgress(
-            jobId, principal.userId(), canActOnAnyOwner(principal)));
+        processingJobQueryService.getProgress(jobId, principal.userId(), canActOnAnyOwner()));
   }
 
   /** Cooperative: a running job stops at its next safe point, so this only records the request. */
   @PostMapping("/jobs/{jobId}/cancel")
   @ResponseStatus(HttpStatus.ACCEPTED)
-  @PreAuthorize("hasPermission(null, 'job:self_update')")
+  @PreAuthorize(UPDATE_JOB)
   public Response<Void> cancel(
       @PathVariable UUID jobId, @AuthenticationPrincipal AuthenticatedUser principal) {
-    processingJobCommandService.requestCancellation(
-        jobId, principal.userId(), canActOnAnyOwner(principal));
+    processingJobCommandService.requestCancellation(jobId, principal.userId(), canActOnAnyOwner());
     return Response.of(null);
   }
 
   @PostMapping("/jobs/{jobId}/retry")
   @ResponseStatus(HttpStatus.ACCEPTED)
-  @PreAuthorize("hasPermission(null, 'job:self_update')")
+  @PreAuthorize(UPDATE_JOB)
   public Response<Void> retry(
       @PathVariable UUID jobId, @AuthenticationPrincipal AuthenticatedUser principal) {
-    processingJobCommandService.requestRetry(
-        jobId, principal.userId(), canActOnAnyOwner(principal));
+    processingJobCommandService.requestRetry(jobId, principal.userId(), canActOnAnyOwner());
     return Response.of(null);
   }
 
   @GetMapping(value = "/jobs/{jobId}/error-report", produces = "text/csv")
-  @PreAuthorize("hasPermission(null, 'report:self_read')")
+  @PreAuthorize(READ_REPORT)
   public ResponseEntity<StreamingResponseBody> downloadErrorReport(
       @PathVariable UUID jobId, @AuthenticationPrincipal AuthenticatedUser principal) {
     return streamed(
-        processingJobQueryService.openErrorReport(
-            jobId, principal.userId(), canActOnAnyOwner(principal)));
+        processingJobQueryService.openErrorReport(jobId, principal.userId(), canActOnAnyOwner()));
   }
 
   /** Kept so existing clients holding a file id keep working; delegates to the job-scoped query. */
   @GetMapping(value = "/{fileId}/error-report", produces = "text/csv")
-  @PreAuthorize("hasPermission(null, 'report:self_read')")
+  @PreAuthorize(READ_REPORT)
   public ResponseEntity<StreamingResponseBody> downloadErrorReportByFile(
       @PathVariable UUID fileId, @AuthenticationPrincipal AuthenticatedUser principal) {
     return streamed(
         processingJobQueryService.openErrorReportByFile(
-            fileId, principal.userId(), canActOnAnyOwner(principal)));
+            fileId, principal.userId(), canActOnAnyOwner()));
   }
 
   private static ResponseEntity<StreamingResponseBody> streamed(InputStream report) {
@@ -230,9 +241,16 @@ public class FileImportController {
     return file;
   }
 
-  private static boolean canActOnAnyOwner(AuthenticatedUser principal) {
-    return principal.authorities().stream()
-        .map(GrantedAuthority::getAuthority)
-        .anyMatch(CROSS_OWNER_PERMISSIONS::contains);
+  /**
+   * Whether the caller may act on any owner's job.
+   *
+   * <p>Asks the same evaluator the gate above uses rather than comparing authority strings, so a
+   * role granted a pattern such as {@code job:.*} -- which the gate accepts -- is not silently
+   * treated as an ordinary owner and shown only its own work. {@code all:manage} satisfies it
+   * inside the evaluator.
+   */
+  private boolean canActOnAnyOwner() {
+    return permissionEvaluator.hasPermission(
+        SecurityUtils.authentication(), null, CROSS_OWNER_PERMISSION);
   }
 }

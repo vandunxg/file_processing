@@ -5,7 +5,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import com.vandunxg.file_processing.fileimport.application.command.UploadFileCommand;
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportErrorCode;
@@ -144,6 +150,44 @@ class FileImportCommandServiceIT extends AuthIntegrationTestBase {
         .isEqualTo(FileImportErrorCode.FILE_IMPORT_FILE_TOO_LARGE);
 
     assertThat(storage.keys()).isEmpty();
+  }
+
+  @Test
+  void concurrentUploadsOfTheSameBytesLeaveExactlyOneFileOneJobAndOneObject() throws Exception {
+    UUID ownerId = UUID.randomUUID();
+    int uploaders = 4;
+
+    List<Future<Object>> attempts;
+    try (var pool = Executors.newFixedThreadPool(uploaders)) {
+      List<Callable<Object>> uploads =
+          Collections.nCopies(
+              uploaders,
+              () -> {
+                try {
+                  return service.upload(command(ownerId));
+                } catch (FileImportException rejected) {
+                  return rejected.getError();
+                }
+              });
+      attempts = pool.invokeAll(uploads);
+    }
+
+    List<Object> outcomes = new ArrayList<>();
+    for (Future<Object> attempt : attempts) {
+      outcomes.add(attempt.get());
+    }
+
+    // The unique constraint decides, not the earlier lookup: every uploader can pass a pre-check
+    // and only one may win.
+    assertThat(outcomes.stream().filter(UploadFileResult.class::isInstance)).hasSize(1);
+    assertThat(outcomes.stream().filter(FileImportErrorCode.class::isInstance))
+        .hasSize(uploaders - 1)
+        .containsOnly(FileImportErrorCode.FILE_IMPORT_DUPLICATE_FILE);
+    assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM file_import", Long.class)).isOne();
+    assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM processing_job", Long.class))
+        .isOne();
+    // Each loser stored its own object before losing, and each must have removed it again.
+    assertThat(storage.keys()).hasSize(1);
   }
 
   private static UploadFileCommand command(UUID ownerId) {

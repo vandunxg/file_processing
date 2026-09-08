@@ -21,15 +21,16 @@ import com.vandunxg.file_processing.fileimport.application.result.ProcessingJobS
 import com.vandunxg.file_processing.fileimport.domain.ImportFileRepository;
 import com.vandunxg.file_processing.fileimport.domain.ProcessingJobRepository;
 import com.vandunxg.file_processing.fileimport.domain.model.ImportFile;
-import com.vandunxg.file_processing.fileimport.domain.model.JobStatus;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /** Reads a job on behalf of its owner or an admin. */
 @Service
 @RequiredArgsConstructor
+@Slf4j(topic = "PROCESSING-JOB-QUERY")
 public class ProcessingJobQueryService {
 
   private final ProcessingJobRepository processingJobRepository;
@@ -87,11 +88,27 @@ public class ProcessingJobQueryService {
    */
   @Transactional(readOnly = true)
   public InputStream openErrorReport(UUID jobId, UUID ownerId, boolean admin) {
-    ProcessingJob job = requireVisible(jobId, ownerId, admin);
-    if (job.getStatus() != JobStatus.COMPLETED_WITH_ERRORS || job.getErrorReportKey() == null) {
+    return openErrorReport(requireVisible(jobId, ownerId, admin));
+  }
+
+  private InputStream openErrorReport(ProcessingJob job) {
+    if (!job.hasErrorReport()) {
       throw new FileImportException(FileImportErrorCode.PROCESSING_JOB_REPORT_NOT_AVAILABLE);
     }
-    return errorReportStore.openPublished(job.getErrorReportKey());
+    // Retention is the contract for how long a report is kept, so once it has passed the report is
+    // gone. Reaching for the object anyway would turn an expected outcome into whatever the storage
+    // SDK raises for a missing key -- a 500 carrying the key and the provider's own message.
+    if (file(job).isExpired(Instant.now(clock))) {
+      throw new FileImportException(FileImportErrorCode.PROCESSING_JOB_REPORT_EXPIRED);
+    }
+    try {
+      return errorReportStore.openPublished(job.getErrorReportKey());
+    } catch (RuntimeException exception) {
+      // The report should be there. Whatever went wrong is the bucket's problem, not the caller's,
+      // and the caller must not be told the bucket's version of it.
+      log.error("[report] jobId={} could not be opened", job.getId(), exception);
+      throw new FileImportException(FileImportErrorCode.FILE_IMPORT_STORAGE_UNAVAILABLE, exception);
+    }
   }
 
   /** Resolves the canonical job of a file, for the older file-scoped report route. */
@@ -107,7 +124,9 @@ public class ProcessingJobQueryService {
             .findByImportFileId(file.getId())
             .orElseThrow(
                 () -> new FileImportException(FileImportErrorCode.PROCESSING_JOB_NOT_FOUND));
-    return openErrorReport(job.getId(), ownerId, admin);
+    // The job was reached through a file the caller may already see, so re-checking visibility
+    // would only load it a second time.
+    return openErrorReport(job);
   }
 
   /**

@@ -8,17 +8,19 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.vandunxg.file_processing.fileimport.application.capability.FileStorage;
 
 /** Stands in for object storage so a test owns the bytes and can make reads fail on demand. */
 public class InMemoryFileStorage implements FileStorage {
 
-  private final Map<String, byte[]> objects = new HashMap<>();
+  /** Concurrent because the duplicate-race test uploads from several threads at once. */
+  private final Map<String, byte[]> objects = new ConcurrentHashMap<>();
+
   private boolean readsFail;
   private Runnable onRead = () -> {};
 

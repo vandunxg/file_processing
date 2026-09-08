@@ -387,6 +387,54 @@ class FileImportControllerIT extends AuthIntegrationTestBase {
         .andExpect(status().isConflict());
   }
 
+  @Test
+  void aJobManagerReachesAnotherOwnersJobWithoutHoldingEveryPermission() throws Exception {
+    // job:manage is this module's own cross-owner permission, so an operations role can be granted
+    // it without also being handed all:manage over the rest of the system.
+    Caller manager = caller(roleGranting(ResourceCode.JOB, Action.MANAGE));
+    UUID somebodyElsesJob = queue(UUID.randomUUID(), "theirs.csv", NOW);
+
+    mockMvc
+        .perform(
+            get("/api/v1/file-import/jobs/{jobId}", somebodyElsesJob)
+                .header("Authorization", "Bearer " + manager.token()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.jobId").value(somebodyElsesJob.toString()));
+  }
+
+  @Test
+  void aJobManagerCanCancelAndListAcrossOwners() throws Exception {
+    Caller manager = caller(roleGranting(ResourceCode.JOB, Action.MANAGE));
+    UUID otherOwner = UUID.randomUUID();
+    UUID somebodyElsesJob = queue(otherOwner, "theirs.csv", NOW);
+
+    mockMvc
+        .perform(
+            get("/api/v1/file-import/jobs")
+                .queryParam("ownerId", otherOwner.toString())
+                .header("Authorization", "Bearer " + manager.token()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.page.total").value(1));
+
+    mockMvc
+        .perform(
+            post("/api/v1/file-import/jobs/{jobId}/cancel", somebodyElsesJob)
+                .header("Authorization", "Bearer " + manager.token()))
+        .andExpect(status().isAccepted());
+  }
+
+  @Test
+  void theListRefusesATimeFilterThatIsNotAnInstant() throws Exception {
+    Caller owner = caller(OWNER_ROLE);
+
+    mockMvc
+        .perform(
+            get("/api/v1/file-import/jobs")
+                .queryParam("createdFrom", "2026-09-08")
+                .header("Authorization", "Bearer " + owner.token()))
+        .andExpect(status().isBadRequest());
+  }
+
   /** Stores a file and queues its job for {@code ownerId}, backdated to {@code createdAt}. */
   private UUID queue(UUID ownerId, String filename, Instant createdAt) {
     UUID fileId = UUID.randomUUID();
@@ -420,14 +468,22 @@ class FileImportControllerIT extends AuthIntegrationTestBase {
 
   /** A caller holding a role that grants nothing this API asks for. */
   private Caller callerWithoutFileImportPermissions() {
+    return caller(roleGranting(ResourceCode.USER, Action.SELF_READ));
+  }
+
+  /** A role granting exactly one permission, so a test can isolate what that permission buys. */
+  private Role roleGranting(ResourceCode resourceCode, Action action) {
     Instant now = Instant.now();
     Role role =
-        roleRepository.save(Role.create("NO_IMPORT_" + System.nanoTime(), "No import", null, now));
+        roleRepository.save(
+            Role.create(
+                resourceCode.name() + "_" + action.name() + "_" + System.nanoTime(),
+                "Single permission",
+                null,
+                now));
     roleRepository.replacePermissions(
-        role.getId(),
-        List.of(RolePermission.grant(role.getId(), ResourceCode.USER, Action.SELF_READ)),
-        now);
-    return caller(role);
+        role.getId(), List.of(RolePermission.grant(role.getId(), resourceCode, action)), now);
+    return role;
   }
 
   private Caller caller(String roleCode) {
