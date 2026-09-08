@@ -20,11 +20,33 @@ public interface JpaProcessingJobRepository
         ProcessingJobRepository,
         ProcessingJobRepositoryCustom {
 
+  /**
+   * Business reads exclude soft-deleted jobs.
+   *
+   * <p>Declared explicitly rather than derived, because {@code findById} is inherited from Spring
+   * Data and would otherwise return a retired job -- which would then stay readable, cancellable
+   * and, through a retry that requeues it, processable again, bypassing the claim query's own
+   * filter.
+   */
   @Override
-  Optional<ProcessingJob> findByIdAndOwnerId(UUID id, UUID ownerId);
+  @Query("SELECT job FROM ProcessingJob job WHERE job.id = :id AND job.deletedAt IS NULL")
+  Optional<ProcessingJob> findById(@Param("id") UUID id);
 
   @Override
-  Optional<ProcessingJob> findByImportFileId(UUID importFileId);
+  @Query(
+      """
+      SELECT job FROM ProcessingJob job
+      WHERE job.id = :id AND job.ownerId = :ownerId AND job.deletedAt IS NULL
+      """)
+  Optional<ProcessingJob> findByIdAndOwnerId(@Param("id") UUID id, @Param("ownerId") UUID ownerId);
+
+  @Override
+  @Query(
+      """
+      SELECT job FROM ProcessingJob job
+      WHERE job.importFileId = :importFileId AND job.deletedAt IS NULL
+      """)
+  Optional<ProcessingJob> findByImportFileId(@Param("importFileId") UUID importFileId);
 
   /**
    * A job still marked as running whose worker stopped sending heartbeats. A job that has never

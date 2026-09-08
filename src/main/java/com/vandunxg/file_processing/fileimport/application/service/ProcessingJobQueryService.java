@@ -7,6 +7,7 @@ import com.vandunxg.file_processing.fileimport.application.capability.ErrorRepor
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportErrorCode;
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportException;
 import com.vandunxg.file_processing.fileimport.application.mapper.ProcessingJobResultMapper;
+import com.vandunxg.file_processing.fileimport.application.result.ProcessingJobProgressResult;
 import com.vandunxg.file_processing.fileimport.application.result.ProcessingJobResult;
 import com.vandunxg.file_processing.fileimport.domain.ImportFileRepository;
 import com.vandunxg.file_processing.fileimport.domain.ProcessingJobRepository;
@@ -31,6 +32,12 @@ public class ProcessingJobQueryService {
   public ProcessingJobResult get(UUID jobId, UUID ownerId, boolean admin) {
     ProcessingJob job = requireVisible(jobId, ownerId, admin);
     return mapper.toResult(job, file(job));
+  }
+
+  /** Counters and timing only, so polling does not carry the file metadata and attempt history. */
+  @Transactional(readOnly = true)
+  public ProcessingJobProgressResult getProgress(UUID jobId, UUID ownerId, boolean admin) {
+    return mapper.toProgressResult(requireVisible(jobId, ownerId, admin));
   }
 
   /**

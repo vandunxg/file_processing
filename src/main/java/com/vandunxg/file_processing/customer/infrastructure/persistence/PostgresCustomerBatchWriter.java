@@ -25,6 +25,12 @@ import org.springframework.stereotype.Repository;
  * <p>{@code xmax = 0} distinguishes a tuple this statement inserted from one it updated, which is
  * what lets a single round trip report both counters. An existing customer is reported as updated
  * even when every imported value is unchanged, because {@code DO UPDATE} always writes a new tuple.
+ *
+ * <p>The update clears {@code deleted_at}. {@code external_id} is unique across soft-deleted rows
+ * because it is the customer's permanent global identity, so a retired customer appearing in a
+ * later import has to be revived: writing the new values into a row that stays soft-deleted would
+ * report a successful update while leaving the customer invisible to every read, and no live record
+ * for that identity could ever be created again.
  */
 @Repository
 @RequiredArgsConstructor
@@ -46,7 +52,8 @@ public class PostgresCustomerBatchWriter implements CustomerBatchWriter {
         date_of_birth = EXCLUDED.date_of_birth,
         address = EXCLUDED.address,
         last_import_job_id = EXCLUDED.last_import_job_id,
-        last_modified_at = CURRENT_TIMESTAMP
+        last_modified_at = CURRENT_TIMESTAMP,
+        deleted_at = NULL
       RETURNING (xmax = 0) AS inserted
       """;
 

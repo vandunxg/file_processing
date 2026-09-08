@@ -11,6 +11,7 @@ import com.vandunxg.file_processing.fileimport.domain.ImportFileRepository;
 import com.vandunxg.file_processing.fileimport.domain.ProcessingJobRepository;
 import com.vandunxg.file_processing.fileimport.domain.exception.ProcessingJobRuleViolation;
 import com.vandunxg.file_processing.fileimport.domain.model.AttemptTrigger;
+import com.vandunxg.file_processing.fileimport.domain.model.JobStatus;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,12 +46,16 @@ public class ProcessingJobCommandService {
   /**
    * Persists a checkpoint of a run in progress.
    *
+   * <p>Returns whether the job has since been asked to stop, read from the aggregate this call
+   * already loaded. Querying separately would cost a second eager load per checkpoint and leave a
+   * gap between the write and the read.
+   *
    * <p>May fail with {@link OptimisticLockingFailureException} when someone writes to the same job
    * concurrently -- a cancellation request, typically. The caller decides what that means; for a
    * checkpoint it is tolerable.
    */
   @Transactional
-  public void recordProgress(
+  public boolean recordProgress(
       UUID jobId,
       long processedRows,
       long validRows,
@@ -61,6 +66,7 @@ public class ProcessingJobCommandService {
     job.recordProgress(
         processedRows, validRows, invalidRows, insertedRows, updatedRows, Instant.now(clock));
     processingJobRepository.save(job);
+    return job.isCancellationRequested();
   }
 
   @Transactional
@@ -168,15 +174,25 @@ public class ProcessingJobCommandService {
    */
   @Transactional
   public void recoverStaleJob(UUID jobId) {
+    Instant now = Instant.now(clock);
     ProcessingJob job = require(jobId);
-    if (!job.getStatus()
-            .equals(com.vandunxg.file_processing.fileimport.domain.model.JobStatus.PROCESSING)
-        && !job.isCancellationRequested()) {
-      // Another scheduler instance already recovered it.
+
+    if (job.isCancellationRequested()) {
+      // Someone asked this job to stop and the worker died before reaching a safe point.
+      // Requeueing would throw that request away and replay the whole file, and the job could then
+      // report COMPLETED for something the owner explicitly cancelled. The worker is gone, so the
+      // request is honoured here instead.
+      job.cancel(now);
+      processingJobRepository.save(job);
+      log.warn("[recover] jobId={} cancelled after its worker was lost", jobId);
       return;
     }
-    job.recoverFromStaleWorker(
-        "WORKER_HEARTBEAT_LOST", "Worker stopped reporting progress", Instant.now(clock));
+    if (job.getStatus() != JobStatus.PROCESSING) {
+      // Another scheduler instance already handled it.
+      return;
+    }
+
+    job.recoverFromStaleWorker("WORKER_HEARTBEAT_LOST", "Worker stopped reporting progress", now);
     processingJobRepository.save(job);
     log.warn("[recover] jobId={} requeued after lost worker status={}", jobId, job.getStatus());
   }

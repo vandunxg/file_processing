@@ -12,6 +12,7 @@ import com.vandunxg.file_processing.configuration.security.AuthenticatedUser;
 import com.vandunxg.file_processing.fileimport.application.command.UploadFileCommand;
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportErrorCode;
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportException;
+import com.vandunxg.file_processing.fileimport.application.result.ProcessingJobProgressResult;
 import com.vandunxg.file_processing.fileimport.application.result.ProcessingJobResult;
 import com.vandunxg.file_processing.fileimport.application.result.UploadFileResult;
 import com.vandunxg.file_processing.fileimport.application.service.FileImportCommandService;
@@ -64,6 +65,9 @@ public class FileImportController {
    * rather than a finished import.
    */
   @PostMapping(
+      // Both spellings: the previous mapping ended in a slash, so "/file-import/" is the published
+      // upload URL, and Spring Boot 3 no longer matches a trailing slash implicitly.
+      value = {"", "/"},
       consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
       produces = MediaType.APPLICATION_JSON_VALUE)
   @ResponseStatus(HttpStatus.ACCEPTED)
@@ -94,12 +98,14 @@ public class FileImportController {
         processingJobQueryService.get(jobId, principal.userId(), canActOnAnyOwner(principal)));
   }
 
+  /** Narrower than the detail view: counters and timing only, for polling while a job runs. */
   @GetMapping("/jobs/{jobId}/progress")
   @PreAuthorize("hasPermission(null, 'job:self_read')")
-  public Response<ProcessingJobResult> getProgress(
+  public Response<ProcessingJobProgressResult> getProgress(
       @PathVariable UUID jobId, @AuthenticationPrincipal AuthenticatedUser principal) {
     return Response.of(
-        processingJobQueryService.get(jobId, principal.userId(), canActOnAnyOwner(principal)));
+        processingJobQueryService.getProgress(
+            jobId, principal.userId(), canActOnAnyOwner(principal)));
   }
 
   /** Cooperative: a running job stops at its next safe point, so this only records the request. */

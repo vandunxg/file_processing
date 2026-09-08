@@ -363,4 +363,63 @@ class ProcessingJobRunnerIT extends AuthIntegrationTestBase {
       }
     }
   }
+
+  @Test
+  void recoveryRequeuesAJobWhoseWorkerDisappearedMidRun() {
+    UUID jobId = queue(HEADER + validRow("CUS_01"));
+    commandService.claimNextQueued();
+    goStale(jobId);
+
+    commandService.recoverStaleJob(jobId);
+
+    ProcessingJob job = jobs.findById(jobId).orElseThrow();
+    assertThat(job.getStatus()).isEqualTo(JobStatus.QUEUED);
+    assertThat(job.getAttempts())
+        .singleElement()
+        .satisfies(attempt -> assertThat(attempt.getStatus()).isEqualTo(AttemptStatus.FAILED));
+
+    assertThat(runner.runNextJob()).isTrue();
+
+    ProcessingJob replayed = jobs.findById(jobId).orElseThrow();
+    assertThat(replayed.getStatus()).isEqualTo(JobStatus.COMPLETED);
+    assertThat(replayed.getAttempts().getLast().getTrigger()).isEqualTo(AttemptTrigger.RECOVERY);
+  }
+
+  @Test
+  void recoveryHonoursACancellationRequestWhoseWorkerDiedBeforeReachingASafePoint() {
+    UUID jobId = queue(HEADER + validRow("CUS_01"));
+    commandService.claimNextQueued();
+    commandService.requestCancellation(jobId, ownerOf(jobId), true);
+    goStale(jobId);
+
+    commandService.recoverStaleJob(jobId);
+
+    ProcessingJob job = jobs.findById(jobId).orElseThrow();
+    // Requeueing would discard the request and replay the file, and the job could then report
+    // COMPLETED for something its owner explicitly cancelled.
+    assertThat(job.getStatus()).isEqualTo(JobStatus.CANCELLED);
+    assertThat(job.getAttempts().getLast().getStatus()).isEqualTo(AttemptStatus.CANCELLED);
+    assertThat(runner.runNextJob()).isFalse();
+  }
+
+  @Test
+  void aSoftDeletedJobIsInvisibleToEveryBusinessRead() {
+    UUID jobId = queue(HEADER + validRow("CUS_01"));
+    transactionTemplate.executeWithoutResult(
+        status ->
+            jdbcTemplate.update(
+                "UPDATE processing_job SET deleted_at = now() WHERE id = ?", jobId));
+
+    assertThat(jobs.findById(jobId)).isEmpty();
+    assertThat(jobs.findByIdAndOwnerId(jobId, UUID.randomUUID())).isEmpty();
+    assertThat(runner.runNextJob()).isFalse();
+  }
+
+  private void goStale(UUID jobId) {
+    transactionTemplate.executeWithoutResult(
+        status ->
+            jdbcTemplate.update(
+                "UPDATE processing_job SET heartbeat_at = now() - interval '1 hour' WHERE id = ?",
+                jobId));
+  }
 }

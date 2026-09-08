@@ -9,6 +9,7 @@ import com.vandunxg.file_processing.fileimport.application.FileImportProperties;
 import com.vandunxg.file_processing.fileimport.application.capability.CustomerCsvReader;
 import com.vandunxg.file_processing.fileimport.application.capability.FileStorage;
 import com.vandunxg.file_processing.fileimport.application.command.UploadFileCommand;
+import com.vandunxg.file_processing.fileimport.application.exception.CsvErrorCode;
 import com.vandunxg.file_processing.fileimport.application.exception.CsvFormatException;
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportErrorCode;
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportException;
@@ -116,10 +117,20 @@ public class FileImportCommandService {
     try (var input = fileStorage.open(storageKey)) {
       customerCsvReader.validateHeader(input);
     } catch (CsvFormatException exception) {
-      throw new FileImportException(FileImportErrorCode.FILE_IMPORT_INVALID_CSV_HEADER, exception);
+      // A bad header and an unparseable body are different problems for the uploader: one means the
+      // columns are wrong, the other that the file is not really CSV.
+      throw new FileImportException(errorFor(exception.code()), exception);
     } catch (IOException exception) {
       throw new FileImportException(FileImportErrorCode.FILE_IMPORT_STORAGE_UNAVAILABLE, exception);
     }
+  }
+
+  private static FileImportErrorCode errorFor(CsvErrorCode code) {
+    return switch (code) {
+      case INVALID_CSV_HEADER -> FileImportErrorCode.FILE_IMPORT_INVALID_CSV_HEADER;
+      case MAXIMUM_ROWS_EXCEEDED -> FileImportErrorCode.FILE_IMPORT_FILE_TOO_LARGE;
+      case MALFORMED_CSV -> FileImportErrorCode.FILE_IMPORT_MALFORMED_CSV;
+    };
   }
 
   private void cleanUp(String storageKey) {

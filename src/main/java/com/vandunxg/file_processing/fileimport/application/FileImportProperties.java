@@ -17,7 +17,6 @@ import org.springframework.util.unit.DataSize;
  * @param batchSize rows per customer upsert transaction
  * @param progressRowInterval rows to process before persisting progress
  * @param progressTimeInterval time to elapse before persisting progress
- * @param pollInterval how often a worker looks for queued work
  * @param staleHeartbeatThreshold silence after which a running job is treated as abandoned
  * @param workerThreads imports this instance may run at the same time. Each run holds a database
  *     connection for its whole duration -- the in-file duplicate tracker keeps a session-scoped
@@ -31,7 +30,6 @@ public record FileImportProperties(
     int batchSize,
     long progressRowInterval,
     Duration progressTimeInterval,
-    Duration pollInterval,
     Duration staleHeartbeatThreshold,
     int workerThreads) {
 
@@ -41,14 +39,12 @@ public record FileImportProperties(
     progressRowInterval = progressRowInterval == 0 ? 5_000 : progressRowInterval;
     progressTimeInterval =
         progressTimeInterval == null ? Duration.ofSeconds(2) : progressTimeInterval;
-    pollInterval = pollInterval == null ? Duration.ofSeconds(1) : pollInterval;
     staleHeartbeatThreshold =
         staleHeartbeatThreshold == null ? Duration.ofMinutes(5) : staleHeartbeatThreshold;
     workerThreads = workerThreads == 0 ? 1 : workerThreads;
 
     requirePositive(retention, "File import retention");
     requirePositive(progressTimeInterval, "Progress time interval");
-    requirePositive(pollInterval, "Poll interval");
     requirePositive(staleHeartbeatThreshold, "Stale heartbeat threshold");
     if (maxFileSize.toBytes() <= 0) {
       throw new IllegalArgumentException("Max file size must be positive");

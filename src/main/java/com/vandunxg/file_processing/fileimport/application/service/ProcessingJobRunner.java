@@ -75,23 +75,45 @@ public class ProcessingJobRunner {
               .findById(job.getImportFileId())
               .orElseThrow(() -> new IllegalStateException("Import file is missing"));
       Outcome outcome = process(job, file, counters);
-      if (outcome.cancelled()) {
-        processingJobCommandService.cancel(job.getId());
-        return;
-      }
-      processingJobCommandService.complete(
-          job.getId(),
-          counters.processedRows,
-          counters.validRows,
-          counters.invalidRows,
-          counters.insertedRows,
-          counters.updatedRows,
-          outcome.reportKey());
+      finish(job, counters, outcome);
     } catch (CsvFormatException exception) {
-      failQuietly(job, "MALFORMED_CSV", "The file could not be parsed", exception);
+      // The specific code matters: a row-cap breach is permanent, and reporting every parse problem
+      // as one generic failure sends the user to retry a file that can never succeed.
+      failQuietly(job, exception.code().name(), "The file could not be parsed", exception);
     } catch (RuntimeException | IOException exception) {
       failQuietly(job, "PROCESSING_FAILED", "Processing stopped on a system error", exception);
     }
+  }
+
+  /**
+   * Applies the terminal transition, retrying once if the job changed underneath.
+   *
+   * <p>A cancellation request can commit between the transition's own read and its flush. Letting
+   * that surface as a system error would report an import that inserted every customer as FAILED,
+   * so the transition is re-applied against the newer state, where it resolves to a cancellation.
+   */
+  private void finish(ProcessingJob job, Counters counters, Outcome outcome) {
+    try {
+      applyTerminalState(job, counters, outcome);
+    } catch (OptimisticLockingFailureException conflict) {
+      log.info("[run] jobId={} changed while finishing, re-reading", job.getId());
+      applyTerminalState(job, counters, outcome);
+    }
+  }
+
+  private void applyTerminalState(ProcessingJob job, Counters counters, Outcome outcome) {
+    if (outcome.cancelled()) {
+      processingJobCommandService.cancel(job.getId());
+      return;
+    }
+    processingJobCommandService.complete(
+        job.getId(),
+        counters.processedRows,
+        counters.validRows,
+        counters.invalidRows,
+        counters.insertedRows,
+        counters.updatedRows,
+        outcome.reportKey());
   }
 
   private Outcome process(ProcessingJob job, ImportFile file, Counters counters)
@@ -129,15 +151,20 @@ public class ProcessingJobRunner {
         // the recovery scan to declare its worker dead and requeue a job that is still running.
         if (checkpoint.isDue(counters.processedRows, Instant.now(clock))) {
           flush(job, batch, counters);
-          persistProgress(job, counters);
+          boolean stopRequested = persistProgress(job, counters);
           checkpoint.reset(counters.processedRows, Instant.now(clock));
-          if (processingJobCommandService.isCancellationRequested(job.getId())) {
+          if (stopRequested) {
             // Safe point: the pending batch is committed and nothing is half-written.
             return Outcome.stoppedByCancellation();
           }
         }
       }
       flush(job, batch, counters);
+      if (persistProgress(job, counters)) {
+        // Checked before publishing rather than after: a cancelled job drops the report key, so
+        // uploading first would leave an object in the bucket that nothing references.
+        return Outcome.stoppedByCancellation();
+      }
       // Only a run that reached end of file publishes its report, so a cancelled or failed attempt
       // never leaves a partial report looking like the final one.
       return Outcome.finished(report.publish());
@@ -163,9 +190,10 @@ public class ProcessingJobRunner {
    * The totals are advisory between checkpoints and the next one reports them anyway -- and the
    * cancellation check immediately after this will see why the write lost.
    */
-  private void persistProgress(ProcessingJob job, Counters counters) {
+  /** Returns true when the job has been asked to stop. */
+  private boolean persistProgress(ProcessingJob job, Counters counters) {
     try {
-      processingJobCommandService.recordProgress(
+      return processingJobCommandService.recordProgress(
           job.getId(),
           counters.processedRows,
           counters.validRows,
@@ -174,6 +202,8 @@ public class ProcessingJobRunner {
           counters.updatedRows);
     } catch (OptimisticLockingFailureException conflict) {
       log.debug("[run] jobId={} checkpoint skipped, job changed concurrently", job.getId());
+      // The write that won was most likely the cancellation request itself.
+      return processingJobCommandService.isCancellationRequested(job.getId());
     }
   }
 

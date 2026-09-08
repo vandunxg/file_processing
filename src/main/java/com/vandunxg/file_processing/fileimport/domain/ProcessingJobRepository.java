@@ -1,6 +1,7 @@
 package com.vandunxg.file_processing.fileimport.domain;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,17 +20,17 @@ public interface ProcessingJobRepository {
    */
   Optional<ProcessingJob> findByIdAndOwnerId(UUID id, UUID ownerId);
 
+  /** The single canonical job of a file, used by the older file-scoped routes. */
+  Optional<ProcessingJob> findByImportFileId(UUID importFileId);
+
   /**
    * Takes exclusive ownership of the oldest queued job, or returns empty when none is available.
    *
    * <p>Concurrent workers must never both take the same job, so the implementation claims and locks
    * in one atomic step rather than reading a candidate and updating it afterwards.
    */
-  /** The single canonical job of a file, used by the older file-scoped routes. */
-  Optional<ProcessingJob> findByImportFileId(UUID importFileId);
-
   Optional<ProcessingJob> claimNextQueued(Instant now);
 
   /** Jobs a worker still owns on paper but has stopped reporting progress for. */
-  java.util.List<ProcessingJob> findStale(Instant heartbeatBefore);
+  List<ProcessingJob> findStale(Instant heartbeatBefore);
 }
