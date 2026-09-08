@@ -124,8 +124,4 @@ public class ProcessingAttempt extends AuditableEntity {
     this.errorCode = errorCode;
     this.errorSummary = errorSummary;
   }
-
-  public boolean isRunning() {
-    return status == AttemptStatus.RUNNING;
-  }
 }

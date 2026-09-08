@@ -48,12 +48,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @PostgresIntegrationTest
 @Import(ProcessingJobRunnerIT.InMemoryStorageConfiguration.class)
 @TestPropertySource(
-    properties = {
-      "app.file-import.batch-size=2",
-      "app.file-import.progress-row-interval=2",
-      "app.file-import.poll-interval=1h",
-      "app.file-import.stale-heartbeat-threshold=1h"
-    })
+    properties = {"app.file-import.batch-size=2", "app.file-import.progress-row-interval=2"})
 class ProcessingJobRunnerIT extends AuthIntegrationTestBase {
 
   private static final String HEADER = "external_id,full_name,email,phone,date_of_birth,address\n";

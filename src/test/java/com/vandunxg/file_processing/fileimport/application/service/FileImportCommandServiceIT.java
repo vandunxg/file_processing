@@ -21,7 +21,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -29,11 +28,6 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 @PostgresIntegrationTest
 @Import(ProcessingJobRunnerIT.InMemoryStorageConfiguration.class)
-@TestPropertySource(
-    properties = {
-      "app.file-import.poll-interval=1h",
-      "app.file-import.stale-heartbeat-threshold=1h"
-    })
 class FileImportCommandServiceIT extends AuthIntegrationTestBase {
 
   private static final String CSV =

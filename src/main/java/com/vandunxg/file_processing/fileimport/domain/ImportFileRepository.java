@@ -3,7 +3,6 @@ package com.vandunxg.file_processing.fileimport.domain;
 import java.util.Optional;
 import java.util.UUID;
 
-import com.vandunxg.file_processing.fileimport.domain.model.FileChecksum;
 import com.vandunxg.file_processing.fileimport.domain.model.ImportFile;
 
 /** Aggregate repository for the immutable metadata of an accepted import file. */
@@ -18,12 +17,4 @@ public interface ImportFileRepository {
    * indistinguishable from asking for one that does not exist.
    */
   Optional<ImportFile> findByIdAndOwnerId(UUID id, UUID ownerId);
-
-  /**
-   * The file this owner already uploaded with the same content.
-   *
-   * <p>Used to describe an existing upload in a duplicate response. The unique constraint, not this
-   * lookup, is what actually prevents a second copy.
-   */
-  Optional<ImportFile> findByOwnerIdAndChecksum(UUID ownerId, FileChecksum checksum);
 }

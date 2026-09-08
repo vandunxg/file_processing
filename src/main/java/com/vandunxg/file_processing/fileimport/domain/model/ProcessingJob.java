@@ -44,6 +44,13 @@ public class ProcessingJob extends AuditableEntity {
   /** Attempts a user or admin may ask for. The first, automatic attempt does not count. */
   private static final long MAX_REQUESTED_RETRIES = 3;
 
+  /**
+   * Automatic requeues after a lost worker. Recovery is not something anyone asked for, so it does
+   * not consume the retry budget above -- but it still needs a ceiling, or a job that kills every
+   * worker that touches it would be requeued forever.
+   */
+  private static final long MAX_RECOVERIES = 3;
+
   @Id
   @Column(name = "id")
   private UUID id;
@@ -335,6 +342,11 @@ public class ProcessingJob extends AuditableEntity {
    */
   public void recoverFromStaleWorker(String errorCode, String errorSummary, Instant now) {
     fail(errorCode, errorSummary, now);
+    if (recoveries() >= MAX_RECOVERIES) {
+      // Left failed rather than requeued. A person can still retry it deliberately, which is the
+      // right outcome for a job that has already taken down three workers.
+      return;
+    }
     requestRetry(AttemptTrigger.RECOVERY);
   }
 
@@ -342,20 +354,14 @@ public class ProcessingJob extends AuditableEntity {
     return status == JobStatus.CANCELLATION_REQUESTED;
   }
 
-  public boolean isTerminal() {
-    return switch (status) {
-      case COMPLETED, COMPLETED_WITH_ERRORS, FAILED, CANCELLED -> true;
-      case QUEUED, PROCESSING, CANCELLATION_REQUESTED -> false;
-    };
-  }
-
-  public boolean isRetryable() {
-    return (status == JobStatus.FAILED || status == JobStatus.CANCELLED)
-        && requestedRetries() < MAX_REQUESTED_RETRIES;
-  }
-
   public List<ProcessingAttempt> getAttempts() {
     return List.copyOf(attempts);
+  }
+
+  private long recoveries() {
+    return attempts.stream()
+        .filter(attempt -> attempt.getTrigger() == AttemptTrigger.RECOVERY)
+        .count();
   }
 
   private long requestedRetries() {

@@ -4,7 +4,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.vandunxg.file_processing.fileimport.domain.ImportFileRepository;
-import com.vandunxg.file_processing.fileimport.domain.model.FileChecksum;
 import com.vandunxg.file_processing.fileimport.domain.model.ImportFile;
 import com.vandunxg.file_processing.fileimport.infrastructure.persistence.mapper.ImportFilePersistenceMapper;
 import lombok.RequiredArgsConstructor;
@@ -34,12 +33,5 @@ public class JpaImportFileRepository implements ImportFileRepository {
   @Override
   public Optional<ImportFile> findByIdAndOwnerId(UUID id, UUID ownerId) {
     return entityRepository.findByIdAndOwnerIdAndDeletedAtIsNull(id, ownerId).map(mapper::toDomain);
-  }
-
-  @Override
-  public Optional<ImportFile> findByOwnerIdAndChecksum(UUID ownerId, FileChecksum checksum) {
-    return entityRepository
-        .findByOwnerIdAndChecksumSha256AndDeletedAtIsNull(ownerId, checksum.value())
-        .map(mapper::toDomain);
   }
 }

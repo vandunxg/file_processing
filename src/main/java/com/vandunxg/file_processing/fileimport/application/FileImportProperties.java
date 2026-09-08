@@ -19,7 +19,7 @@ import org.springframework.util.unit.DataSize;
  * @param progressTimeInterval time to elapse before persisting progress
  * @param pollInterval how often a worker looks for queued work
  * @param staleHeartbeatThreshold silence after which a running job is treated as abandoned
- * @param maxJobsPerPoll jobs a single poll may drain before yielding
+ * @param workerThreads imports this instance may run at the same time
  */
 @ConfigurationProperties(prefix = "app.file-import")
 public record FileImportProperties(
@@ -30,7 +30,7 @@ public record FileImportProperties(
     Duration progressTimeInterval,
     Duration pollInterval,
     Duration staleHeartbeatThreshold,
-    int maxJobsPerPoll) {
+    int workerThreads) {
 
   public FileImportProperties {
     maxFileSize = maxFileSize == null ? DataSize.ofMegabytes(500) : maxFileSize;
@@ -41,7 +41,7 @@ public record FileImportProperties(
     pollInterval = pollInterval == null ? Duration.ofSeconds(1) : pollInterval;
     staleHeartbeatThreshold =
         staleHeartbeatThreshold == null ? Duration.ofMinutes(5) : staleHeartbeatThreshold;
-    maxJobsPerPoll = maxJobsPerPoll == 0 ? 1 : maxJobsPerPoll;
+    workerThreads = workerThreads == 0 ? 1 : workerThreads;
 
     requirePositive(retention, "File import retention");
     requirePositive(progressTimeInterval, "Progress time interval");
@@ -52,7 +52,7 @@ public record FileImportProperties(
     }
     requirePositive(batchSize, "Batch size");
     requirePositive(progressRowInterval, "Progress row interval");
-    requirePositive(maxJobsPerPoll, "Max jobs per poll");
+    requirePositive(workerThreads, "Worker threads");
   }
 
   private static void requirePositive(Duration value, String name) {

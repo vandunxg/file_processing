@@ -24,6 +24,11 @@ logging:
 app:
   file-import:
     retention: PT720H
+    # The background worker is off by default in tests: it would otherwise claim jobs a test just
+    # queued and make assertions about queue state race. Tests that want a run call the runner
+    # directly.
+    poll-interval: PT1H
+    stale-heartbeat-threshold: PT1H
     storage:
       r2:
         endpoint: http://localhost:9000

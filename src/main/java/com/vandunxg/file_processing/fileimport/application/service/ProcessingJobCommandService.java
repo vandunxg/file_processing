@@ -167,13 +167,8 @@ public class ProcessingJobCommandService {
       // Another scheduler instance already recovered it.
       return;
     }
-    try {
-      job.recoverFromStaleWorker(
-          "WORKER_HEARTBEAT_LOST", "Worker stopped reporting progress", Instant.now(clock));
-    } catch (ProcessingJobRuleViolation violation) {
-      // The retry limit is exhausted, so the job stays failed rather than looping forever.
-      log.warn("[recover] jobId={} left failed rule={}", jobId, violation.getRule());
-    }
+    job.recoverFromStaleWorker(
+        "WORKER_HEARTBEAT_LOST", "Worker stopped reporting progress", Instant.now(clock));
     processingJobRepository.save(job);
     log.warn("[recover] jobId={} requeued after lost worker status={}", jobId, job.getStatus());
   }

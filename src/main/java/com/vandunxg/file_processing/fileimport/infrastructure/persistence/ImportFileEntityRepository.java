@@ -11,7 +11,4 @@ public interface ImportFileEntityRepository extends JpaRepository<ImportFileEnti
   Optional<ImportFileEntity> findByIdAndOwnerIdAndDeletedAtIsNull(UUID id, UUID ownerId);
 
   Optional<ImportFileEntity> findByIdAndDeletedAtIsNull(UUID id);
-
-  Optional<ImportFileEntity> findByOwnerIdAndChecksumSha256AndDeletedAtIsNull(
-      UUID ownerId, String checksumSha256);
 }
