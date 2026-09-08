@@ -290,11 +290,52 @@
     </dependency>
 
     <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>url-connection-client</artifactId>
+      <version>${software.amazon.awssdk}</version>
+    </dependency>
+
+    <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-csv</artifactId>
       <version>${commons-csv.version}</version>
     </dependency>
   </dependencies>
+
+  <profiles>
+    <!--
+      Opt-in load verification. Runs only *LoadIT, capped at the 512 MB demo heap: an import that
+      buffers instead of streaming fails with an OutOfMemoryError rather than passing quietly.
+    -->
+    <profile>
+      <id>load-test</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <skipTests>true</skipTests>
+            </configuration>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-failsafe-plugin</artifactId>
+            <configuration>
+              <argLine>-Xmx512m</argLine>
+              <includes>
+                <include>**/*LoadIT.java</include>
+              </includes>
+              <systemPropertyVariables>
+                <api.version>1.40</api.version>
+                <loadTest>true</loadTest>
+              </systemPropertyVariables>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 
   <build>
     <plugins>

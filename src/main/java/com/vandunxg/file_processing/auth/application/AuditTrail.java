@@ -11,6 +11,7 @@ import com.vandunxg.file_processing.auth.domain.model.OperationType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Single place where auth write use cases record an audit event.
@@ -46,17 +47,22 @@ public class AuditTrail {
   }
 
   public void recordAfterCommit(AuditLog auditLog) {
-    AfterCommit.run(
-        () -> {
-          try {
-            auditLogEventPublisher.publish(auditLog);
-          } catch (Exception exception) {
-            log.warn(
-                "[recordAfterCommit] failed to publish audit event operation={} objectId={}",
-                auditLog.getOperation(),
-                auditLog.getObjectId(),
-                exception);
-          }
-        });
+    if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+      publishSafely(auditLog);
+      return;
+    }
+    AfterCommit.run(() -> publishSafely(auditLog));
+  }
+
+  private void publishSafely(AuditLog auditLog) {
+    try {
+      auditLogEventPublisher.publish(auditLog);
+    } catch (Exception exception) {
+      log.warn(
+          "[recordAfterCommit] failed to publish audit event operation={} objectId={}",
+          auditLog.getOperation(),
+          auditLog.getObjectId(),
+          exception);
+    }
   }
 }

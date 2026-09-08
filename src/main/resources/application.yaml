@@ -54,7 +54,7 @@ spring:
         batch_versioned_data: true
         generate_statistics: false
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: false
 
   flyway:
@@ -307,6 +307,10 @@ app:
     max-page-size: ${MAX_PAGE_SIZE:100}
 
   file-import:
+    # Bound to the same variable as the servlet limit above: the container rejects an oversized
+    # request before the handler runs, so two independent settings would let the size the API
+    # advertises drift away from the size it can actually receive.
+    max-file-size: ${MAX_FILE_SIZE:500MB}
     retention: ${FILE_IMPORT_RETENTION:PT720H}
     storage:
       r2:
