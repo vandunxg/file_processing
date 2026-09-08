@@ -83,6 +83,11 @@ public class InMemoryFileStorage implements FileStorage {
   }
 
   @Override
+  public boolean exists(String storageKey) {
+    return objects.containsKey(storageKey);
+  }
+
+  @Override
   public void delete(String storageKey) {
     objects.remove(storageKey);
   }

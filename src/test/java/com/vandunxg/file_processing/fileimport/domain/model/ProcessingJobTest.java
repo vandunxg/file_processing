@@ -321,57 +321,26 @@ class ProcessingJobTest {
   }
 
   @Test
-  void recoveryClosesTheLostAttemptAndRequeuesTheJobWithoutSpendingARetry() {
+  void workerLossFailsTheAttemptAndRequiresAnExplicitRetry() {
     ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
     job.claim(NOW);
     job.recordProgress(5, 5, 0, 5, 0, NOW.plusSeconds(1));
 
-    job.recoverFromStaleWorker("WORKER_HEARTBEAT_LOST", "worker stopped", NOW.plusSeconds(2));
+    job.fail("WORKER_LOST", "worker stopped", NOW.plusSeconds(2));
 
-    assertThat(job.getStatus()).isEqualTo(JobStatus.QUEUED);
-    assertThat(job.getProcessedRows()).isZero();
+    assertThat(job.getStatus()).isEqualTo(JobStatus.FAILED);
     assertThat(job.getAttempts())
         .singleElement()
         .extracting(ProcessingAttempt::getStatus, ProcessingAttempt::getErrorCode)
-        .containsExactly(AttemptStatus.FAILED, "WORKER_HEARTBEAT_LOST");
+        .containsExactly(AttemptStatus.FAILED, "WORKER_LOST");
 
+    job.requestRetry(AttemptTrigger.USER_RETRY);
     job.claim(NOW.plusSeconds(3));
 
     assertThat(job.getAttempts())
         .element(1)
         .extracting(ProcessingAttempt::getTrigger)
-        .isEqualTo(AttemptTrigger.RECOVERY);
-  }
-
-  @Test
-  void recoveryDoesNotConsumeTheRetryBudgetAUserStillHas() {
-    ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
-    for (int recovery = 0; recovery < 3; recovery++) {
-      job.claim(NOW.plusSeconds(recovery * 2L));
-      job.recoverFromStaleWorker(
-          "WORKER_HEARTBEAT_LOST", "worker stopped", NOW.plusSeconds(recovery * 2L + 1));
-    }
-    job.claim(NOW.plusSeconds(10));
-    job.fail("DATABASE_BATCH_FAILED", "database batch failed", NOW.plusSeconds(11));
-
-    job.requestRetry(AttemptTrigger.USER_RETRY);
-
-    assertThat(job.getStatus()).isEqualTo(JobStatus.QUEUED);
-  }
-
-  @Test
-  void recoveryStopsRequeueingAJobThatKeepsLosingItsWorker() {
-    ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
-    for (int recovery = 0; recovery < 4; recovery++) {
-      job.claim(NOW.plusSeconds(recovery * 2L));
-      job.recoverFromStaleWorker(
-          "WORKER_HEARTBEAT_LOST", "worker stopped", NOW.plusSeconds(recovery * 2L + 1));
-    }
-
-    // The fourth loss leaves the job failed instead of queued: an endless requeue would occupy a
-    // worker forever, and a person can still retry it deliberately.
-    assertThat(job.getStatus()).isEqualTo(JobStatus.FAILED);
-    assertThat(job.getAttempts()).hasSize(4);
+        .isEqualTo(AttemptTrigger.USER_RETRY);
   }
 
   @Test

@@ -5,7 +5,11 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.vandunxg.file_processing.auth.domain.model.OperationType;
+import com.vandunxg.file_processing.fileimport.application.FileImportProperties;
 import com.vandunxg.file_processing.fileimport.application.capability.ErrorReportStore;
+import com.vandunxg.file_processing.fileimport.application.capability.FileImportMetrics;
+import com.vandunxg.file_processing.fileimport.application.capability.FileStorage;
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportErrorCode;
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportException;
 import com.vandunxg.file_processing.fileimport.domain.ImportFileRepository;
@@ -35,13 +39,20 @@ public class ProcessingJobCommandService {
   private final ProcessingJobRepository processingJobRepository;
   private final ImportFileRepository importFileRepository;
   private final ErrorReportStore errorReportStore;
+  private final FileStorage fileStorage;
+  private final FileImportProperties properties;
+  private final FileImportAuditService auditService;
+  private final FileImportMetrics metrics;
   private final Clock clock;
 
   /** Takes ownership of the next queued job, or returns empty when there is nothing to do. */
   public Optional<ProcessingJob> claimNextQueued() {
     Optional<ProcessingJob> claimed = processingJobRepository.claimNextQueued(Instant.now(clock));
     claimed.ifPresent(
-        job -> log.info("[claim] jobId={} attempt={}", job.getId(), job.getCurrentAttempt()));
+        job -> {
+          log.info("[claim] jobId={} attempt={}", job.getId(), job.getCurrentAttempt());
+          auditService.record(OperationType.JOB_STARTED, job.getId(), null, Instant.now(clock));
+        });
     return claimed;
   }
 
@@ -96,6 +107,8 @@ public class ProcessingJobCommandService {
         errorReportStore.discard(errorReportKey);
       }
       log.info("[complete] jobId={} cancelled after finishing its last batch", jobId);
+      auditService.record(OperationType.JOB_CANCELLED, jobId, null, now);
+      metrics.cancellation("completed_race");
       return;
     }
     job.complete(errorReportKey, now);
@@ -106,6 +119,8 @@ public class ProcessingJobCommandService {
         job.getStatus(),
         processedRows,
         invalidRows);
+    auditService.record(OperationType.JOB_COMPLETED, jobId, null, now);
+    metrics.jobFinished(job.getStatus(), validRows, invalidRows);
   }
 
   @Transactional
@@ -114,6 +129,8 @@ public class ProcessingJobCommandService {
     job.fail(errorCode, errorSummary, Instant.now(clock));
     processingJobRepository.save(job);
     log.warn("[fail] jobId={} errorCode={}", jobId, errorCode);
+    auditService.record(OperationType.JOB_FAILED, jobId, null, Instant.now(clock));
+    metrics.jobFinished(JobStatus.FAILED, job.getValidRows(), job.getInvalidRows());
   }
 
   @Transactional
@@ -122,6 +139,8 @@ public class ProcessingJobCommandService {
     job.cancel(Instant.now(clock));
     processingJobRepository.save(job);
     log.info("[cancel] jobId={} stopped at safe point", jobId);
+    auditService.record(OperationType.JOB_CANCELLED, jobId, null, Instant.now(clock));
+    metrics.cancellation("completed");
   }
 
   /** True when someone asked this job to stop. Checked by the worker between batches. */
@@ -144,6 +163,11 @@ public class ProcessingJobCommandService {
     try {
       switch (job.getStatus()) {
         case QUEUED -> job.cancelQueued(Instant.now(clock));
+        case CANCELLATION_REQUESTED, CANCELLED -> {
+          // The public cancellation operation is idempotent once stopping has been requested or
+          // completed. In particular, do not turn a retry-safe repeated HTTP request into a 409.
+          return;
+        }
         default -> job.requestCancellation();
       }
     } catch (ProcessingJobRuleViolation violation) {
@@ -151,6 +175,14 @@ public class ProcessingJobCommandService {
     }
     processingJobRepository.save(job);
     log.info("[cancel-requested] jobId={} status={}", jobId, job.getStatus());
+    auditService.record(
+        job.getStatus() == JobStatus.CANCELLED
+            ? OperationType.JOB_CANCELLED
+            : OperationType.JOB_CANCELLATION_REQUESTED,
+        jobId,
+        ownerId,
+        Instant.now(clock));
+    metrics.cancellation(job.getStatus() == JobStatus.CANCELLED ? "queued" : "requested");
   }
 
   /**
@@ -170,38 +202,30 @@ public class ProcessingJobCommandService {
     }
     processingJobRepository.save(job);
     log.info("[retry-requested] jobId={} attemptsSoFar={}", jobId, job.getCurrentAttempt());
+    auditService.record(OperationType.JOB_RETRY_REQUESTED, jobId, ownerId, Instant.now(clock));
   }
 
-  /**
-   * Returns an abandoned job to the queue.
-   *
-   * <p>A crashed worker leaves its job marked as running forever. Closing the dead attempt and
-   * requeueing lets another worker replay the file; batches the lost run already committed stay
-   * committed, and an upsert makes replaying them harmless.
-   */
+  /** Marks a genuinely stale worker as failed; recovery is always an explicit user/admin retry. */
   @Transactional
   public void recoverStaleJob(UUID jobId) {
     Instant now = Instant.now(clock);
-    ProcessingJob job = require(jobId);
-
-    if (job.isCancellationRequested()) {
-      // Someone asked this job to stop and the worker died before reaching a safe point.
-      // Requeueing would throw that request away and replay the whole file, and the job could then
-      // report COMPLETED for something the owner explicitly cancelled. The worker is gone, so the
-      // request is honoured here instead.
-      job.cancel(now);
-      processingJobRepository.save(job);
-      log.warn("[recover] jobId={} cancelled after its worker was lost", jobId);
+    ProcessingJob job =
+        processingJobRepository
+            .findByIdForUpdate(jobId)
+            .orElseThrow(
+                () -> new FileImportException(FileImportErrorCode.PROCESSING_JOB_NOT_FOUND));
+    if ((job.getStatus() != JobStatus.PROCESSING
+            && job.getStatus() != JobStatus.CANCELLATION_REQUESTED)
+        || job.getHeartbeatAt() == null
+        || !job.getHeartbeatAt().isBefore(now.minus(properties.staleHeartbeatThreshold()))) {
+      // The worker may have checkpointed after the scan selected it. The lock and recheck prevent
+      // a healthy import from being failed on a stale snapshot.
       return;
     }
-    if (job.getStatus() != JobStatus.PROCESSING) {
-      // Another scheduler instance already handled it.
-      return;
-    }
-
-    job.recoverFromStaleWorker("WORKER_HEARTBEAT_LOST", "Worker stopped reporting progress", now);
+    job.fail("WORKER_LOST", "Worker stopped reporting progress", now);
     processingJobRepository.save(job);
-    log.warn("[recover] jobId={} requeued after lost worker status={}", jobId, job.getStatus());
+    log.warn("[recover] jobId={} marked failed after lost worker", jobId);
+    auditService.record(OperationType.STALE_JOB_MARKED_FAILED, jobId, null, now);
   }
 
   private void requireReplayableOriginal(ProcessingJob job) {
@@ -211,7 +235,7 @@ public class ProcessingJobCommandService {
             .orElseThrow(
                 () ->
                     new FileImportException(FileImportErrorCode.FILE_IMPORT_ORIGINAL_FILE_EXPIRED));
-    if (file.isExpired(Instant.now(clock))) {
+    if (file.isExpired(Instant.now(clock)) || !fileStorage.exists(file.getStorageKey())) {
       throw new FileImportException(FileImportErrorCode.FILE_IMPORT_ORIGINAL_FILE_EXPIRED);
     }
   }

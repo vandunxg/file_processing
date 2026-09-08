@@ -9,6 +9,7 @@ import java.util.UUID;
 import java.util.function.Function;
 
 import com.vandunxg.common.models.dto.PageDTO;
+import com.vandunxg.file_processing.auth.domain.model.OperationType;
 import com.vandunxg.file_processing.fileimport.application.capability.ErrorReportStore;
 import com.vandunxg.file_processing.fileimport.application.capability.ProcessingJobSearchRepository;
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportErrorCode;
@@ -38,6 +39,7 @@ public class ProcessingJobQueryService {
   private final ProcessingJobSearchRepository processingJobSearchRepository;
   private final ErrorReportStore errorReportStore;
   private final ProcessingJobResultMapper mapper;
+  private final FileImportAuditService auditService;
   private final Clock clock;
 
   /**
@@ -88,7 +90,9 @@ public class ProcessingJobQueryService {
    */
   @Transactional(readOnly = true)
   public InputStream openErrorReport(UUID jobId, UUID ownerId, boolean admin) {
-    return openErrorReport(requireVisible(jobId, ownerId, admin));
+    InputStream report = openErrorReport(requireVisible(jobId, ownerId, admin));
+    auditService.record(OperationType.ERROR_REPORT_DOWNLOADED, jobId, ownerId, Instant.now(clock));
+    return report;
   }
 
   private InputStream openErrorReport(ProcessingJob job) {
@@ -126,7 +130,10 @@ public class ProcessingJobQueryService {
                 () -> new FileImportException(FileImportErrorCode.PROCESSING_JOB_NOT_FOUND));
     // The job was reached through a file the caller may already see, so re-checking visibility
     // would only load it a second time.
-    return openErrorReport(job);
+    InputStream report = openErrorReport(job);
+    auditService.record(
+        OperationType.ERROR_REPORT_DOWNLOADED, job.getId(), ownerId, Instant.now(clock));
+    return report;
   }
 
   /**

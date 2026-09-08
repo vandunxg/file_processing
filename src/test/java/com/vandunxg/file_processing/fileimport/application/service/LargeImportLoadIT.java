@@ -211,6 +211,11 @@ class LargeImportLoadIT extends AuthIntegrationTestBase {
     }
 
     @Override
+    public boolean exists(String storageKey) {
+      return served != null && Files.exists(served);
+    }
+
+    @Override
     public void delete(String storageKey) {
       // The test owns the temp file.
     }

@@ -81,6 +81,26 @@ class CsvValidationReaderTest {
     }
   }
 
+  @Test
+  void reportsDuplicateAlongsideOtherValidationIssues() {
+    String csv =
+        "external_id,full_name,email,phone,date_of_birth,address\n"
+            + "CUS_01,Nguyen Van A,one@example.com,0912345678,2000-01-02,\n"
+            + "CUS_01,Tran Van B,invalid,0912345679,2001-01-02,\n";
+
+    try (var reader =
+        new CsvValidationReader(
+            new ByteArrayInputStream(csv.getBytes(StandardCharsets.UTF_8)),
+            Clock.fixed(Instant.parse("2026-08-04T00:00:00Z"), ZoneOffset.UTC),
+            new InMemoryTracker())) {
+      reader.next();
+      assertThat(reader.next().orElseThrow().issues())
+          .extracting(issue -> issue.code())
+          .containsExactlyInAnyOrder(
+              ValidationErrorCode.INVALID_EMAIL, ValidationErrorCode.DUPLICATE_EXTERNAL_ID_IN_FILE);
+    }
+  }
+
   private static final class InMemoryTracker implements DuplicateExternalIdTracker {
 
     @Override
@@ -90,6 +110,11 @@ class CsvValidationReaderTest {
         @Override
         public boolean firstOccurrence(String externalId) {
           return externalIds.add(externalId);
+        }
+
+        @Override
+        public boolean alreadySeen(String externalId) {
+          return externalIds.contains(externalId);
         }
 
         @Override

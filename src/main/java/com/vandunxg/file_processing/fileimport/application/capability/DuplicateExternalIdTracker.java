@@ -8,6 +8,9 @@ public interface DuplicateExternalIdTracker {
 
     boolean firstOccurrence(String externalId);
 
+    /** Checks a first valid occurrence without reserving an ID from an otherwise invalid row. */
+    boolean alreadySeen(String externalId);
+
     @Override
     void close();
   }

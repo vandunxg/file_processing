@@ -5,5 +5,6 @@ public enum AuditLogDomain {
   USER,
   ROLE,
   PERMISSION,
-  SESSION
+  SESSION,
+  FILE_IMPORT
 }

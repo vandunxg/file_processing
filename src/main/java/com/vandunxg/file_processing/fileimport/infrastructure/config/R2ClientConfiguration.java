@@ -1,11 +1,13 @@
 package com.vandunxg.file_processing.fileimport.infrastructure.config;
 
 import java.net.URI;
+import java.time.Duration;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 
@@ -33,6 +35,11 @@ public class R2ClientConfiguration {
         .endpointOverride(URI.create(properties.endpoint()))
         .credentialsProvider(StaticCredentialsProvider.create(credentials))
         .region(Region.US_EAST_1)
+        .httpClient(
+            UrlConnectionHttpClient.builder()
+                .connectionTimeout(Duration.ofSeconds(5))
+                .socketTimeout(properties.apiCallTimeout())
+                .build())
         .build();
   }
 }

@@ -7,7 +7,9 @@ import java.util.UUID;
 
 import com.vandunxg.file_processing.fileimport.domain.ProcessingJobRepository;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -31,6 +33,11 @@ public interface JpaProcessingJobRepository
   @Override
   @Query("SELECT job FROM ProcessingJob job WHERE job.id = :id AND job.deletedAt IS NULL")
   Optional<ProcessingJob> findById(@Param("id") UUID id);
+
+  @Override
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT job FROM ProcessingJob job WHERE job.id = :id AND job.deletedAt IS NULL")
+  Optional<ProcessingJob> findByIdForUpdate(@Param("id") UUID id);
 
   @Override
   @Query(

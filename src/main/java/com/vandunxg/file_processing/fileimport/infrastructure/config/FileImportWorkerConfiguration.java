@@ -19,10 +19,10 @@ public class FileImportWorkerConfiguration {
     // The scheduler only submits when a thread is free, so a queue would only ever hide a bug.
     executor.setQueueCapacity(0);
     executor.setThreadNamePrefix("file-import-worker-");
-    // Shutdown does not wait for a run in progress: a large import can take far longer than any
-    // reasonable shutdown grace period. The abandoned job keeps its committed batches and the
-    // recovery scan requeues it after restart, which is exactly the case recovery exists for.
-    executor.setWaitForTasksToCompleteOnShutdown(false);
+    // Runs observe the shared stop signal at a safe point. Give an in-flight transaction time to
+    // commit before Spring closes the executor; anything still running is recovered as WORKER_LOST.
+    executor.setWaitForTasksToCompleteOnShutdown(true);
+    executor.setAwaitTerminationSeconds(30);
     executor.initialize();
     return executor;
   }

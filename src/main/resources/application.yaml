@@ -54,7 +54,7 @@ spring:
         batch_versioned_data: true
         generate_statistics: false
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: false
 
   flyway:

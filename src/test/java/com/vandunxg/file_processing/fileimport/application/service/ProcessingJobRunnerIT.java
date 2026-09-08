@@ -283,7 +283,7 @@ class ProcessingJobRunnerIT extends AuthIntegrationTestBase {
   }
 
   @Test
-  void recoveryRequeuesAJobWhoseWorkerDisappearedMidRun() {
+  void recoveryMarksAJobWhoseWorkerDisappearedAsFailed() {
     UUID jobId = queue(HEADER + validRow("CUS_01"));
     commandService.claimNextQueued();
     goStale(jobId);
@@ -291,20 +291,19 @@ class ProcessingJobRunnerIT extends AuthIntegrationTestBase {
     commandService.recoverStaleJob(jobId);
 
     ProcessingJob job = jobs.findById(jobId).orElseThrow();
-    assertThat(job.getStatus()).isEqualTo(JobStatus.QUEUED);
+    assertThat(job.getStatus()).isEqualTo(JobStatus.FAILED);
     assertThat(job.getAttempts())
         .singleElement()
-        .satisfies(attempt -> assertThat(attempt.getStatus()).isEqualTo(AttemptStatus.FAILED));
-
-    assertThat(runner.runNextJob()).isTrue();
-
-    ProcessingJob replayed = jobs.findById(jobId).orElseThrow();
-    assertThat(replayed.getStatus()).isEqualTo(JobStatus.COMPLETED);
-    assertThat(replayed.getAttempts().getLast().getTrigger()).isEqualTo(AttemptTrigger.RECOVERY);
+        .satisfies(
+            attempt -> {
+              assertThat(attempt.getStatus()).isEqualTo(AttemptStatus.FAILED);
+              assertThat(attempt.getErrorCode()).isEqualTo("WORKER_LOST");
+            });
+    assertThat(runner.runNextJob()).isFalse();
   }
 
   @Test
-  void recoveryHonoursACancellationRequestWhoseWorkerDiedBeforeReachingASafePoint() {
+  void recoveryFailsACancellationRequestedJobWhoseWorkerDisappeared() {
     UUID jobId = queue(HEADER + validRow("CUS_01"));
     commandService.claimNextQueued();
     commandService.requestCancellation(jobId, ownerOf(jobId), true);
@@ -313,10 +312,9 @@ class ProcessingJobRunnerIT extends AuthIntegrationTestBase {
     commandService.recoverStaleJob(jobId);
 
     ProcessingJob job = jobs.findById(jobId).orElseThrow();
-    // Requeueing would discard the request and replay the file, and the job could then report
-    // COMPLETED for something its owner explicitly cancelled.
-    assertThat(job.getStatus()).isEqualTo(JobStatus.CANCELLED);
-    assertThat(job.getAttempts().getLast().getStatus()).isEqualTo(AttemptStatus.CANCELLED);
+    assertThat(job.getStatus()).isEqualTo(JobStatus.FAILED);
+    assertThat(job.getAttempts().getLast().getStatus()).isEqualTo(AttemptStatus.FAILED);
+    assertThat(job.getErrorCode()).isEqualTo("WORKER_LOST");
     assertThat(runner.runNextJob()).isFalse();
   }
 

@@ -19,7 +19,7 @@ public class CustomerImportService {
   private final CustomerBatchWriter customerBatchWriter;
 
   /** Persists one logical batch. The batch is the transaction: all rows land, or none do. */
-  @Transactional
+  @Transactional(timeout = 30)
   public ImportCustomerBatchResult importBatch(ImportCustomerBatchCommand command) {
     if (command.rows().isEmpty()) {
       return ImportCustomerBatchResult.EMPTY;

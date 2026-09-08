@@ -17,8 +17,10 @@ import com.vandunxg.file_processing.configuration.security.AuthenticatedUser;
 import com.vandunxg.file_processing.fileimport.api.dto.request.ProcessingJobSearchRequest;
 import com.vandunxg.file_processing.fileimport.api.mapper.ProcessingJobWebMapper;
 import com.vandunxg.file_processing.fileimport.application.command.UploadFileCommand;
+import com.vandunxg.file_processing.fileimport.application.exception.DuplicateFileException;
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportErrorCode;
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportException;
+import com.vandunxg.file_processing.fileimport.application.result.DuplicateFileResult;
 import com.vandunxg.file_processing.fileimport.application.result.ProcessingJobProgressResult;
 import com.vandunxg.file_processing.fileimport.application.result.ProcessingJobResult;
 import com.vandunxg.file_processing.fileimport.application.result.ProcessingJobSummaryResult;
@@ -36,6 +38,7 @@ import org.springframework.security.access.PermissionEvaluator;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.WebDataBinder;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.InitBinder;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -85,6 +88,11 @@ public class FileImportController {
   private final ProcessingJobQueryService processingJobQueryService;
   private final ProcessingJobWebMapper processingJobWebMapper;
   private final PermissionEvaluator permissionEvaluator;
+
+  @ExceptionHandler(DuplicateFileException.class)
+  ResponseEntity<Response<DuplicateFileResult>> duplicate(DuplicateFileException exception) {
+    return ResponseEntity.status(HttpStatus.CONFLICT).body(Response.of(exception.getExisting()));
+  }
 
   /**
    * Reads a time filter as an ISO-8601 instant.

@@ -40,7 +40,7 @@ public record FileImportProperties(
     progressTimeInterval =
         progressTimeInterval == null ? Duration.ofSeconds(2) : progressTimeInterval;
     staleHeartbeatThreshold =
-        staleHeartbeatThreshold == null ? Duration.ofMinutes(5) : staleHeartbeatThreshold;
+        staleHeartbeatThreshold == null ? Duration.ofMinutes(2) : staleHeartbeatThreshold;
     workerThreads = workerThreads == 0 ? 1 : workerThreads;
 
     requirePositive(retention, "File import retention");

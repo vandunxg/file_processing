@@ -9,6 +9,9 @@ public interface FileStorage {
 
   InputStream open(String storageKey);
 
+  /** Verifies that a stored original can still be replayed without opening its full stream. */
+  boolean exists(String storageKey);
+
   void delete(String storageKey);
 
   record StoredObject(String bucket, long sizeBytes, String checksumSha256, String contentType) {}

@@ -26,6 +26,8 @@ public class PostgresDuplicateExternalIdTracker implements DuplicateExternalIdTr
           + "ON COMMIT PRESERVE ROWS";
   private static final String INSERT_EXTERNAL_ID =
       "INSERT INTO csv_seen_external_ids (external_id) VALUES (?) ON CONFLICT DO NOTHING";
+  private static final String EXISTS_EXTERNAL_ID =
+      "SELECT EXISTS (SELECT 1 FROM csv_seen_external_ids WHERE external_id = ?)";
   private static final String DROP_TABLE = "DROP TABLE IF EXISTS csv_seen_external_ids";
 
   private final DataSource dataSource;
@@ -47,7 +49,10 @@ public class PostgresDuplicateExternalIdTracker implements DuplicateExternalIdTr
       try (Statement statement = connection.createStatement()) {
         statement.execute(CREATE_TABLE);
       }
-      return new PostgresRun(connection, connection.prepareStatement(INSERT_EXTERNAL_ID));
+      return new PostgresRun(
+          connection,
+          connection.prepareStatement(INSERT_EXTERNAL_ID),
+          connection.prepareStatement(EXISTS_EXTERNAL_ID));
     } catch (SQLException exception) {
       close(connection);
       throw new IllegalStateException("Unable to start duplicate external ID tracking", exception);
@@ -89,10 +94,12 @@ public class PostgresDuplicateExternalIdTracker implements DuplicateExternalIdTr
 
     private final Connection connection;
     private final PreparedStatement insert;
+    private final PreparedStatement exists;
 
-    private PostgresRun(Connection connection, PreparedStatement insert) {
+    private PostgresRun(Connection connection, PreparedStatement insert, PreparedStatement exists) {
       this.connection = connection;
       this.insert = insert;
+      this.exists = exists;
     }
 
     @Override
@@ -106,9 +113,26 @@ public class PostgresDuplicateExternalIdTracker implements DuplicateExternalIdTr
     }
 
     @Override
+    public boolean alreadySeen(String externalId) {
+      try {
+        exists.setString(1, externalId);
+        try (var result = exists.executeQuery()) {
+          return result.next() && result.getBoolean(1);
+        }
+      } catch (SQLException exception) {
+        throw new IllegalStateException("Unable to read duplicate external ID tracking", exception);
+      }
+    }
+
+    @Override
     public void close() {
       try {
         insert.close();
+      } catch (SQLException ignored) {
+        // The temporary table is still cleaned up below.
+      }
+      try {
+        exists.close();
       } catch (SQLException ignored) {
         // The temporary table is still cleaned up below.
       }

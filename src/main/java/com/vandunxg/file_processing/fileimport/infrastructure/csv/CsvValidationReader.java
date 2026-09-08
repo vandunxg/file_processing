@@ -2,6 +2,7 @@ package com.vandunxg.file_processing.fileimport.infrastructure.csv;
 
 import java.io.InputStream;
 import java.time.Clock;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -55,19 +56,23 @@ public final class CsvValidationReader implements CustomerCsvReader.Run {
             parsed.dateOfBirth(),
             parsed.address());
     ValidatedCustomerRow validated = validator.validate(originalRow);
-    if (validated.row().isEmpty()
-        || duplicateTracker.firstOccurrence(validated.row().orElseThrow().externalId())) {
+    String externalId = CustomerRowValidator.normalizeExternalId(originalRow.externalId());
+    if (validated.row().isPresent() && duplicateTracker.firstOccurrence(externalId)) {
       return new ValidatedCustomerRow(validated.row(), validated.issues(), originalRow);
     }
-    return new ValidatedCustomerRow(
-        Optional.empty(),
-        List.of(
-            new ValidationIssue(
-                parsed.rowNumber(),
-                validated.row().orElseThrow().externalId(),
-                ValidationErrorCode.DUPLICATE_EXTERNAL_ID_IN_FILE,
-                "external_id",
-                "External ID appears more than once in the file")),
-        originalRow);
+    if (validated.row().isEmpty()
+        && (!CustomerRowValidator.isValidExternalId(externalId)
+            || !duplicateTracker.alreadySeen(externalId))) {
+      return new ValidatedCustomerRow(validated.row(), validated.issues(), originalRow);
+    }
+    List<ValidationIssue> issues = new ArrayList<>(validated.issues());
+    issues.add(
+        new ValidationIssue(
+            parsed.rowNumber(),
+            externalId,
+            ValidationErrorCode.DUPLICATE_EXTERNAL_ID_IN_FILE,
+            "external_id",
+            "External ID appears more than once in the file"));
+    return new ValidatedCustomerRow(Optional.empty(), List.copyOf(issues), originalRow);
   }
 }

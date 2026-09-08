@@ -52,6 +52,7 @@ public class ProcessingJobRunner {
   private final CustomerCsvReader customerCsvReader;
   private final ErrorReportStore errorReportStore;
   private final CustomerImportService customerImportService;
+  private final ProcessingWorkerControl workerControl;
   private final FileImportProperties properties;
   private final Clock clock;
 
@@ -106,6 +107,11 @@ public class ProcessingJobRunner {
       processingJobCommandService.cancel(job.getId());
       return;
     }
+    if (outcome.shutdown()) {
+      // Leave the in-flight attempt and heartbeat intact. Stale recovery owns the terminal
+      // WORKER_LOST transition after a forced shutdown, rather than pretending the run completed.
+      return;
+    }
     processingJobCommandService.complete(
         job.getId(),
         counters.processedRows,
@@ -144,6 +150,10 @@ public class ProcessingJobRunner {
 
         if (batch.size() >= properties.batchSize()) {
           flush(job, batch, counters);
+          Outcome stop = stopAtSafePoint(job);
+          if (stop != null) {
+            return stop;
+          }
         }
         // Checked per row rather than per batch: a file of nothing but rejected rows never fills a
         // batch, and it would otherwise run to the end without a single heartbeat -- long enough
@@ -157,6 +167,9 @@ public class ProcessingJobRunner {
             // Safe point: the pending batch is committed and nothing is half-written.
             return Outcome.stoppedByCancellation();
           }
+          if (workerControl.isStopping()) {
+            return Outcome.stoppedByShutdown();
+          }
         }
       }
       flush(job, batch, counters);
@@ -164,6 +177,9 @@ public class ProcessingJobRunner {
         // Checked before publishing rather than after: a cancelled job drops the report key, so
         // uploading first would leave an object in the bucket that nothing references.
         return Outcome.stoppedByCancellation();
+      }
+      if (workerControl.isStopping()) {
+        return Outcome.stoppedByShutdown();
       }
       // Only a run that reached end of file publishes its report, so a cancelled or failed attempt
       // never leaves a partial report looking like the final one.
@@ -180,6 +196,16 @@ public class ProcessingJobRunner {
     counters.insertedRows += result.insertedRows();
     counters.updatedRows += result.updatedRows();
     batch.clear();
+  }
+
+  /** A completed batch is the cancellation and shutdown safe point. */
+  private Outcome stopAtSafePoint(ProcessingJob job) {
+    if (workerControl.isStopping()) {
+      return Outcome.stoppedByShutdown();
+    }
+    return processingJobCommandService.isCancellationRequested(job.getId())
+        ? Outcome.stoppedByCancellation()
+        : null;
   }
 
   /**
@@ -210,11 +236,20 @@ public class ProcessingJobRunner {
   private void failQuietly(ProcessingJob job, String code, String summary, Exception cause) {
     // The message is sanitized on purpose: a raw driver or SDK error can carry connection strings,
     // credentials or row content, and it ends up in an API response.
-    log.error("[run] jobId={} failed code={}", job.getId(), code, cause);
+    // Parser, JDBC and object-storage exception messages can include a customer value, a bucket
+    // path or credentials. Keep the diagnostic category without serialising those details to logs.
+    log.error(
+        "[run] jobId={} failed code={} causeType={}",
+        job.getId(),
+        code,
+        cause.getClass().getSimpleName());
     try {
       processingJobCommandService.fail(job.getId(), code, summary);
     } catch (RuntimeException failure) {
-      log.error("[run] jobId={} could not be marked failed", job.getId(), failure);
+      log.error(
+          "[run] jobId={} could not be marked failed causeType={}",
+          job.getId(),
+          failure.getClass().getSimpleName());
     }
   }
 
@@ -228,14 +263,18 @@ public class ProcessingJobRunner {
         row.address());
   }
 
-  private record Outcome(boolean cancelled, String reportKey) {
+  private record Outcome(boolean cancelled, boolean shutdown, String reportKey) {
 
     static Outcome stoppedByCancellation() {
-      return new Outcome(true, null);
+      return new Outcome(true, false, null);
+    }
+
+    static Outcome stoppedByShutdown() {
+      return new Outcome(false, true, null);
     }
 
     static Outcome finished(String reportKey) {
-      return new Outcome(false, reportKey);
+      return new Outcome(false, false, reportKey);
     }
   }
 

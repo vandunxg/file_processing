@@ -15,6 +15,12 @@ public interface ProcessingJobRepository {
   Optional<ProcessingJob> findById(UUID id);
 
   /**
+   * Loads a live job under an exclusive lock for a short state transition such as stale-worker
+   * recovery. The caller must recheck its premise after acquiring the lock.
+   */
+  Optional<ProcessingJob> findByIdForUpdate(UUID id);
+
+  /**
    * Loads a job only when the caller is allowed to see it, so a caller asking for someone else's
    * job cannot tell it apart from one that does not exist.
    */

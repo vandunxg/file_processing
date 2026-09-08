@@ -53,6 +53,7 @@ class ProcessingJobListTest {
             searchRepository,
             mock(ErrorReportStore.class),
             new ProcessingJobResultMapperImpl(),
+            mock(FileImportAuditService.class),
             Clock.fixed(NOW, java.time.ZoneOffset.UTC));
   }
 

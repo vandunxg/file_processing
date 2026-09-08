@@ -6,13 +6,25 @@ import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 
+import com.vandunxg.file_processing.auth.domain.model.OperationType;
 import com.vandunxg.file_processing.fileimport.application.FileImportProperties;
+import com.vandunxg.file_processing.fileimport.application.capability.ErrorReportStore;
+import com.vandunxg.file_processing.fileimport.application.capability.FileStorage;
+import com.vandunxg.file_processing.fileimport.application.service.FileImportAuditService;
 import com.vandunxg.file_processing.fileimport.application.service.ProcessingJobCommandService;
 import com.vandunxg.file_processing.fileimport.application.service.ProcessingJobRunner;
+import com.vandunxg.file_processing.fileimport.application.service.ProcessingWorkerControl;
+import com.vandunxg.file_processing.fileimport.domain.ImportFileRepository;
 import com.vandunxg.file_processing.fileimport.domain.ProcessingJobRepository;
+import com.vandunxg.file_processing.fileimport.domain.model.ImportFile;
+import com.vandunxg.file_processing.fileimport.domain.model.JobStatus;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.availability.AvailabilityChangeEvent;
+import org.springframework.boot.availability.ReadinessState;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -42,22 +54,40 @@ public class ProcessingJobScheduler {
   private final ProcessingJobRunner processingJobRunner;
   private final ProcessingJobCommandService processingJobCommandService;
   private final ProcessingJobRepository processingJobRepository;
+  private final ImportFileRepository importFileRepository;
+  private final FileStorage fileStorage;
+  private final ErrorReportStore errorReportStore;
   private final FileImportProperties properties;
   private final Executor workerExecutor;
+  private final ProcessingWorkerControl workerControl;
+  private final ApplicationEventPublisher eventPublisher;
+  private final FileImportAuditService auditService;
   private final Clock clock;
 
   public ProcessingJobScheduler(
       ProcessingJobRunner processingJobRunner,
       ProcessingJobCommandService processingJobCommandService,
       ProcessingJobRepository processingJobRepository,
+      ImportFileRepository importFileRepository,
+      FileStorage fileStorage,
+      ErrorReportStore errorReportStore,
       FileImportProperties properties,
       @Qualifier("fileImportWorkerExecutor") Executor workerExecutor,
+      ProcessingWorkerControl workerControl,
+      ApplicationEventPublisher eventPublisher,
+      FileImportAuditService auditService,
       Clock clock) {
     this.processingJobRunner = processingJobRunner;
     this.processingJobCommandService = processingJobCommandService;
     this.processingJobRepository = processingJobRepository;
+    this.importFileRepository = importFileRepository;
+    this.fileStorage = fileStorage;
+    this.errorReportStore = errorReportStore;
     this.properties = properties;
     this.workerExecutor = workerExecutor;
+    this.workerControl = workerControl;
+    this.eventPublisher = eventPublisher;
+    this.auditService = auditService;
     this.clock = clock;
   }
 
@@ -65,6 +95,9 @@ public class ProcessingJobScheduler {
       fixedDelayString = "${app.file-import.poll-interval:1s}",
       initialDelayString = "${app.file-import.poll-interval:1s}")
   public void pollQueuedJobs() {
+    if (workerControl.isStopping()) {
+      return;
+    }
     for (int submitted = 0; submitted < properties.workerThreads(); submitted++) {
       try {
         workerExecutor.execute(this::drainQueue);
@@ -81,8 +114,8 @@ public class ProcessingJobScheduler {
   }
 
   @Scheduled(
-      fixedDelayString = "${app.file-import.stale-heartbeat-threshold:5m}",
-      initialDelayString = "${app.file-import.stale-heartbeat-threshold:5m}")
+      fixedDelayString = "${app.file-import.recovery-interval:1m}",
+      initialDelayString = "${app.file-import.recovery-interval:1m}")
   public void recoverAbandonedJobs() {
     try {
       Instant staleBefore = Instant.now(clock).minus(properties.staleHeartbeatThreshold());
@@ -95,6 +128,45 @@ public class ProcessingJobScheduler {
     }
   }
 
+  /** Purges retained objects but deliberately keeps the job and file metadata for audit history. */
+  @Scheduled(fixedDelayString = "${app.file-import.retention-cleanup-interval:1h}")
+  public void cleanExpiredObjects() {
+    for (ImportFile file : importFileRepository.findExpired(Instant.now(clock))) {
+      processingJobRepository
+          .findByImportFileId(file.getId())
+          .filter(this::isTerminal)
+          .ifPresent(job -> cleanExpiredObjects(file, job));
+    }
+  }
+
+  private void cleanExpiredObjects(ImportFile file, ProcessingJob job) {
+    try {
+      if (fileStorage.exists(file.getStorageKey())) {
+        fileStorage.delete(file.getStorageKey());
+        auditService.record(
+            OperationType.FILE_DELETED_BY_RETENTION, file.getId(), null, Instant.now(clock));
+      }
+      if (job.getErrorReportKey() != null) {
+        errorReportStore.discard(job.getErrorReportKey());
+        auditService.record(
+            OperationType.REPORT_DELETED_BY_RETENTION, job.getId(), null, Instant.now(clock));
+      }
+    } catch (RuntimeException exception) {
+      log.warn(
+          "[retention] object cleanup failed fileId={} jobId={} causeType={}",
+          file.getId(),
+          job.getId(),
+          exception.getClass().getSimpleName());
+    }
+  }
+
+  private boolean isTerminal(ProcessingJob job) {
+    return job.getStatus() == JobStatus.COMPLETED
+        || job.getStatus() == JobStatus.COMPLETED_WITH_ERRORS
+        || job.getStatus() == JobStatus.FAILED
+        || job.getStatus() == JobStatus.CANCELLED;
+  }
+
   /**
    * Keeps running jobs while the queue has any, then lets the thread go.
    *
@@ -103,7 +175,7 @@ public class ProcessingJobScheduler {
    */
   private void drainQueue() {
     try {
-      while (processingJobRunner.runNextJob()) {
+      while (!workerControl.isStopping() && processingJobRunner.runNextJob()) {
         // Keep going while work remains.
       }
     } catch (RuntimeException exception) {
@@ -127,5 +199,11 @@ public class ProcessingJobScheduler {
     } catch (RuntimeException exception) {
       log.error("[recover] jobId={} could not be recovered", job.getId(), exception);
     }
+  }
+
+  @PreDestroy
+  void stopAcceptingWork() {
+    workerControl.requestStop();
+    AvailabilityChangeEvent.publish(eventPublisher, this, ReadinessState.REFUSING_TRAFFIC);
   }
 }

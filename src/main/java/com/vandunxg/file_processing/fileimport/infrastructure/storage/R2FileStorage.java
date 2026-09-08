@@ -17,7 +17,9 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
 /**
  * Reads and writes the originals and the reports.
@@ -72,6 +74,22 @@ public class R2FileStorage implements FileStorage {
     try {
       return r2Client.getObject(
           GetObjectRequest.builder().bucket(properties.bucket()).key(storageKey).build());
+    } catch (SdkException exception) {
+      throw new FileImportException(FileImportErrorCode.FILE_IMPORT_STORAGE_UNAVAILABLE, exception);
+    }
+  }
+
+  @Override
+  public boolean exists(String storageKey) {
+    try {
+      r2Client.headObject(
+          HeadObjectRequest.builder().bucket(properties.bucket()).key(storageKey).build());
+      return true;
+    } catch (S3Exception exception) {
+      if (exception.statusCode() == 404) {
+        return false;
+      }
+      throw new FileImportException(FileImportErrorCode.FILE_IMPORT_STORAGE_UNAVAILABLE, exception);
     } catch (SdkException exception) {
       throw new FileImportException(FileImportErrorCode.FILE_IMPORT_STORAGE_UNAVAILABLE, exception);
     }
