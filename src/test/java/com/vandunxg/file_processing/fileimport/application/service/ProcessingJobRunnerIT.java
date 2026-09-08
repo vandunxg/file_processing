@@ -2,19 +2,9 @@ package com.vandunxg.file_processing.fileimport.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.HexFormat;
-import java.util.Map;
 import java.util.UUID;
 
-import com.vandunxg.file_processing.fileimport.application.capability.FileStorage;
 import com.vandunxg.file_processing.fileimport.domain.ImportFileRepository;
 import com.vandunxg.file_processing.fileimport.domain.ProcessingJobRepository;
 import com.vandunxg.file_processing.fileimport.domain.model.AttemptStatus;
@@ -26,14 +16,13 @@ import com.vandunxg.file_processing.fileimport.domain.model.ProcessingAttempt;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
 import com.vandunxg.file_processing.fileimport.domain.model.StorageProvider;
 import com.vandunxg.file_processing.testsupport.AuthIntegrationTestBase;
+import com.vandunxg.file_processing.testsupport.InMemoryFileStorage;
+import com.vandunxg.file_processing.testsupport.InMemoryStorageConfiguration;
 import com.vandunxg.file_processing.testsupport.PostgresIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -46,7 +35,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * several safe points -- the behaviour that matters here only appears between batches.
  */
 @PostgresIntegrationTest
-@Import(ProcessingJobRunnerIT.InMemoryStorageConfiguration.class)
+@Import(InMemoryStorageConfiguration.class)
 @TestPropertySource(
     properties = {"app.file-import.batch-size=2", "app.file-import.progress-row-interval=2"})
 class ProcessingJobRunnerIT extends AuthIntegrationTestBase {
@@ -271,97 +260,6 @@ class ProcessingJobRunnerIT extends AuthIntegrationTestBase {
         + ",Nguyen Van A,"
         + externalId.toLowerCase(java.util.Locale.ROOT)
         + "@example.com,0912345678,2000-01-02,1 Main St\n";
-  }
-
-  @TestConfiguration
-  static class InMemoryStorageConfiguration {
-
-    @Bean
-    @Primary
-    InMemoryFileStorage inMemoryFileStorage() {
-      return new InMemoryFileStorage();
-    }
-  }
-
-  /** Stands in for object storage so the test owns the bytes and can make reads fail on demand. */
-  static class InMemoryFileStorage implements FileStorage {
-
-    private final Map<String, byte[]> objects = new HashMap<>();
-    private boolean readsFail;
-    private Runnable onRead = () -> {};
-
-    void put(String key, String content) {
-      objects.put(key, content.getBytes(StandardCharsets.UTF_8));
-    }
-
-    String read(String key) {
-      return new String(objects.get(key), StandardCharsets.UTF_8);
-    }
-
-    java.util.Set<String> keys() {
-      return objects.keySet();
-    }
-
-    void clear() {
-      objects.clear();
-      readsFail = false;
-      onRead = () -> {};
-    }
-
-    void failReads() {
-      readsFail = true;
-    }
-
-    void succeedReads() {
-      readsFail = false;
-    }
-
-    /** Runs once when the worker opens the original, letting a test interleave with the run. */
-    void onRead(Runnable hook) {
-      this.onRead = hook;
-    }
-
-    @Override
-    public StoredObject store(
-        String storageKey, String contentType, long contentLength, InputStream content) {
-      try (content) {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        content.transferTo(buffer);
-        byte[] stored = buffer.toByteArray();
-        objects.put(storageKey, stored);
-        return new StoredObject("file-processing", stored.length, sha256(stored), contentType);
-      } catch (IOException exception) {
-        throw new UncheckedIOException(exception);
-      }
-    }
-
-    @Override
-    public InputStream open(String storageKey) {
-      if (readsFail) {
-        throw new IllegalStateException("storage unavailable: secret bucket-internal detail");
-      }
-      onRead.run();
-      byte[] content = objects.get(storageKey);
-      if (content == null) {
-        throw new IllegalStateException("object not found");
-      }
-      return new ByteArrayInputStream(content);
-    }
-
-    @Override
-    public void delete(String storageKey) {
-      objects.remove(storageKey);
-    }
-
-    /** A real digest, so identical bytes really do collide the way the duplicate rule expects. */
-    private static String sha256(byte[] content) {
-      try {
-        return HexFormat.of()
-            .formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(content));
-      } catch (java.security.NoSuchAlgorithmException exception) {
-        throw new IllegalStateException(exception);
-      }
-    }
   }
 
   @Test

@@ -2,6 +2,7 @@ package com.vandunxg.file_processing.fileimport.application.mapper;
 
 import com.vandunxg.file_processing.fileimport.application.result.ProcessingJobProgressResult;
 import com.vandunxg.file_processing.fileimport.application.result.ProcessingJobResult;
+import com.vandunxg.file_processing.fileimport.application.result.ProcessingJobSummaryResult;
 import com.vandunxg.file_processing.fileimport.domain.model.ImportFile;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingAttempt;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
@@ -32,6 +33,15 @@ public interface ProcessingJobResultMapper {
   ProcessingJobResult toResult(ProcessingJob job, ImportFile file);
 
   ProcessingJobResult.AttemptResult toAttemptResult(ProcessingAttempt attempt);
+
+  @Mapping(target = "jobId", source = "job.id")
+  @Mapping(target = "fileId", source = "file.id")
+  @Mapping(target = "ownerId", source = "job.ownerId")
+  @Mapping(target = "originalFilename", source = "file.originalFilename")
+  @Mapping(target = "sizeBytes", source = "file.sizeBytes")
+  @Mapping(target = "createdAt", source = "job.createdAt")
+  @Mapping(target = "errorReportAvailable", expression = "java(job.getErrorReportKey() != null)")
+  ProcessingJobSummaryResult toSummaryResult(ProcessingJob job, ImportFile file);
 
   @Mapping(target = "jobId", source = "id")
   ProcessingJobProgressResult toProgressResult(ProcessingJob job);

@@ -1,5 +1,7 @@
 package com.vandunxg.file_processing.fileimport.infrastructure.persistence;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -11,4 +13,6 @@ public interface ImportFileEntityRepository extends JpaRepository<ImportFileEnti
   Optional<ImportFileEntity> findByIdAndOwnerIdAndDeletedAtIsNull(UUID id, UUID ownerId);
 
   Optional<ImportFileEntity> findByIdAndDeletedAtIsNull(UUID id);
+
+  List<ImportFileEntity> findAllByIdInAndDeletedAtIsNull(Collection<UUID> ids);
 }

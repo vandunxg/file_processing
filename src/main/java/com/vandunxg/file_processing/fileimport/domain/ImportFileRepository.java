@@ -1,5 +1,7 @@
 package com.vandunxg.file_processing.fileimport.domain;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -17,4 +19,12 @@ public interface ImportFileRepository {
    * indistinguishable from asking for one that does not exist.
    */
   Optional<ImportFile> findByIdAndOwnerId(UUID id, UUID ownerId);
+
+  /**
+   * Loads the files behind a page of jobs.
+   *
+   * <p>One lookup for the whole page: a list resolves a filename per row, and doing that one id at
+   * a time is a query per row.
+   */
+  List<ImportFile> findAllByIds(Collection<UUID> ids);
 }

@@ -1,23 +1,32 @@
 package com.vandunxg.file_processing.fileimport.api;
 
+import java.beans.PropertyEditorSupport;
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
+import com.vandunxg.common.models.dto.PageDTO;
+import com.vandunxg.common.models.dto.response.PagingResponse;
 import com.vandunxg.common.models.dto.response.Response;
+import com.vandunxg.common.models.validator.ValidatePaging;
 import com.vandunxg.file_processing.configuration.security.AuthenticatedUser;
+import com.vandunxg.file_processing.fileimport.api.dto.request.ProcessingJobSearchRequest;
+import com.vandunxg.file_processing.fileimport.api.mapper.ProcessingJobWebMapper;
 import com.vandunxg.file_processing.fileimport.application.command.UploadFileCommand;
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportErrorCode;
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportException;
 import com.vandunxg.file_processing.fileimport.application.result.ProcessingJobProgressResult;
 import com.vandunxg.file_processing.fileimport.application.result.ProcessingJobResult;
+import com.vandunxg.file_processing.fileimport.application.result.ProcessingJobSummaryResult;
 import com.vandunxg.file_processing.fileimport.application.result.UploadFileResult;
 import com.vandunxg.file_processing.fileimport.application.service.FileImportCommandService;
 import com.vandunxg.file_processing.fileimport.application.service.ProcessingJobCommandService;
 import com.vandunxg.file_processing.fileimport.application.service.ProcessingJobQueryService;
+import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -26,7 +35,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.InitBinder;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -56,6 +67,26 @@ public class FileImportController {
   private final FileImportCommandService fileImportCommandService;
   private final ProcessingJobCommandService processingJobCommandService;
   private final ProcessingJobQueryService processingJobQueryService;
+  private final ProcessingJobWebMapper processingJobWebMapper;
+
+  /**
+   * Reads a time filter as an ISO-8601 instant.
+   *
+   * <p>The application-wide editor reads epoch milliseconds, which is unusable in a hand-written
+   * query string, so the time filters on this controller take the same shape as the ones on the
+   * admin log endpoints.
+   */
+  @InitBinder
+  void bindInstant(WebDataBinder binder) {
+    binder.registerCustomEditor(
+        Instant.class,
+        new PropertyEditorSupport() {
+          @Override
+          public void setAsText(String text) {
+            setValue(Instant.parse(text));
+          }
+        });
+  }
 
   /**
    * Accepts a CSV and queues it.
@@ -88,6 +119,26 @@ public class FileImportController {
     } catch (IOException exception) {
       throw new FileImportException(FileImportErrorCode.FILE_IMPORT_STORAGE_UNAVAILABLE, exception);
     }
+  }
+
+  /**
+   * Lists jobs, newest first.
+   *
+   * <p>The owner filter only widens the result for a caller who may act on any owner; for everyone
+   * else the application replaces it with the caller's own id, so it can never be used to read
+   * somebody else's list.
+   */
+  @GetMapping("/jobs")
+  @PreAuthorize("hasPermission(null, 'job:self_read')")
+  public PagingResponse<ProcessingJobSummaryResult> listJobs(
+      @ValidatePaging(sortModel = ProcessingJob.class) ProcessingJobSearchRequest request,
+      @AuthenticationPrincipal AuthenticatedUser principal) {
+    PageDTO<ProcessingJobSummaryResult> page =
+        processingJobQueryService.list(
+            processingJobWebMapper.toQuery(request),
+            principal.userId(),
+            canActOnAnyOwner(principal));
+    return new PagingResponse<>(page);
   }
 
   @GetMapping("/jobs/{jobId}")

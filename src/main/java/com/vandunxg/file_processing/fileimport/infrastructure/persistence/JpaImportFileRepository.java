@@ -1,5 +1,7 @@
 package com.vandunxg.file_processing.fileimport.infrastructure.persistence;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,5 +35,15 @@ public class JpaImportFileRepository implements ImportFileRepository {
   @Override
   public Optional<ImportFile> findByIdAndOwnerId(UUID id, UUID ownerId) {
     return entityRepository.findByIdAndOwnerIdAndDeletedAtIsNull(id, ownerId).map(mapper::toDomain);
+  }
+
+  @Override
+  public List<ImportFile> findAllByIds(Collection<UUID> ids) {
+    if (ids.isEmpty()) {
+      return List.of();
+    }
+    return entityRepository.findAllByIdInAndDeletedAtIsNull(ids).stream()
+        .map(mapper::toDomain)
+        .toList();
   }
 }

@@ -11,10 +11,11 @@ import com.vandunxg.file_processing.fileimport.application.command.UploadFileCom
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportErrorCode;
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportException;
 import com.vandunxg.file_processing.fileimport.application.result.UploadFileResult;
-import com.vandunxg.file_processing.fileimport.application.service.ProcessingJobRunnerIT.InMemoryFileStorage;
 import com.vandunxg.file_processing.fileimport.domain.ProcessingJobRepository;
 import com.vandunxg.file_processing.fileimport.domain.model.JobStatus;
 import com.vandunxg.file_processing.testsupport.AuthIntegrationTestBase;
+import com.vandunxg.file_processing.testsupport.InMemoryFileStorage;
+import com.vandunxg.file_processing.testsupport.InMemoryStorageConfiguration;
 import com.vandunxg.file_processing.testsupport.PostgresIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,7 +28,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Covers what an upload is allowed to do during the request, and what it must leave to the worker.
  */
 @PostgresIntegrationTest
-@Import(ProcessingJobRunnerIT.InMemoryStorageConfiguration.class)
+@Import(InMemoryStorageConfiguration.class)
 class FileImportCommandServiceIT extends AuthIntegrationTestBase {
 
   private static final String CSV =
