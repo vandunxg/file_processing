@@ -46,7 +46,7 @@ public class R2FileStorage implements FileStorage {
           contentType);
     } catch (SdkException exception) {
       deleteAfterFailedStore(storageKey);
-      throw new FileImportException(FileImportErrorCode.STORAGE_UNAVAILABLE, exception);
+      throw new FileImportException(FileImportErrorCode.FILE_IMPORT_STORAGE_UNAVAILABLE, exception);
     }
   }
 
@@ -56,7 +56,7 @@ public class R2FileStorage implements FileStorage {
       r2Client.deleteObject(
           DeleteObjectRequest.builder().bucket(properties.bucket()).key(storageKey).build());
     } catch (SdkException exception) {
-      throw new FileImportException(FileImportErrorCode.STORAGE_UNAVAILABLE, exception);
+      throw new FileImportException(FileImportErrorCode.FILE_IMPORT_STORAGE_UNAVAILABLE, exception);
     }
   }
 
@@ -66,7 +66,7 @@ public class R2FileStorage implements FileStorage {
       return r2Client.getObject(
           GetObjectRequest.builder().bucket(properties.bucket()).key(storageKey).build());
     } catch (SdkException exception) {
-      throw new FileImportException(FileImportErrorCode.STORAGE_UNAVAILABLE, exception);
+      throw new FileImportException(FileImportErrorCode.FILE_IMPORT_STORAGE_UNAVAILABLE, exception);
     }
   }
 

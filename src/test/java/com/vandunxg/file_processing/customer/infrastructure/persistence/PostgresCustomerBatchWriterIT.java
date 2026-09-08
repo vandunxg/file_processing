@@ -41,6 +41,8 @@ class PostgresCustomerBatchWriterIT extends PostgresTestContainerBase {
   @BeforeEach
   void setUp() {
     jdbc.update("DELETE FROM customers");
+    // Attempts reference their job, so they have to go first.
+    jdbc.update("DELETE FROM processing_attempt");
     jdbc.update("DELETE FROM processing_job");
     jdbc.update("DELETE FROM file_import");
     firstJobId = insertJob();

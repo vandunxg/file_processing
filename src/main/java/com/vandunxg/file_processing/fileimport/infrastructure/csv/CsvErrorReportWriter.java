@@ -1,4 +1,4 @@
-package com.vandunxg.file_processing.fileimport.application.service;
+package com.vandunxg.file_processing.fileimport.infrastructure.csv;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -14,13 +14,13 @@ import com.vandunxg.file_processing.fileimport.application.validation.Validation
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 
-final class CsvErrorReportWriter implements AutoCloseable {
+public final class CsvErrorReportWriter implements AutoCloseable {
 
   private static final ObjectMapper JSON = new ObjectMapper();
 
   private final CSVPrinter printer;
 
-  CsvErrorReportWriter(Path path) throws IOException {
+  public CsvErrorReportWriter(Path path) throws IOException {
     var writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8);
     writer.write('\uFEFF');
     printer =
@@ -38,7 +38,7 @@ final class CsvErrorReportWriter implements AutoCloseable {
                 .get());
   }
 
-  void write(ValidationIssue issue, ParsedCustomerRow row) {
+  public void write(ValidationIssue issue, ParsedCustomerRow row) {
     try {
       printer.printRecord(
           issue.rowNumber(),

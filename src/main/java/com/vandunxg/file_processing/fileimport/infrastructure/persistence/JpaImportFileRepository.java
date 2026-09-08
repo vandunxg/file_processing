@@ -4,25 +4,42 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.vandunxg.file_processing.fileimport.domain.ImportFileRepository;
-import com.vandunxg.file_processing.fileimport.domain.model.FileImport;
+import com.vandunxg.file_processing.fileimport.domain.model.FileChecksum;
+import com.vandunxg.file_processing.fileimport.domain.model.ImportFile;
 import com.vandunxg.file_processing.fileimport.infrastructure.persistence.mapper.ImportFilePersistenceMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+/**
+ * The file table predates the aggregate and still carries legacy processing columns, so the
+ * aggregate keeps its own shape and this repository maps between the two.
+ */
 @Repository
 @RequiredArgsConstructor
 public class JpaImportFileRepository implements ImportFileRepository {
 
-  private final ImportFileEntityRepository repository;
+  private final ImportFileEntityRepository entityRepository;
   private final ImportFilePersistenceMapper mapper;
 
   @Override
-  public FileImport save(FileImport fileImport) {
-    return mapper.toDomain(repository.saveAndFlush(mapper.toEntity(fileImport)));
+  public ImportFile save(ImportFile importFile) {
+    return mapper.toDomain(entityRepository.saveAndFlush(mapper.toNewEntity(importFile)));
   }
 
   @Override
-  public Optional<FileImport> findByIdAndOwnerId(UUID id, UUID ownerId) {
-    return repository.findByIdAndOwnerId(id, ownerId).map(mapper::toDomain);
+  public Optional<ImportFile> findById(UUID id) {
+    return entityRepository.findByIdAndDeletedAtIsNull(id).map(mapper::toDomain);
+  }
+
+  @Override
+  public Optional<ImportFile> findByIdAndOwnerId(UUID id, UUID ownerId) {
+    return entityRepository.findByIdAndOwnerIdAndDeletedAtIsNull(id, ownerId).map(mapper::toDomain);
+  }
+
+  @Override
+  public Optional<ImportFile> findByOwnerIdAndChecksum(UUID ownerId, FileChecksum checksum) {
+    return entityRepository
+        .findByOwnerIdAndChecksumSha256AndDeletedAtIsNull(ownerId, checksum.value())
+        .map(mapper::toDomain);
   }
 }

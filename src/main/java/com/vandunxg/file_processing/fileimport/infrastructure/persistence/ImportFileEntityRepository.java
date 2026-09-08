@@ -8,5 +8,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ImportFileEntityRepository extends JpaRepository<ImportFileEntity, UUID> {
 
-  Optional<ImportFileEntity> findByIdAndOwnerId(UUID id, UUID ownerId);
+  Optional<ImportFileEntity> findByIdAndOwnerIdAndDeletedAtIsNull(UUID id, UUID ownerId);
+
+  Optional<ImportFileEntity> findByIdAndDeletedAtIsNull(UUID id);
+
+  Optional<ImportFileEntity> findByOwnerIdAndChecksumSha256AndDeletedAtIsNull(
+      UUID ownerId, String checksumSha256);
 }

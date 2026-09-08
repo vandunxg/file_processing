@@ -11,52 +11,57 @@ import com.vandunxg.file_processing.configuration.security.AuthenticatedUser;
 import com.vandunxg.file_processing.fileimport.application.command.UploadFileCommand;
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportErrorCode;
 import com.vandunxg.file_processing.fileimport.application.exception.FileImportException;
+import com.vandunxg.file_processing.fileimport.application.result.ProcessingJobResult;
 import com.vandunxg.file_processing.fileimport.application.result.UploadFileResult;
-import com.vandunxg.file_processing.fileimport.application.service.ErrorReportDownloadService;
-import com.vandunxg.file_processing.fileimport.application.service.UploadFileService;
+import com.vandunxg.file_processing.fileimport.application.service.FileImportCommandService;
+import com.vandunxg.file_processing.fileimport.application.service.ProcessingJobCommandService;
+import com.vandunxg.file_processing.fileimport.application.service.ProcessingJobQueryService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @RestController
-@RequestMapping("${app.api.prefix}/${app.api.version}/file-import/")
+@RequestMapping("${app.api.prefix}/${app.api.version}/file-import")
 @RequiredArgsConstructor
 @Tag(name = "File import", description = "Bearer access token required.")
 public class FileImportController {
 
-  private final UploadFileService uploadFileService;
-  private final ErrorReportDownloadService errorReportDownloadService;
+  private static final String ADMIN_ROLE = "ROLE_ADMIN";
 
+  private final FileImportCommandService fileImportCommandService;
+  private final ProcessingJobCommandService processingJobCommandService;
+  private final ProcessingJobQueryService processingJobQueryService;
+
+  /**
+   * Accepts a CSV and queues it.
+   *
+   * <p>Answers {@code 202}, not {@code 200}: the file is stored and validated during the request,
+   * but its rows are processed afterwards by a worker, so the response describes a job to watch
+   * rather than a finished import.
+   */
   @PostMapping(
       consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
       produces = MediaType.APPLICATION_JSON_VALUE)
-  @ResponseStatus(HttpStatus.OK)
+  @ResponseStatus(HttpStatus.ACCEPTED)
   public Response<UploadFileResult> upload(
       @RequestPart("file") List<MultipartFile> files,
       @AuthenticationPrincipal AuthenticatedUser principal) {
-    if (files.isEmpty()) {
-      throw new FileImportException(FileImportErrorCode.FILE_REQUIRED);
-    }
-    if (files.size() != 1) {
-      throw new FileImportException(FileImportErrorCode.ONLY_ONE_FILE_ALLOWED);
-    }
-    MultipartFile file = files.getFirst();
-    if (file.isEmpty()) {
-      throw new FileImportException(FileImportErrorCode.EMPTY_FILE);
-    }
-    String filename = file.getOriginalFilename();
-    if (filename == null || !filename.toLowerCase(Locale.ROOT).endsWith(".csv")) {
-      throw new FileImportException(FileImportErrorCode.UNSUPPORTED_FILE_TYPE);
-    }
+    MultipartFile file = requireExactlyOneCsv(files);
     try (var inputStream = file.getInputStream()) {
       return Response.of(
-          uploadFileService.upload(
+          fileImportCommandService.upload(
               new UploadFileCommand(
                   principal.userId(),
                   file.getOriginalFilename(),
@@ -64,14 +69,58 @@ public class FileImportController {
                   file.getSize(),
                   inputStream)));
     } catch (IOException exception) {
-      throw new FileImportException(FileImportErrorCode.STORAGE_UNAVAILABLE, exception);
+      throw new FileImportException(FileImportErrorCode.FILE_IMPORT_STORAGE_UNAVAILABLE, exception);
     }
   }
 
-  @GetMapping(value = "{fileId}/error-report", produces = "text/csv")
+  @GetMapping("/jobs/{jobId}")
+  public Response<ProcessingJobResult> getJob(
+      @PathVariable UUID jobId, @AuthenticationPrincipal AuthenticatedUser principal) {
+    return Response.of(
+        processingJobQueryService.get(jobId, principal.userId(), isAdmin(principal)));
+  }
+
+  @GetMapping("/jobs/{jobId}/progress")
+  public Response<ProcessingJobResult> getProgress(
+      @PathVariable UUID jobId, @AuthenticationPrincipal AuthenticatedUser principal) {
+    return Response.of(
+        processingJobQueryService.get(jobId, principal.userId(), isAdmin(principal)));
+  }
+
+  /** Cooperative: a running job stops at its next safe point, so this only records the request. */
+  @PostMapping("/jobs/{jobId}/cancel")
+  @ResponseStatus(HttpStatus.ACCEPTED)
+  public Response<Void> cancel(
+      @PathVariable UUID jobId, @AuthenticationPrincipal AuthenticatedUser principal) {
+    processingJobCommandService.requestCancellation(jobId, principal.userId(), isAdmin(principal));
+    return Response.of(null);
+  }
+
+  @PostMapping("/jobs/{jobId}/retry")
+  @ResponseStatus(HttpStatus.ACCEPTED)
+  public Response<Void> retry(
+      @PathVariable UUID jobId, @AuthenticationPrincipal AuthenticatedUser principal) {
+    processingJobCommandService.requestRetry(jobId, principal.userId(), isAdmin(principal));
+    return Response.of(null);
+  }
+
+  @GetMapping(value = "/jobs/{jobId}/error-report", produces = "text/csv")
   public ResponseEntity<StreamingResponseBody> downloadErrorReport(
+      @PathVariable UUID jobId, @AuthenticationPrincipal AuthenticatedUser principal) {
+    return streamed(
+        processingJobQueryService.openErrorReport(jobId, principal.userId(), isAdmin(principal)));
+  }
+
+  /** Kept so existing clients holding a file id keep working; delegates to the job-scoped query. */
+  @GetMapping(value = "/{fileId}/error-report", produces = "text/csv")
+  public ResponseEntity<StreamingResponseBody> downloadErrorReportByFile(
       @PathVariable UUID fileId, @AuthenticationPrincipal AuthenticatedUser principal) {
-    InputStream report = errorReportDownloadService.download(fileId, principal.userId());
+    return streamed(
+        processingJobQueryService.openErrorReportByFile(
+            fileId, principal.userId(), isAdmin(principal)));
+  }
+
+  private static ResponseEntity<StreamingResponseBody> streamed(InputStream report) {
     StreamingResponseBody body =
         output -> {
           try (report) {
@@ -82,5 +131,28 @@ public class FileImportController {
         .contentType(MediaType.parseMediaType("text/csv"))
         .header("Content-Disposition", "attachment; filename=customer-import-errors.csv")
         .body(body);
+  }
+
+  private static MultipartFile requireExactlyOneCsv(List<MultipartFile> files) {
+    if (files.isEmpty()) {
+      throw new FileImportException(FileImportErrorCode.FILE_IMPORT_FILE_REQUIRED);
+    }
+    if (files.size() != 1) {
+      throw new FileImportException(FileImportErrorCode.FILE_IMPORT_ONLY_ONE_FILE_ALLOWED);
+    }
+    MultipartFile file = files.getFirst();
+    if (file.isEmpty()) {
+      throw new FileImportException(FileImportErrorCode.FILE_IMPORT_EMPTY_FILE);
+    }
+    String filename = file.getOriginalFilename();
+    if (filename == null || !filename.toLowerCase(Locale.ROOT).endsWith(".csv")) {
+      throw new FileImportException(FileImportErrorCode.FILE_IMPORT_UNSUPPORTED_FILE_TYPE);
+    }
+    return file;
+  }
+
+  private static boolean isAdmin(AuthenticatedUser principal) {
+    return principal.authorities().stream()
+        .anyMatch(authority -> ADMIN_ROLE.equals(authority.getAuthority()));
   }
 }

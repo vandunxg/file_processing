@@ -1,4 +1,4 @@
-package com.vandunxg.file_processing.fileimport.application.service;
+package com.vandunxg.file_processing.fileimport.infrastructure.csv;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

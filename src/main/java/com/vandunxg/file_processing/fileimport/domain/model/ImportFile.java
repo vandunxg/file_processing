@@ -89,6 +89,50 @@ public class ImportFile extends AuditableDomain {
         null);
   }
 
+  /**
+   * Rebuilds a stored file's metadata from persistence.
+   *
+   * <p>Registration invariants are not re-checked: they were enforced when the row was written, and
+   * a stored row is a fact rather than a new request. Every persisted field is a parameter, so
+   * adding one to the aggregate fails to compile here until persistence carries it too.
+   */
+  public static ImportFile reconstitute(
+      UUID id,
+      UUID ownerId,
+      String originalFilename,
+      String storageKey,
+      FileChecksum checksum,
+      long sizeBytes,
+      String detectedContentType,
+      Instant retentionDeadline,
+      String bucket,
+      StorageProvider storageProvider,
+      Long version,
+      Instant createdAt,
+      Instant lastModifiedAt) {
+    ImportFile file =
+        new ImportFile(
+            id,
+            ownerId,
+            originalFilename,
+            storageKey,
+            checksum,
+            sizeBytes,
+            detectedContentType,
+            retentionDeadline,
+            bucket,
+            storageProvider,
+            version);
+    file.setCreatedAt(createdAt);
+    file.setLastModifiedAt(lastModifiedAt);
+    return file;
+  }
+
+  /** A file whose retention window has closed can no longer be read or replayed. */
+  public boolean isExpired(Instant now) {
+    return retentionDeadline.isBefore(now);
+  }
+
   private static boolean isBlank(String value) {
     return value == null || value.isBlank();
   }

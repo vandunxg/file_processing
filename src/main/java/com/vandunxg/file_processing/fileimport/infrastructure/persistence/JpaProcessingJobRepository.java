@@ -23,6 +23,9 @@ public interface JpaProcessingJobRepository
   @Override
   Optional<ProcessingJob> findByIdAndOwnerId(UUID id, UUID ownerId);
 
+  @Override
+  Optional<ProcessingJob> findByImportFileId(UUID importFileId);
+
   /**
    * A job still marked as running whose worker stopped sending heartbeats. A job that has never
    * been claimed has no heartbeat and is not stale -- it is simply waiting.
