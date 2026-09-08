@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 import com.vandunxg.common.models.dto.response.Response;
@@ -21,6 +22,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,10 +38,19 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 @RestController
 @RequestMapping("${app.api.prefix}/${app.api.version}/file-import")
 @RequiredArgsConstructor
-@Tag(name = "File import", description = "Bearer access token required.")
+@Tag(
+    name = "File import",
+    description = "Bearer access token required. `all:manage` satisfies the `self_*` permissions.")
 public class FileImportController {
 
-  private static final String ADMIN_ROLE = "ROLE_ADMIN";
+  /**
+   * Permissions that let a caller act on a resource somebody else owns.
+   *
+   * <p>The seeded operator role only ever grants {@code *:self_*}, so anyone holding one of these
+   * is administrating rather than using their own data. Authorities in this application are {@code
+   * resource:action} permissions, never {@code ROLE_*}.
+   */
+  private static final Set<String> CROSS_OWNER_PERMISSIONS = Set.of("all:manage", "job:manage");
 
   private final FileImportCommandService fileImportCommandService;
   private final ProcessingJobCommandService processingJobCommandService;
@@ -55,6 +67,7 @@ public class FileImportController {
       consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
       produces = MediaType.APPLICATION_JSON_VALUE)
   @ResponseStatus(HttpStatus.ACCEPTED)
+  @PreAuthorize("hasPermission(null, 'file:self_create')")
   public Response<UploadFileResult> upload(
       @RequestPart("file") List<MultipartFile> files,
       @AuthenticationPrincipal AuthenticatedUser principal) {
@@ -74,50 +87,59 @@ public class FileImportController {
   }
 
   @GetMapping("/jobs/{jobId}")
+  @PreAuthorize("hasPermission(null, 'job:self_read')")
   public Response<ProcessingJobResult> getJob(
       @PathVariable UUID jobId, @AuthenticationPrincipal AuthenticatedUser principal) {
     return Response.of(
-        processingJobQueryService.get(jobId, principal.userId(), isAdmin(principal)));
+        processingJobQueryService.get(jobId, principal.userId(), canActOnAnyOwner(principal)));
   }
 
   @GetMapping("/jobs/{jobId}/progress")
+  @PreAuthorize("hasPermission(null, 'job:self_read')")
   public Response<ProcessingJobResult> getProgress(
       @PathVariable UUID jobId, @AuthenticationPrincipal AuthenticatedUser principal) {
     return Response.of(
-        processingJobQueryService.get(jobId, principal.userId(), isAdmin(principal)));
+        processingJobQueryService.get(jobId, principal.userId(), canActOnAnyOwner(principal)));
   }
 
   /** Cooperative: a running job stops at its next safe point, so this only records the request. */
   @PostMapping("/jobs/{jobId}/cancel")
   @ResponseStatus(HttpStatus.ACCEPTED)
+  @PreAuthorize("hasPermission(null, 'job:self_update')")
   public Response<Void> cancel(
       @PathVariable UUID jobId, @AuthenticationPrincipal AuthenticatedUser principal) {
-    processingJobCommandService.requestCancellation(jobId, principal.userId(), isAdmin(principal));
+    processingJobCommandService.requestCancellation(
+        jobId, principal.userId(), canActOnAnyOwner(principal));
     return Response.of(null);
   }
 
   @PostMapping("/jobs/{jobId}/retry")
   @ResponseStatus(HttpStatus.ACCEPTED)
+  @PreAuthorize("hasPermission(null, 'job:self_update')")
   public Response<Void> retry(
       @PathVariable UUID jobId, @AuthenticationPrincipal AuthenticatedUser principal) {
-    processingJobCommandService.requestRetry(jobId, principal.userId(), isAdmin(principal));
+    processingJobCommandService.requestRetry(
+        jobId, principal.userId(), canActOnAnyOwner(principal));
     return Response.of(null);
   }
 
   @GetMapping(value = "/jobs/{jobId}/error-report", produces = "text/csv")
+  @PreAuthorize("hasPermission(null, 'report:self_read')")
   public ResponseEntity<StreamingResponseBody> downloadErrorReport(
       @PathVariable UUID jobId, @AuthenticationPrincipal AuthenticatedUser principal) {
     return streamed(
-        processingJobQueryService.openErrorReport(jobId, principal.userId(), isAdmin(principal)));
+        processingJobQueryService.openErrorReport(
+            jobId, principal.userId(), canActOnAnyOwner(principal)));
   }
 
   /** Kept so existing clients holding a file id keep working; delegates to the job-scoped query. */
   @GetMapping(value = "/{fileId}/error-report", produces = "text/csv")
+  @PreAuthorize("hasPermission(null, 'report:self_read')")
   public ResponseEntity<StreamingResponseBody> downloadErrorReportByFile(
       @PathVariable UUID fileId, @AuthenticationPrincipal AuthenticatedUser principal) {
     return streamed(
         processingJobQueryService.openErrorReportByFile(
-            fileId, principal.userId(), isAdmin(principal)));
+            fileId, principal.userId(), canActOnAnyOwner(principal)));
   }
 
   private static ResponseEntity<StreamingResponseBody> streamed(InputStream report) {
@@ -151,8 +173,9 @@ public class FileImportController {
     return file;
   }
 
-  private static boolean isAdmin(AuthenticatedUser principal) {
+  private static boolean canActOnAnyOwner(AuthenticatedUser principal) {
     return principal.authorities().stream()
-        .anyMatch(authority -> ADMIN_ROLE.equals(authority.getAuthority()));
+        .map(GrantedAuthority::getAuthority)
+        .anyMatch(CROSS_OWNER_PERMISSIONS::contains);
   }
 }
