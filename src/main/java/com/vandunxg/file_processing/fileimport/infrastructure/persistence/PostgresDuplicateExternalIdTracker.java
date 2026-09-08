@@ -10,6 +10,13 @@ import com.vandunxg.file_processing.fileimport.application.capability.DuplicateE
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+/**
+ * Remembers which external IDs a single file has already offered, in a session-scoped temporary
+ * table rather than in the heap.
+ *
+ * <p>A file may hold a million rows, so a set of every ID seen so far belongs in the database, not
+ * in memory next to the streaming reader.
+ */
 @Repository
 @RequiredArgsConstructor
 public class PostgresDuplicateExternalIdTracker implements DuplicateExternalIdTracker {
@@ -28,6 +35,15 @@ public class PostgresDuplicateExternalIdTracker implements DuplicateExternalIdTr
     Connection connection = null;
     try {
       connection = dataSource.getConnection();
+      // The pool hands out connections with auto-commit off, which would leave this run's very
+      // first statement in a transaction that only closes when the import does -- minutes for a
+      // supported file. An assigned transaction id held that long pins the vacuum horizon for the
+      // whole database, so nothing the rest of the application writes can be cleaned up while any
+      // import is in progress.
+      //
+      // Committing each row instead costs one transaction id per row, which PostgreSQL is built to
+      // absorb, and the table survives because it is session-scoped and preserves rows on commit.
+      connection.setAutoCommit(true);
       try (Statement statement = connection.createStatement()) {
         statement.execute(CREATE_TABLE);
       }

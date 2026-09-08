@@ -28,4 +28,37 @@ class CsvErrorReportWriterTest {
         .contains("Nguyen Van A");
     Files.deleteIfExists(path);
   }
+
+  @Test
+  void neutralisesAValueASpreadsheetWouldTreatAsAFormula() throws Exception {
+    // The uploader controls every cell of the report, and an administrator opens reports for files
+    // other people uploaded. A cell left starting with '=' is executed by Excel when that
+    // administrator opens it, so the uploader would be running formulas on someone else's machine.
+    var path = Files.createTempFile("import-report-", ".csv");
+    try (var writer = new CsvErrorReportWriter(path)) {
+      writer.write(
+          new ValidationIssue(
+              2,
+              "=1+1",
+              ValidationErrorCode.DUPLICATE_EXTERNAL_ID_IN_FILE,
+              "external_id",
+              "Duplicate"),
+          new ParsedCustomerRow(
+              2, "=1+1", "@SUM(A1)", "a@example.com", "0912345678", "2000-01-02", "-2+3"));
+    }
+
+    String report = Files.readString(path);
+    assertThat(report.lines().skip(1))
+        .allSatisfy(
+            line ->
+                assertThat(line)
+                    .as("no cell may begin with a formula trigger")
+                    .doesNotContain(",=")
+                    .doesNotContain(",@")
+                    .doesNotContain(",-")
+                    .doesNotContain(",+"));
+    // The value is still readable, just inert.
+    assertThat(report).contains("1+1");
+    Files.deleteIfExists(path);
+  }
 }

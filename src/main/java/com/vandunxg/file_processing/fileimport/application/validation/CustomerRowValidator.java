@@ -9,11 +9,34 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 public final class CustomerRowValidator {
 
   private static final DateTimeFormatter DATE_FORMAT =
       DateTimeFormatter.ofPattern("uuuu-MM-dd").withResolverStyle(ResolverStyle.STRICT);
+
+  /**
+   * Compiled once rather than per call.
+   *
+   * <p>{@code String.matches} and {@code String.replaceAll} compile their pattern on every
+   * invocation, and this class runs five of them against every row of a file that may hold a
+   * million -- five million compilations for one import, all of the same five patterns.
+   *
+   * <p>Each is anchored by a length check before it runs, so none of them ever sees an unbounded
+   * input.
+   */
+  private static final Pattern REPEATED_WHITESPACE = Pattern.compile("\\s+");
+
+  private static final Pattern PHONE_SEPARATORS = Pattern.compile("[\\s.-]");
+
+  private static final Pattern EXTERNAL_ID = Pattern.compile("[A-Za-z0-9_-]+");
+
+  private static final Pattern EMAIL = Pattern.compile("[^\\s@]+@[^\\s@]+\\.[^\\s@]+");
+
+  private static final Pattern LOCAL_PHONE = Pattern.compile("0\\d{9}");
+
+  private static final Pattern INTERNATIONAL_PHONE = Pattern.compile("\\+84\\d{9}");
 
   private final Clock clock;
 
@@ -24,9 +47,9 @@ public final class CustomerRowValidator {
   public ValidatedCustomerRow validate(ParsedCustomerRow row) {
     List<ValidationIssue> issues = new ArrayList<>();
     String externalId = normalize(row.externalId());
-    String fullName = normalize(row.fullName()).replaceAll("\\s+", " ");
+    String fullName = REPEATED_WHITESPACE.matcher(normalize(row.fullName())).replaceAll(" ");
     String email = normalize(row.email()).toLowerCase(Locale.ROOT);
-    String phone = normalize(row.phone()).replaceAll("[\\s.-]", "");
+    String phone = PHONE_SEPARATORS.matcher(normalize(row.phone())).replaceAll("");
     String address = normalize(row.address());
 
     validateExternalId(row, externalId, issues);
@@ -56,7 +79,7 @@ public final class CustomerRowValidator {
           "external_id",
           "External ID is required",
           issues);
-    } else if (externalId.length() > 64 || !externalId.matches("[A-Za-z0-9_-]+")) {
+    } else if (externalId.length() > 64 || !EXTERNAL_ID.matcher(externalId).matches()) {
       issue(
           row,
           externalId,
@@ -106,7 +129,7 @@ public final class CustomerRowValidator {
           "email",
           "Email is required",
           issues);
-    } else if (email.length() > 254 || !email.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")) {
+    } else if (email.length() > 254 || !EMAIL.matcher(email).matches()) {
       issue(
           row, externalId, ValidationErrorCode.INVALID_EMAIL, "email", "Email is invalid", issues);
     }
@@ -124,10 +147,10 @@ public final class CustomerRowValidator {
           issues);
       return null;
     }
-    if (phone.matches("0\\d{9}")) {
+    if (LOCAL_PHONE.matcher(phone).matches()) {
       return "+84" + phone.substring(1);
     }
-    if (phone.matches("\\+84\\d{9}")) {
+    if (INTERNATIONAL_PHONE.matcher(phone).matches()) {
       return phone;
     }
     issue(row, externalId, ValidationErrorCode.INVALID_PHONE, "phone", "Phone is invalid", issues);

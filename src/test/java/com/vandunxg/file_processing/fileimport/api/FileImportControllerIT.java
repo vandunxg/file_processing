@@ -1,5 +1,6 @@
 package com.vandunxg.file_processing.fileimport.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -27,6 +28,7 @@ import com.vandunxg.file_processing.auth.domain.model.Role;
 import com.vandunxg.file_processing.auth.domain.model.RolePermission;
 import com.vandunxg.file_processing.auth.domain.model.Session;
 import com.vandunxg.file_processing.auth.domain.model.User;
+import com.vandunxg.file_processing.fileimport.application.FileImportProperties;
 import com.vandunxg.file_processing.fileimport.domain.ProcessingJobRepository;
 import com.vandunxg.file_processing.fileimport.domain.model.JobStatus;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
@@ -37,6 +39,7 @@ import com.vandunxg.file_processing.testsupport.PostgresIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.servlet.autoconfigure.MultipartProperties;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -80,6 +83,8 @@ class FileImportControllerIT extends AuthIntegrationTestBase {
   @Autowired private JdbcTemplate jdbcTemplate;
   @Autowired private TransactionTemplate transactionTemplate;
   @Autowired private InMemoryFileStorage storage;
+  @Autowired private MultipartProperties multipartProperties;
+  @Autowired private FileImportProperties fileImportProperties;
 
   @BeforeEach
   void reset() {
@@ -433,6 +438,21 @@ class FileImportControllerIT extends AuthIntegrationTestBase {
                 .queryParam("createdFrom", "2026-09-08")
                 .header("Authorization", "Bearer " + owner.token()))
         .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void theListIsNotReachableWithoutAToken() throws Exception {
+    // The owner check reads the principal, so an unauthenticated request must be stopped by the
+    // filter chain rather than reaching the handler with nothing to scope the query to.
+    mockMvc.perform(get("/api/v1/file-import/jobs")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void theSizeTheApiAdvertisesIsTheSizeTheTransportWillAccept() {
+    // A request over the servlet limit is refused by the container before any handler runs, so a
+    // smaller multipart limit would make FILE_IMPORT_FILE_TOO_LARGE unreachable and answer a
+    // different error instead.
+    assertThat(multipartProperties.getMaxFileSize()).isEqualTo(fileImportProperties.maxFileSize());
   }
 
   /** Stores a file and queues its job for {@code ownerId}, backdated to {@code createdAt}. */

@@ -14,9 +14,25 @@ import com.vandunxg.file_processing.fileimport.application.validation.Validation
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 
+/**
+ * Writes the report of rejected rows.
+ *
+ * <p>Every cell comes from the uploaded file, and the person who opens the report is not always the
+ * person who uploaded it -- an administrator reads reports for other owners' imports. A cell left
+ * starting with {@code =}, {@code +}, {@code -} or {@code @} is a formula to a spreadsheet, so the
+ * uploader would be choosing what runs on the reader's machine. Quoting by the CSV writer does not
+ * prevent that: it protects the file's structure, not the reader's application.
+ */
 public final class CsvErrorReportWriter implements AutoCloseable {
 
   private static final ObjectMapper JSON = new ObjectMapper();
+
+  /**
+   * Characters that make a spreadsheet read a cell as a formula rather than text. The two control
+   * characters are included because a leading tab or carriage return is stripped before the rest of
+   * the cell is interpreted.
+   */
+  private static final String FORMULA_TRIGGERS = "=+-@\t\r";
 
   private final CSVPrinter printer;
 
@@ -42,11 +58,11 @@ public final class CsvErrorReportWriter implements AutoCloseable {
     try {
       printer.printRecord(
           issue.rowNumber(),
-          issue.externalId(),
+          asText(issue.externalId()),
           issue.code(),
           issue.field(),
           issue.message(),
-          JSON.writeValueAsString(originalData(row)));
+          asText(JSON.writeValueAsString(originalData(row))));
     } catch (IOException exception) {
       throw new UncheckedIOException("Unable to write CSV error report", exception);
     }
@@ -55,6 +71,19 @@ public final class CsvErrorReportWriter implements AutoCloseable {
   @Override
   public void close() throws IOException {
     printer.close();
+  }
+
+  /**
+   * Keeps a value readable while making a spreadsheet treat it as text.
+   *
+   * <p>A leading apostrophe is the convention spreadsheets already understand, and they hide it
+   * again when displaying the cell, so the value a reader sees is unchanged.
+   */
+  private static String asText(String value) {
+    if (value == null || value.isEmpty() || FORMULA_TRIGGERS.indexOf(value.charAt(0)) < 0) {
+      return value;
+    }
+    return "'" + value;
   }
 
   private static Map<String, String> originalData(ParsedCustomerRow row) {

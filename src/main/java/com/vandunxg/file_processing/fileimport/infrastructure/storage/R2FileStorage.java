@@ -19,6 +19,14 @@ import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
+/**
+ * Reads and writes the originals and the reports.
+ *
+ * <p>Neither the upload nor the download is given a timeout on its total duration: both stream a
+ * file that may be 500 MB, and the SDK's api-call timeout covers the body transfer, so it would
+ * abort a healthy transfer for being large. A stalled connection is still caught by the HTTP
+ * client's idle read and write timeouts. Deleting moves no data, so it does get the configured cap.
+ */
 @Component
 @RequiredArgsConstructor
 public class R2FileStorage implements FileStorage {
@@ -53,8 +61,7 @@ public class R2FileStorage implements FileStorage {
   @Override
   public void delete(String storageKey) {
     try {
-      r2Client.deleteObject(
-          DeleteObjectRequest.builder().bucket(properties.bucket()).key(storageKey).build());
+      r2Client.deleteObject(deleteRequest(storageKey));
     } catch (SdkException exception) {
       throw new FileImportException(FileImportErrorCode.FILE_IMPORT_STORAGE_UNAVAILABLE, exception);
     }
@@ -70,6 +77,14 @@ public class R2FileStorage implements FileStorage {
     }
   }
 
+  private DeleteObjectRequest deleteRequest(String storageKey) {
+    return DeleteObjectRequest.builder()
+        .bucket(properties.bucket())
+        .key(storageKey)
+        .overrideConfiguration(override -> override.apiCallTimeout(properties.apiCallTimeout()))
+        .build();
+  }
+
   private static MessageDigest sha256() {
     try {
       return MessageDigest.getInstance("SHA-256");
@@ -80,8 +95,7 @@ public class R2FileStorage implements FileStorage {
 
   private void deleteAfterFailedStore(String storageKey) {
     try {
-      r2Client.deleteObject(
-          DeleteObjectRequest.builder().bucket(properties.bucket()).key(storageKey).build());
+      r2Client.deleteObject(deleteRequest(storageKey));
     } catch (SdkException ignored) {
       // Best effort only: the original storage failure remains the actionable error.
     }
