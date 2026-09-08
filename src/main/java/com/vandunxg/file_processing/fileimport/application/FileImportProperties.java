@@ -19,7 +19,10 @@ import org.springframework.util.unit.DataSize;
  * @param progressTimeInterval time to elapse before persisting progress
  * @param pollInterval how often a worker looks for queued work
  * @param staleHeartbeatThreshold silence after which a running job is treated as abandoned
- * @param workerThreads imports this instance may run at the same time
+ * @param workerThreads imports this instance may run at the same time. Each run holds a database
+ *     connection for its whole duration -- the in-file duplicate tracker keeps a session-scoped
+ *     temporary table alive -- and needs a second, short-lived one per batch. Raising this above
+ *     roughly half the connection pool size will starve the pool and stall every run.
  */
 @ConfigurationProperties(prefix = "app.file-import")
 public record FileImportProperties(

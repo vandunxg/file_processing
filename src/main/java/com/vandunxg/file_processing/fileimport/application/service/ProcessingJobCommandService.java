@@ -14,6 +14,7 @@ import com.vandunxg.file_processing.fileimport.domain.model.AttemptTrigger;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +42,13 @@ public class ProcessingJobCommandService {
     return claimed;
   }
 
+  /**
+   * Persists a checkpoint of a run in progress.
+   *
+   * <p>May fail with {@link OptimisticLockingFailureException} when someone writes to the same job
+   * concurrently -- a cancellation request, typically. The caller decides what that means; for a
+   * checkpoint it is tolerable.
+   */
   @Transactional
   public void recordProgress(
       UUID jobId,

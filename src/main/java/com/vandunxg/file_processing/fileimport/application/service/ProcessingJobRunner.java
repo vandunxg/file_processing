@@ -24,6 +24,7 @@ import com.vandunxg.file_processing.fileimport.domain.model.ImportFile;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
 /**
@@ -154,14 +155,26 @@ public class ProcessingJobRunner {
     batch.clear();
   }
 
+  /**
+   * Checkpoints progress, tolerating a lost race.
+   *
+   * <p>A cancellation request writes to the same row, so a checkpoint can lose. Letting that
+   * propagate would abort the run and mark the job FAILED, turning a cancellation into a failure.
+   * The totals are advisory between checkpoints and the next one reports them anyway -- and the
+   * cancellation check immediately after this will see why the write lost.
+   */
   private void persistProgress(ProcessingJob job, Counters counters) {
-    processingJobCommandService.recordProgress(
-        job.getId(),
-        counters.processedRows,
-        counters.validRows,
-        counters.invalidRows,
-        counters.insertedRows,
-        counters.updatedRows);
+    try {
+      processingJobCommandService.recordProgress(
+          job.getId(),
+          counters.processedRows,
+          counters.validRows,
+          counters.invalidRows,
+          counters.insertedRows,
+          counters.updatedRows);
+    } catch (OptimisticLockingFailureException conflict) {
+      log.debug("[run] jobId={} checkpoint skipped, job changed concurrently", job.getId());
+    }
   }
 
   private void failQuietly(ProcessingJob job, String code, String summary, Exception cause) {
