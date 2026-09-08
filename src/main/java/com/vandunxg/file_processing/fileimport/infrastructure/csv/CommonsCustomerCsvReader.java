@@ -4,7 +4,6 @@ import java.io.InputStream;
 import java.time.Clock;
 
 import com.vandunxg.file_processing.fileimport.application.capability.CustomerCsvReader;
-import com.vandunxg.file_processing.fileimport.application.capability.DuplicateExternalIdTracker;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -14,7 +13,6 @@ import org.springframework.stereotype.Component;
 public class CommonsCustomerCsvReader implements CustomerCsvReader {
 
   private final Clock clock;
-  private final DuplicateExternalIdTracker duplicateExternalIdTracker;
 
   @Override
   public void validateHeader(InputStream input) {
@@ -25,6 +23,6 @@ public class CommonsCustomerCsvReader implements CustomerCsvReader {
 
   @Override
   public Run open(InputStream input) {
-    return new CsvValidationReader(input, clock, duplicateExternalIdTracker);
+    return new CsvValidationReader(input, clock);
   }
 }

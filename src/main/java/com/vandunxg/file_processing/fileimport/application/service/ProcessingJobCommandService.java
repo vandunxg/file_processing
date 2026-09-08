@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import com.vandunxg.file_processing.auth.domain.model.OperationType;
 import com.vandunxg.file_processing.fileimport.application.FileImportProperties;
+import com.vandunxg.file_processing.fileimport.application.capability.CustomerImportStaging;
 import com.vandunxg.file_processing.fileimport.application.capability.ErrorReportStore;
 import com.vandunxg.file_processing.fileimport.application.capability.FileImportMetrics;
 import com.vandunxg.file_processing.fileimport.application.capability.FileStorage;
@@ -39,6 +40,7 @@ public class ProcessingJobCommandService {
   private final ProcessingJobRepository processingJobRepository;
   private final ImportFileRepository importFileRepository;
   private final ErrorReportStore errorReportStore;
+  private final CustomerImportStaging customerImportStaging;
   private final FileStorage fileStorage;
   private final FileImportProperties properties;
   private final FileImportAuditService auditService;
@@ -224,6 +226,10 @@ public class ProcessingJobCommandService {
     }
     job.fail("WORKER_LOST", "Worker stopped reporting progress", now);
     processingJobRepository.save(job);
+    // Unlike ordinary failures, a lost process never reaches the runner's finally block. The
+    // attempt-scoped workspace holds PII only to generate a report, so recovery clears it as part
+    // of the same short transaction that declares the attempt terminal.
+    customerImportStaging.clear(job.getId(), job.getCurrentAttempt());
     log.warn("[recover] jobId={} marked failed after lost worker", jobId);
     auditService.record(OperationType.STALE_JOB_MARKED_FAILED, jobId, null, now);
   }

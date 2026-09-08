@@ -77,6 +77,9 @@ class ProcessingJobRunnerIT extends AuthIntegrationTestBase {
     assertThat(job.getTotalRows()).isEqualTo(3);
     assertThat(job.getProgressPercent()).isEqualTo(100);
     assertThat(customerCount()).isEqualTo(3);
+    assertThat(
+            jdbcTemplate.queryForObject("SELECT count(*) FROM customer_import_staging", Long.class))
+        .isZero();
   }
 
   @Test
@@ -114,16 +117,32 @@ class ProcessingJobRunnerIT extends AuthIntegrationTestBase {
   }
 
   @Test
-  void aRowRepeatedInTheSameFileIsProcessedOnceAndRejectedAfterwards() {
-    UUID jobId = queue(HEADER + validRow("CUS_01") + validRow("CUS_01"));
+  void firstFieldValidOccurrenceWinsAndReportStaysInPhysicalRowOrder() {
+    UUID jobId =
+        queue(
+            HEADER
+                + "CUS_01,Nguyen Van A,invalid,0912345678,2000-01-02,\n"
+                + validRow("CUS_01")
+                + validRow("CUS_01"));
 
     runner.runNextJob();
 
     ProcessingJob job = jobs.findById(jobId).orElseThrow();
     assertThat(job.getStatus()).isEqualTo(JobStatus.COMPLETED_WITH_ERRORS);
     assertThat(job.getValidRows()).isOne();
-    assertThat(job.getInvalidRows()).isOne();
-    assertThat(storage.read(job.getErrorReportKey())).contains("DUPLICATE_EXTERNAL_ID_IN_FILE");
+    assertThat(job.getInvalidRows()).isEqualTo(2);
+    String report = storage.read(job.getErrorReportKey());
+    assertThat(report)
+        .contains("INVALID_EMAIL")
+        .contains("DUPLICATE_EXTERNAL_ID_IN_FILE")
+        .satisfies(
+            content ->
+                assertThat(content.indexOf("INVALID_EMAIL"))
+                    .isLessThan(content.indexOf("DUPLICATE_EXTERNAL_ID_IN_FILE")));
+    assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT email FROM customers WHERE external_id = 'CUS_01'", String.class))
+        .isEqualTo("cus_01@example.com");
   }
 
   @Test
@@ -145,7 +164,7 @@ class ProcessingJobRunnerIT extends AuthIntegrationTestBase {
   }
 
   @Test
-  void cancellationStopsAtASafePointAndKeepsTheBatchesAlreadyCommitted() {
+  void cancellationStopsAtAStagingSafePointBeforeAnyCustomerMerge() {
     UUID jobId =
         queue(
             HEADER
@@ -167,10 +186,11 @@ class ProcessingJobRunnerIT extends AuthIntegrationTestBase {
     assertThat(job.getErrorReportKey()).isNull();
     assertThat(job.getAttempts().getLast().getStatus()).isEqualTo(AttemptStatus.CANCELLED);
     assertThat(storage.keys()).noneMatch(key -> key.startsWith("reports/"));
-    // It stopped early, and everything committed before the safe point survived.
+    // The new two-phase design only merges canonical rows after parsing reaches EOF. Cancelling
+    // while staging therefore leaves customer data untouched; a retry restarts from the original.
     assertThat(job.getProcessedRows()).isLessThan(6);
-    assertThat(customerCount()).isEqualTo(job.getInsertedRows());
-    assertThat(customerCount()).isPositive();
+    assertThat(customerCount()).isZero();
+    assertThat(job.getInsertedRows()).isZero();
   }
 
   @Test

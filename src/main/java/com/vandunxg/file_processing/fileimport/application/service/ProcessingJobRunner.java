@@ -14,12 +14,17 @@ import com.vandunxg.file_processing.customer.application.result.ImportCustomerBa
 import com.vandunxg.file_processing.customer.application.service.CustomerImportService;
 import com.vandunxg.file_processing.fileimport.application.FileImportProperties;
 import com.vandunxg.file_processing.fileimport.application.capability.CustomerCsvReader;
+import com.vandunxg.file_processing.fileimport.application.capability.CustomerImportStaging;
 import com.vandunxg.file_processing.fileimport.application.capability.ErrorReportStore;
 import com.vandunxg.file_processing.fileimport.application.capability.FileStorage;
+import com.vandunxg.file_processing.fileimport.application.command.StagedCustomerRow;
 import com.vandunxg.file_processing.fileimport.application.exception.CsvFormatException;
+import com.vandunxg.file_processing.fileimport.application.result.StagedReportRow;
+import com.vandunxg.file_processing.fileimport.application.result.StagingResolution;
 import com.vandunxg.file_processing.fileimport.application.validation.NormalizedCustomerRow;
 import com.vandunxg.file_processing.fileimport.application.validation.ValidatedCustomerRow;
 import com.vandunxg.file_processing.fileimport.domain.ImportFileRepository;
+import com.vandunxg.file_processing.fileimport.domain.exception.ProcessingJobRuleViolation;
 import com.vandunxg.file_processing.fileimport.domain.model.ImportFile;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
 import lombok.RequiredArgsConstructor;
@@ -32,14 +37,15 @@ import org.springframework.stereotype.Service;
  *
  * <p>Deliberately not transactional. The file may hold a million rows, so wrapping the run in one
  * transaction would hold a connection for its whole duration and lose every committed row if the
- * last batch failed. Instead each customer batch commits on its own and progress is checkpointed
- * separately, which is what lets a failure halfway through keep the work already done and lets a
- * retry replay the file harmlessly.
+ * last batch failed. Instead staging batches and later canonical-customer batches each commit on
+ * their own, while progress is checkpointed separately. A failure during merge keeps earlier merge
+ * batches, and a retry can safely rebuild staging from the immutable original file.
  *
- * <p>Rows stream through one batch at a time: the file is never read into memory, and the batch
- * list is the only buffer. Processing is sequential because one atomic upsert per batch already
- * meets the throughput requirement, and concurrency here would buy little while making cancellation
- * and failure handling much harder to reason about.
+ * <p>Rows stream through one staging batch at a time: the file is never read into memory, and the
+ * batch list is the only buffer. After EOF, PostgreSQL resolves duplicate external IDs set-wise and
+ * canonical rows merge in bounded batches. Processing is sequential because one atomic upsert per
+ * batch already meets the throughput requirement, and concurrency here would buy little while
+ * making cancellation and failure handling much harder to reason about.
  */
 @Service
 @RequiredArgsConstructor
@@ -50,6 +56,7 @@ public class ProcessingJobRunner {
   private final ImportFileRepository importFileRepository;
   private final FileStorage fileStorage;
   private final CustomerCsvReader customerCsvReader;
+  private final CustomerImportStaging customerImportStaging;
   private final ErrorReportStore errorReportStore;
   private final CustomerImportService customerImportService;
   private final ProcessingWorkerControl workerControl;
@@ -80,9 +87,13 @@ public class ProcessingJobRunner {
     } catch (CsvFormatException exception) {
       // The specific code matters: a row-cap breach is permanent, and reporting every parse problem
       // as one generic failure sends the user to retry a file that can never succeed.
+      checkpointBeforeFailure(job, counters);
       failQuietly(job, exception.code().name(), "The file could not be parsed", exception);
     } catch (RuntimeException | IOException exception) {
+      checkpointBeforeFailure(job, counters);
       failQuietly(job, "PROCESSING_FAILED", "Processing stopped on a system error", exception);
+    } finally {
+      clearStaging(job);
     }
   }
 
@@ -112,6 +123,14 @@ public class ProcessingJobRunner {
       // WORKER_LOST transition after a forced shutdown, rather than pretending the run completed.
       return;
     }
+    log.debug(
+        "[run] completing jobId={} processed={} valid={} invalid={} inserted={} updated={}",
+        job.getId(),
+        counters.processedRows,
+        counters.validRows,
+        counters.invalidRows,
+        counters.insertedRows,
+        counters.updatedRows);
     processingJobCommandService.complete(
         job.getId(),
         counters.processedRows,
@@ -125,11 +144,11 @@ public class ProcessingJobRunner {
   private Outcome process(ProcessingJob job, ImportFile file, Counters counters)
       throws IOException {
     Checkpoint checkpoint = new Checkpoint(Instant.now(clock));
-    List<ImportCustomerRow> batch = new ArrayList<>(properties.batchSize());
+    List<StagedCustomerRow> batch = new ArrayList<>(properties.batchSize());
+    customerImportStaging.clear(job.getId(), job.getCurrentAttempt());
 
     try (InputStream input = fileStorage.open(file.getStorageKey());
-        CustomerCsvReader.Run rows = customerCsvReader.open(input);
-        ErrorReportStore.Draft report = errorReportStore.open(job.getId())) {
+        CustomerCsvReader.Run rows = customerCsvReader.open(input)) {
       while (true) {
         var next = rows.next();
         if (next.isEmpty()) {
@@ -139,17 +158,17 @@ public class ProcessingJobRunner {
         counters.processedRows++;
 
         if (validated.row().isEmpty()) {
-          // A rejected row is a business outcome, not a failure: it is reported and the run
-          // continues. Its issues all belong to one source row, so invalidRows counts the row once.
+          // Field-invalid rows are retained in staging only long enough to produce a source-ordered
+          // report. Duplicate validation is resolved after the stream reaches EOF.
           counters.invalidRows++;
-          validated.issues().forEach(issue -> report.write(issue, validated.originalRow()));
         } else {
           counters.validRows++;
-          batch.add(toImportRow(validated.row().orElseThrow()));
         }
+        batch.add(
+            new StagedCustomerRow(validated.originalRow(), validated.row(), validated.issues()));
 
         if (batch.size() >= properties.batchSize()) {
-          flush(job, batch, counters);
+          stage(job, batch);
           Outcome stop = stopAtSafePoint(job);
           if (stop != null) {
             return stop;
@@ -160,7 +179,7 @@ public class ProcessingJobRunner {
         // for
         // the recovery scan to declare its worker dead and requeue a job that is still running.
         if (checkpoint.isDue(counters.processedRows, Instant.now(clock))) {
-          flush(job, batch, counters);
+          stage(job, batch);
           boolean stopRequested = persistProgress(job, counters);
           checkpoint.reset(counters.processedRows, Instant.now(clock));
           if (stopRequested) {
@@ -172,7 +191,7 @@ public class ProcessingJobRunner {
           }
         }
       }
-      flush(job, batch, counters);
+      stage(job, batch);
       if (persistProgress(job, counters)) {
         // Checked before publishing rather than after: a cancelled job drops the report key, so
         // uploading first would leave an object in the bucket that nothing references.
@@ -181,21 +200,94 @@ public class ProcessingJobRunner {
       if (workerControl.isStopping()) {
         return Outcome.stoppedByShutdown();
       }
-      // Only a run that reached end of file publishes its report, so a cancelled or failed attempt
-      // never leaves a partial report looking like the final one.
-      return Outcome.finished(report.publish());
+
+      StagingResolution resolution =
+          customerImportStaging.resolve(job.getId(), job.getCurrentAttempt());
+      counters.validRows = resolution.validRows();
+      counters.invalidRows = resolution.invalidRows();
+      if (persistProgress(job, counters)) {
+        return Outcome.stoppedByCancellation();
+      }
+
+      Outcome stopped = mergeCanonicalRows(job, counters, checkpoint);
+      if (stopped != null) {
+        return stopped;
+      }
+      return publishReport(job);
     }
   }
 
-  private void flush(ProcessingJob job, List<ImportCustomerRow> batch, Counters counters) {
+  private void stage(ProcessingJob job, List<StagedCustomerRow> batch) {
     if (batch.isEmpty()) {
       return;
     }
-    ImportCustomerBatchResult result =
-        customerImportService.importBatch(new ImportCustomerBatchCommand(job.getId(), batch));
-    counters.insertedRows += result.insertedRows();
-    counters.updatedRows += result.updatedRows();
+    customerImportStaging.append(job.getId(), job.getCurrentAttempt(), batch);
     batch.clear();
+  }
+
+  private Outcome mergeCanonicalRows(ProcessingJob job, Counters counters, Checkpoint checkpoint) {
+    long afterRowNumber = 0;
+    while (true) {
+      List<StagedCustomerRow> canonical =
+          customerImportStaging.canonicalRowsAfter(
+              job.getId(), job.getCurrentAttempt(), afterRowNumber, properties.batchSize());
+      if (canonical.isEmpty()) {
+        return null;
+      }
+      List<ImportCustomerRow> customers =
+          canonical.stream().map(ProcessingJobRunner::toImportRow).toList();
+      ImportCustomerBatchResult result =
+          customerImportService.importBatch(new ImportCustomerBatchCommand(job.getId(), customers));
+      counters.insertedRows += result.insertedRows();
+      counters.updatedRows += result.updatedRows();
+      afterRowNumber = canonical.getLast().originalRow().rowNumber();
+
+      Outcome stopped = stopAtSafePoint(job);
+      if (stopped != null) {
+        return stopped;
+      }
+      if (checkpoint.isDue(counters.processedRows, Instant.now(clock))) {
+        if (persistProgress(job, counters)) {
+          return Outcome.stoppedByCancellation();
+        }
+        checkpoint.reset(counters.processedRows, Instant.now(clock));
+      }
+    }
+  }
+
+  private Outcome publishReport(ProcessingJob job) {
+    try (ErrorReportStore.Draft report = errorReportStore.open(job.getId())) {
+      long afterRowNumber = 0;
+      int afterIssueOrder = -1;
+      int afterSource = -1;
+      while (true) {
+        List<StagedReportRow> records =
+            customerImportStaging.reportRowsAfter(
+                job.getId(),
+                job.getCurrentAttempt(),
+                afterRowNumber,
+                afterIssueOrder,
+                afterSource,
+                properties.batchSize());
+        if (records.isEmpty()) {
+          break;
+        }
+        for (StagedReportRow record : records) {
+          report.write(record.issue(), record.originalRow());
+        }
+        StagedReportRow last = records.getLast();
+        afterRowNumber = last.issue().rowNumber();
+        afterIssueOrder = last.issueOrder();
+        afterSource = last.source();
+
+        Outcome stopped = stopAtSafePoint(job);
+        if (stopped != null) {
+          return stopped;
+        }
+      }
+      Outcome stopped = stopAtSafePoint(job);
+      return stopped == null ? Outcome.finished(report.publish()) : stopped;
+    }
   }
 
   /** A completed batch is the cancellation and shutdown safe point. */
@@ -239,10 +331,11 @@ public class ProcessingJobRunner {
     // Parser, JDBC and object-storage exception messages can include a customer value, a bucket
     // path or credentials. Keep the diagnostic category without serialising those details to logs.
     log.error(
-        "[run] jobId={} failed code={} causeType={}",
+        "[run] jobId={} failed code={} causeType={} rule={}",
         job.getId(),
         code,
-        cause.getClass().getSimpleName());
+        cause.getClass().getSimpleName(),
+        cause instanceof ProcessingJobRuleViolation violation ? violation.getRule() : "n/a");
     try {
       processingJobCommandService.fail(job.getId(), code, summary);
     } catch (RuntimeException failure) {
@@ -253,7 +346,31 @@ public class ProcessingJobRunner {
     }
   }
 
-  private static ImportCustomerRow toImportRow(NormalizedCustomerRow row) {
+  /**
+   * Captures already committed customer merge batches before a later batch fails.
+   *
+   * <p>Normal progress remains rate-limited. This is the exceptional path, where preserving exact
+   * terminal counters matters more than avoiding one final short transaction.
+   */
+  private void checkpointBeforeFailure(ProcessingJob job, Counters counters) {
+    try {
+      processingJobCommandService.recordProgress(
+          job.getId(),
+          counters.processedRows,
+          counters.validRows,
+          counters.invalidRows,
+          counters.insertedRows,
+          counters.updatedRows);
+    } catch (RuntimeException exception) {
+      log.warn(
+          "[run] could not checkpoint before failure jobId={} causeType={}",
+          job.getId(),
+          exception.getClass().getSimpleName());
+    }
+  }
+
+  private static ImportCustomerRow toImportRow(StagedCustomerRow staged) {
+    NormalizedCustomerRow row = staged.normalizedRow().orElseThrow();
     return new ImportCustomerRow(
         row.externalId(),
         row.fullName(),
@@ -261,6 +378,21 @@ public class ProcessingJobRunner {
         row.phone(),
         row.dateOfBirth(),
         row.address());
+  }
+
+  private void clearStaging(ProcessingJob job) {
+    try {
+      customerImportStaging.clear(job.getId(), job.getCurrentAttempt());
+    } catch (RuntimeException exception) {
+      // The stage is a reconstructable workspace. Do not hide the actual processing failure or
+      // turn a successful job into a failed one merely because best-effort PII cleanup raced a DB
+      // outage; the cleanup task can safely retry this idempotent deletion.
+      log.warn(
+          "[run] could not clear staging jobId={} attempt={} causeType={}",
+          job.getId(),
+          job.getCurrentAttempt(),
+          exception.getClass().getSimpleName());
+    }
   }
 
   private record Outcome(boolean cancelled, boolean shutdown, String reportKey) {
