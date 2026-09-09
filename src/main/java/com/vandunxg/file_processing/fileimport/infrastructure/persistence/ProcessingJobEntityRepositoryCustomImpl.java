@@ -6,26 +6,21 @@ import java.util.Map;
 import com.vandunxg.common.persistence.repository.custom.BaseEntityRepositoryCustom;
 import com.vandunxg.common.persistence.support.SqlUtils;
 import com.vandunxg.common.utils.StrUtils;
-import com.vandunxg.file_processing.fileimport.application.capability.ProcessingJobSearchRepository;
 import com.vandunxg.file_processing.fileimport.application.query.ProcessingJobSearchQuery;
-import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
-import org.springframework.stereotype.Repository;
+import com.vandunxg.file_processing.fileimport.infrastructure.persistence.entity.ProcessingJobEntity;
 
 /**
  * Runs the job list.
  *
- * <p>A plain bean rather than a Spring Data fragment: the read model is reached through the
- * application capability, so nothing needs it hanging off the aggregate repository. {@code count}
- * and {@code search} come from the shared paging base, which also applies the default {@code
- * createdAt desc} ordering when the caller asks for no sort.
+ * <p>{@code count} and {@code search} come from the shared paging base, which also applies the
+ * default {@code createdAt desc} ordering when the caller asks for no sort.
  */
-@Repository
-public class JpaProcessingJobSearchRepository
-    extends BaseEntityRepositoryCustom<ProcessingJob, ProcessingJobSearchQuery>
-    implements ProcessingJobSearchRepository {
+public class ProcessingJobEntityRepositoryCustomImpl
+    extends BaseEntityRepositoryCustom<ProcessingJobEntity, ProcessingJobSearchQuery>
+    implements ProcessingJobEntityRepositoryCustom {
 
-  public JpaProcessingJobSearchRepository() {
-    super(ProcessingJob.class);
+  protected ProcessingJobEntityRepositoryCustomImpl() {
+    super(ProcessingJobEntity.class);
   }
 
   @Override

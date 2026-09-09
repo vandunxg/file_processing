@@ -1,9 +1,11 @@
 package com.vandunxg.file_processing.fileimport.infrastructure.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -21,6 +23,7 @@ import com.vandunxg.file_processing.testsupport.PostgresIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -130,6 +133,87 @@ class JpaProcessingJobRepositoryIT extends AuthIntegrationTestBase {
 
     assertThat(found).extracting(ProcessingJob::getId).containsExactly(stale.getId());
     assertThat(found).extracting(ProcessingJob::getId).doesNotContain(fresh.getId());
+  }
+
+  /**
+   * A write merges the aggregate over the stored rows, and the history it carries is append-only.
+   * Were the merge to replace the collection rather than update it, the earlier attempts would be
+   * deleted and reinserted -- the rows would still look right while their identity and creation
+   * time, the only record of when that run actually happened, had silently changed.
+   */
+  @Test
+  void savingAJobUpdatesItsEarlierAttemptsInPlaceInsteadOfReplacingThem() {
+    repository.save(ProcessingJob.queue(insertImportFile(), UUID.randomUUID(), NOW));
+    ProcessingJob claimed = repository.claimNextQueued(NOW).orElseThrow();
+    Map<String, Object> firstAttemptBefore = attemptRows().getFirst();
+
+    claimed.fail("DATABASE_BATCH_FAILED", "database batch failed", NOW.plusSeconds(1));
+    claimed.requestRetry(AttemptTrigger.USER_RETRY);
+    repository.save(claimed);
+    repository.claimNextQueued(NOW.plusSeconds(2)).orElseThrow();
+
+    List<Map<String, Object>> attempts = attemptRows();
+    assertThat(attempts).hasSize(2);
+    assertThat(attempts.getFirst())
+        .containsEntry("id", firstAttemptBefore.get("id"))
+        .containsEntry("created_at", firstAttemptBefore.get("created_at"))
+        .containsEntry("status", AttemptStatus.FAILED.name());
+    assertThat(attempts.get(1)).containsEntry("status", AttemptStatus.RUNNING.name());
+  }
+
+  /**
+   * The creation audit survives the merge that a write performs.
+   *
+   * <p>What makes this true is {@code updatable = false} on {@code AuditableEntity}, not anything
+   * the mapper does -- so this pins the guarantee where a caller actually depends on it: an entity
+   * that dropped that flag, or a write path that stopped going through it, shows up here.
+   */
+  @Test
+  void theCreationAuditOfAJobSurvivesEveryLaterWrite() {
+    ProcessingJob queued =
+        repository.save(ProcessingJob.queue(insertImportFile(), UUID.randomUUID(), NOW));
+    Object createdAtAfterInsert = jobRow(queued.getId()).get("created_at");
+    assertThat(createdAtAfterInsert).isNotNull();
+
+    ProcessingJob claimed = repository.claimNextQueued(NOW).orElseThrow();
+    claimed.complete(null, NOW.plusSeconds(1));
+    repository.save(claimed);
+
+    assertThat(jobRow(queued.getId()))
+        .containsEntry("created_at", createdAtAfterInsert)
+        .containsEntry("status", JobStatus.COMPLETED.name());
+  }
+
+  /**
+   * Two transactions may load the same job; only the first one to write may win. The aggregate
+   * carries the lock version it was loaded at, so the loser is rejected instead of overwriting a
+   * decision it never saw.
+   */
+  @Test
+  void aJobLoadedBeforeSomebodyElseMovedItCannotSaveOverThem() {
+    ProcessingJob queued =
+        repository.save(ProcessingJob.queue(insertImportFile(), UUID.randomUUID(), NOW));
+    repository.claimNextQueued(NOW).orElseThrow();
+
+    ProcessingJob winner = repository.findById(queued.getId()).orElseThrow();
+    ProcessingJob loser = repository.findById(queued.getId()).orElseThrow();
+    winner.recordProgress(2, 2, 0, 2, 0, NOW.plusSeconds(1));
+    repository.save(winner);
+
+    loser.recordProgress(4, 4, 0, 4, 0, NOW.plusSeconds(2));
+    assertThatThrownBy(() -> repository.save(loser))
+        .isInstanceOf(OptimisticLockingFailureException.class);
+    assertThat(repository.findById(queued.getId()).orElseThrow().getProcessedRows()).isEqualTo(2);
+  }
+
+  private List<Map<String, Object>> attemptRows() {
+    return jdbcTemplate.queryForList(
+        "SELECT id, created_at, status FROM processing_attempt ORDER BY attempt_number ASC");
+  }
+
+  private Map<String, Object> jobRow(UUID jobId) {
+    return jdbcTemplate.queryForMap(
+        "SELECT created_at, status FROM processing_job WHERE id = ?", jobId);
   }
 
   private UUID insertImportFile() {

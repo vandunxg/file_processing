@@ -28,7 +28,7 @@ import com.vandunxg.file_processing.fileimport.application.result.UploadFileResu
 import com.vandunxg.file_processing.fileimport.application.service.FileImportCommandService;
 import com.vandunxg.file_processing.fileimport.application.service.ProcessingJobCommandService;
 import com.vandunxg.file_processing.fileimport.application.service.ProcessingJobQueryService;
-import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
+import com.vandunxg.file_processing.fileimport.infrastructure.persistence.entity.ProcessingJobEntity;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -156,7 +156,7 @@ public class FileImportController {
   @GetMapping("/jobs")
   @PreAuthorize(READ_JOB)
   public PagingResponse<ProcessingJobSummaryResult> listJobs(
-      @ValidatePaging(sortModel = ProcessingJob.class) ProcessingJobSearchRequest request,
+      @ValidatePaging(sortModel = ProcessingJobEntity.class) ProcessingJobSearchRequest request,
       @AuthenticationPrincipal AuthenticatedUser principal) {
     PageDTO<ProcessingJobSummaryResult> page =
         processingJobQueryService.list(

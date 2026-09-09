@@ -3,14 +3,8 @@ package com.vandunxg.file_processing.fileimport.domain.model;
 import java.time.Instant;
 import java.util.UUID;
 
-import com.vandunxg.common.models.entities.AuditableEntity;
+import com.vandunxg.common.models.domain.AuditableDomain;
 import com.vandunxg.common.utils.IdUtils;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 
@@ -21,67 +15,28 @@ import lombok.Getter;
  * the record of why a job ran and how it ended survives every later run. Only the job that owns
  * this attempt may create or finish it, which is why the lifecycle methods are package-private.
  */
-@Entity
-@Table(name = "processing_attempt")
 @Getter
 @EqualsAndHashCode(callSuper = false, of = "id")
-public class ProcessingAttempt extends AuditableEntity {
+public class ProcessingAttempt extends AuditableDomain {
 
-  @Id
-  @Column(name = "id")
-  private UUID id;
+  private final UUID id;
 
-  /**
-   * Written through the owning job's join column, so it is read-only here and exists only to let
-   * callers correlate an attempt with its job without navigating back up.
-   */
-  @Column(name = "job_id", nullable = false, insertable = false, updatable = false)
-  private UUID jobId;
+  /** Lets a caller correlate an attempt with its job without navigating back up. */
+  private final UUID jobId;
 
-  @Column(name = "attempt_number", nullable = false)
-  private int attemptNumber;
-
-  @Enumerated(EnumType.STRING)
-  @Column(name = "\"trigger\"", nullable = false, length = 30)
-  private AttemptTrigger trigger;
-
-  @Enumerated(EnumType.STRING)
-  @Column(name = "status", nullable = false, length = 30)
+  private final int attemptNumber;
+  private final AttemptTrigger trigger;
   private AttemptStatus status;
-
-  @Column(name = "started_at", nullable = false)
-  private Instant startedAt;
-
-  @Column(name = "finished_at")
+  private final Instant startedAt;
   private Instant finishedAt;
-
-  @Column(name = "processed_rows", nullable = false)
   private long processedRows;
-
-  @Column(name = "valid_rows", nullable = false)
   private long validRows;
-
-  @Column(name = "invalid_rows", nullable = false)
   private long invalidRows;
-
-  @Column(name = "inserted_rows", nullable = false)
   private long insertedRows;
-
-  @Column(name = "updated_rows", nullable = false)
   private long updatedRows;
-
-  @Column(name = "error_code", length = 100)
   private String errorCode;
-
-  @Column(name = "error_summary", length = 500)
   private String errorSummary;
-
-  @Column(name = "deleted_at")
-  private Instant deletedAt;
-
-  protected ProcessingAttempt() {
-    // Hibernate.
-  }
+  private final Instant deletedAt;
 
   private ProcessingAttempt(
       UUID id,
@@ -89,19 +44,66 @@ public class ProcessingAttempt extends AuditableEntity {
       int attemptNumber,
       AttemptTrigger trigger,
       AttemptStatus status,
-      Instant startedAt) {
+      Instant startedAt,
+      Instant deletedAt) {
     this.id = id;
     this.jobId = jobId;
     this.attemptNumber = attemptNumber;
     this.trigger = trigger;
     this.status = status;
     this.startedAt = startedAt;
+    this.deletedAt = deletedAt;
   }
 
   static ProcessingAttempt start(
       UUID jobId, int attemptNumber, AttemptTrigger trigger, Instant startedAt) {
     return new ProcessingAttempt(
-        IdUtils.nextId(), jobId, attemptNumber, trigger, AttemptStatus.RUNNING, startedAt);
+        IdUtils.nextId(), jobId, attemptNumber, trigger, AttemptStatus.RUNNING, startedAt, null);
+  }
+
+  /**
+   * Rebuilds a stored attempt from persistence.
+   *
+   * <p>Public because the mapper that reads the row lives outside this package, but it takes every
+   * persisted field, so adding one to the attempt fails to compile here until persistence carries
+   * it too. {@link #start} and {@link #finish} stay package-private: reconstitution replays a fact,
+   * while driving the lifecycle remains the owning job's alone.
+   */
+  public static ProcessingAttempt reconstitute(
+      UUID id,
+      UUID jobId,
+      int attemptNumber,
+      AttemptTrigger trigger,
+      AttemptStatus status,
+      Instant startedAt,
+      Instant finishedAt,
+      long processedRows,
+      long validRows,
+      long invalidRows,
+      long insertedRows,
+      long updatedRows,
+      String errorCode,
+      String errorSummary,
+      Instant deletedAt,
+      String createdBy,
+      Instant createdAt,
+      String lastModifiedBy,
+      Instant lastModifiedAt) {
+    ProcessingAttempt attempt =
+        new ProcessingAttempt(id, jobId, attemptNumber, trigger, status, startedAt, deletedAt);
+    attempt.finishedAt = finishedAt;
+    attempt.processedRows = processedRows;
+    attempt.validRows = validRows;
+    attempt.invalidRows = invalidRows;
+    attempt.insertedRows = insertedRows;
+    attempt.updatedRows = updatedRows;
+    attempt.errorCode = errorCode;
+    attempt.errorSummary = errorSummary;
+    attempt.setCreatedBy(createdBy);
+    attempt.setCreatedAt(createdAt);
+    attempt.setLastModifiedBy(lastModifiedBy);
+    attempt.setLastModifiedAt(lastModifiedAt);
+    return attempt;
   }
 
   void finish(

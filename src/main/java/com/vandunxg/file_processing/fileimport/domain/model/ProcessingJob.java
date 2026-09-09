@@ -5,25 +5,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import com.vandunxg.common.models.entities.AuditableEntity;
+import com.vandunxg.common.models.domain.AuditableDomain;
 import com.vandunxg.common.utils.IdUtils;
 import com.vandunxg.file_processing.fileimport.domain.exception.ProcessingJobRule;
 import com.vandunxg.file_processing.fileimport.domain.exception.ProcessingJobRuleViolation;
-import jakarta.persistence.CascadeType;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.OrderBy;
-import jakarta.persistence.Table;
-import jakarta.persistence.Version;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
-import org.hibernate.annotations.BatchSize;
 
 /**
  * Aggregate root for a file's processing lifecycle.
@@ -32,109 +19,68 @@ import org.hibernate.annotations.BatchSize;
  * {@link ImportFile} says which file was accepted and never changes; everything that moves --
  * state, counters, progress, retries, cancellation -- lives here.
  *
- * <p>Mapped directly to its table: the schema was designed around this shape, so a separate
- * persistence model would only duplicate it. Mutation still happens through the behaviour below,
- * never through setters.
+ * <p>Carries no persistence mapping: how these facts are stored is {@code ProcessingJobEntity}'s
+ * business, not this state machine's. Mutation happens only through the behaviour below, never
+ * through setters.
  */
-@Entity
-@Table(name = "processing_job")
 @Getter
 @EqualsAndHashCode(callSuper = false, of = "id")
-public class ProcessingJob extends AuditableEntity {
+public class ProcessingJob extends AuditableDomain {
 
   /** Attempts a user or admin may ask for. The first, automatic attempt does not count. */
   private static final long MAX_REQUESTED_RETRIES = 3;
 
-  @Id
-  @Column(name = "id")
   private UUID id;
 
-  @Column(name = "import_file_id", nullable = false, updatable = false)
   private UUID importFileId;
 
-  @Column(name = "owner_id", nullable = false, updatable = false)
   private UUID ownerId;
 
-  @Enumerated(EnumType.STRING)
-  @Column(name = "status", nullable = false, length = 30)
   private JobStatus status;
 
-  @Column(name = "processed_rows", nullable = false)
   private long processedRows;
 
-  @Column(name = "valid_rows", nullable = false)
   private long validRows;
 
-  @Column(name = "invalid_rows", nullable = false)
   private long invalidRows;
 
-  @Column(name = "inserted_rows", nullable = false)
   private long insertedRows;
 
-  @Column(name = "updated_rows", nullable = false)
   private long updatedRows;
 
   /**
    * Unknown until the file has been read to the end, because the row count is not in the header.
    */
-  @Column(name = "total_rows")
   private Long totalRows;
 
-  @Column(name = "progress_percent")
   private Integer progressPercent;
 
-  @Column(name = "current_attempt", nullable = false)
   private int currentAttempt;
 
-  @Column(name = "started_at")
   private Instant startedAt;
 
-  @Column(name = "finished_at")
   private Instant finishedAt;
 
-  @Column(name = "heartbeat_at")
   private Instant heartbeatAt;
 
-  @Column(name = "error_report_key", length = 512)
   private String errorReportKey;
 
-  @Column(name = "error_code", length = 100)
   private String errorCode;
 
-  @Column(name = "error_summary", length = 500)
   private String errorSummary;
 
   /**
    * Why the next attempt will run. Decided when a retry or recovery is requested, consumed when a
    * worker claims the job, so it has to outlive a restart in between.
    */
-  @Enumerated(EnumType.STRING)
-  @Column(name = "next_attempt_trigger", nullable = false, length = 30)
   private AttemptTrigger nextAttemptTrigger;
 
-  @Column(name = "deleted_at")
   private Instant deletedAt;
 
-  @Version
-  @Column(name = "version", nullable = false)
   private Long version;
 
-  /**
-   * The whole history loads with the job: an aggregate is loaded whole, and the retry limit bounds
-   * how many attempts there can be.
-   *
-   * <p>Batched because the job list reads a page of aggregates at once, and initialising this
-   * collection one job at a time would make a page cost a query per row.
-   */
-  @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
-  @JoinColumn(name = "job_id", nullable = false)
-  @BatchSize(size = 100)
-  @OrderBy("attemptNumber ASC")
+  /** The job's whole history, oldest attempt first. */
   private List<ProcessingAttempt> attempts = new ArrayList<>();
-
-  protected ProcessingJob() {
-    // Hibernate.
-  }
 
   private ProcessingJob(UUID id, UUID importFileId, UUID ownerId, Instant createdAt) {
     this.id = id;
@@ -147,6 +93,70 @@ public class ProcessingJob extends AuditableEntity {
 
   public static ProcessingJob queue(UUID importFileId, UUID ownerId, Instant createdAt) {
     return new ProcessingJob(IdUtils.nextId(), importFileId, ownerId, createdAt);
+  }
+
+  /**
+   * Rebuilds a stored job from persistence.
+   *
+   * <p>Queueing invariants are not re-checked: they were enforced when the row was written, and a
+   * stored row is a fact rather than a new request. Every persisted field is a parameter, so adding
+   * one to the aggregate fails to compile here until persistence carries it too.
+   *
+   * <p>{@code version} is carried so a write can be rejected when the row moved underneath it, and
+   * {@code deletedAt} so a retired job is rebuilt as retired rather than being resurrected by the
+   * next write.
+   */
+  public static ProcessingJob reconstitute(
+      UUID id,
+      UUID importFileId,
+      UUID ownerId,
+      JobStatus status,
+      long processedRows,
+      long validRows,
+      long invalidRows,
+      long insertedRows,
+      long updatedRows,
+      Long totalRows,
+      Integer progressPercent,
+      int currentAttempt,
+      Instant startedAt,
+      Instant finishedAt,
+      Instant heartbeatAt,
+      String errorReportKey,
+      String errorCode,
+      String errorSummary,
+      AttemptTrigger nextAttemptTrigger,
+      Instant deletedAt,
+      Long version,
+      List<ProcessingAttempt> attempts,
+      String createdBy,
+      Instant createdAt,
+      String lastModifiedBy,
+      Instant lastModifiedAt) {
+    ProcessingJob job = new ProcessingJob(id, importFileId, ownerId, createdAt);
+    job.status = status;
+    job.processedRows = processedRows;
+    job.validRows = validRows;
+    job.invalidRows = invalidRows;
+    job.insertedRows = insertedRows;
+    job.updatedRows = updatedRows;
+    job.totalRows = totalRows;
+    job.progressPercent = progressPercent;
+    job.currentAttempt = currentAttempt;
+    job.startedAt = startedAt;
+    job.finishedAt = finishedAt;
+    job.heartbeatAt = heartbeatAt;
+    job.errorReportKey = errorReportKey;
+    job.errorCode = errorCode;
+    job.errorSummary = errorSummary;
+    job.nextAttemptTrigger = nextAttemptTrigger;
+    job.deletedAt = deletedAt;
+    job.version = version;
+    job.attempts = new ArrayList<>(attempts);
+    job.setCreatedBy(createdBy);
+    job.setLastModifiedBy(lastModifiedBy);
+    job.setLastModifiedAt(lastModifiedAt);
+    return job;
   }
 
   /**

@@ -66,10 +66,10 @@ class ArchitectureConformanceTest {
   }
 
   /**
-   * JPA annotations are deliberately absent from this list: {@code RULE.md §6.4} allows mapping an
-   * aggregate directly when its shape and its table agree, and {@code ProcessingJob} does. Spring
-   * Data, JDBC, the object-storage SDK and the Redis client describe how data is fetched, which is
-   * infrastructure's decision either way.
+   * Spring Data, JDBC, the object-storage SDK and the Redis client describe how data is fetched,
+   * which is infrastructure's decision. JPA mapping is covered separately by {@link
+   * #aDomainCarriesNoPersistenceMapping()}, because it is a rule about the model's shape rather
+   * than about who fetches it.
    */
   @Test
   void anApplicationOrDomainNeverDependsOnAPersistenceOrStorageFramework() {
@@ -108,26 +108,72 @@ class ArchitectureConformanceTest {
   }
 
   /**
-   * The api layer of the refactored modules stays off persistence entirely.
+   * The api layer of a refactored module stays off persistence, with one exception it may not
+   * exceed.
    *
-   * <p>The auth module's controllers name their entity as a paging sort model, which is the house
-   * pattern; the job list avoids needing it because the aggregate is its own entity.
+   * <p>{@code @ValidatePaging} builds its sort allow-list by reflecting over {@code @Column}
+   * fields, so a controller has to name an entity to accept a {@code sortBy} at all: a domain model
+   * carries no such fields and would produce an empty allow-list that rejects every sort. The
+   * exception is therefore the annotation's argument and nothing else -- the entity may not be
+   * imported for any other purpose, mapped, or returned. This is the pattern auth's controllers
+   * already follow.
    */
   @Test
-  void theApiLayerOfARefactoredModuleNeverDependsOnItsInfrastructure() {
+  void theApiLayerOfARefactoredModuleTouchesInfrastructureOnlyAsAPagingSortModel() {
     for (String module : DDD_MODULES) {
+      String infrastructure = "import com.vandunxg.file_processing." + module + ".infrastructure";
+      String entities = infrastructure + ".persistence.entity.";
       walk(SOURCE_ROOT.resolve(module).resolve("api"))
           .forEach(
-              file ->
-                  assertThat(importsOf(file))
-                      .as("%s must not depend on infrastructure", file)
-                      .noneMatch(
-                          line ->
-                              line.startsWith(
-                                  "import com.vandunxg.file_processing."
-                                      + module
-                                      + ".infrastructure")));
+              file -> {
+                List<String> reached =
+                    importsOf(file).stream()
+                        .filter(line -> line.startsWith(infrastructure))
+                        .toList();
+                assertThat(reached)
+                    .as("%s may reach infrastructure only for a paging sort model", file)
+                    .allMatch(line -> line.startsWith(entities));
+                reached.forEach(
+                    line ->
+                        assertThat(mentionsOnlyAsSortModel(file, simpleNameOf(line)))
+                            .as("%s must name %s only as a @ValidatePaging sort model", file, line)
+                            .isTrue());
+              });
     }
+  }
+
+  private static String simpleNameOf(String importLine) {
+    String qualified = importLine.substring("import ".length(), importLine.length() - 1);
+    return qualified.substring(qualified.lastIndexOf('.') + 1);
+  }
+
+  private static boolean mentionsOnlyAsSortModel(Path file, String type) {
+    return linesOf(file).stream()
+        .filter(line -> !line.startsWith("import "))
+        .filter(line -> line.contains(type))
+        .allMatch(line -> line.contains("sortModel = " + type + ".class"));
+  }
+
+  /**
+   * A domain model carries no persistence mapping.
+   *
+   * <p>The mapping describes the row, not the business rule. An aggregate that names its own
+   * columns cannot be reshaped without a migration, cannot be unit-tested without a persistence
+   * provider, and quietly invites the table's shape to dictate the model's. {@code RULE.md §6.4}
+   * makes the separation mandatory; this is the executable form of that rule, because a rule kept
+   * only in prose erodes.
+   */
+  @Test
+  void aDomainCarriesNoPersistenceMapping() {
+    forEachSourceIn(
+        "domain",
+        (file, imports) ->
+            assertThat(imports)
+                .as("%s is in a domain and must not carry persistence mapping", file)
+                .noneMatch(
+                    line ->
+                        line.startsWith("import jakarta.persistence.")
+                            || line.startsWith("import org.hibernate.")));
   }
 
   private interface SourceCheck {
@@ -155,8 +201,12 @@ class ArchitectureConformanceTest {
   }
 
   private static List<String> importsOf(Path file) {
+    return linesOf(file).stream().filter(line -> line.startsWith("import ")).toList();
+  }
+
+  private static List<String> linesOf(Path file) {
     try {
-      return Files.readAllLines(file).stream().filter(line -> line.startsWith("import ")).toList();
+      return Files.readAllLines(file);
     } catch (IOException exception) {
       throw new UncheckedIOException(exception);
     }

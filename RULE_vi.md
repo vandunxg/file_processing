@@ -225,8 +225,8 @@ Bị cấm (**không được**):
   client, object-storage client hoặc bất kỳ infrastructure type nào khác.
 - module A → `infrastructure` của module B, hoặc persistence implementation của
   module B, hoặc persistence model của module B.
-- `domain` import Spring, Jackson, servlet hoặc HTTP type. Mapping
-  `jakarta.persistence` trực tiếp trên aggregate chỉ được phép theo §6.4.
+- `domain` import Spring, Jackson, servlet hoặc HTTP type, hoặc mang mapping
+  `jakarta.persistence` / Hibernate (§6.4).
 
 `application` **có thể** dùng annotation transaction và component của Spring.
 
@@ -379,9 +379,9 @@ Tên phải thể hiện ý nghĩa nghiệp vụ.
 | Controller                               | `<Xxx>Controller`                       |
 | Request DTO                              | `<Xxx>Request`                          |
 | Response DTO                             | `<Xxx>Response`                         |
-| Persistence model tách riêng             | `<Xxx>Entity`                           |
+| Persistence model                        | `<Xxx>Entity`                           |
 | Triển khai JPA của domain contract       | `Jpa<Aggregate>Repository`              |
-| Spring Data interface trên persistence model tách riêng | `<Xxx>EntityRepository` |
+| Spring Data interface trên persistence model | `<Xxx>EntityRepository`             |
 | Spring Data custom fragment              | `<Xxx>EntityRepositoryCustom`           |
 | Infrastructure implementation khác       | `<Technology><Capability>`              |
 | Configuration                            | `<Xxx>Configuration`                    |
@@ -392,13 +392,11 @@ Chi tiết về naming repository:
 
 - `domain/<Aggregate>Repository` là contract. Nó nói bằng domain type.
 - `Jpa<Aggregate>Repository` trong `infrastructure/persistence` **luôn** là
-  triển khai JPA của contract đó. Theo §6.4, nó thường là một Spring Data
-  interface extends cả `JpaRepository<...>` và domain contract, nên không có
-  class nào phát sinh thêm. Khi persistence model tách riêng là hợp lý, nó là
-  một class `@Repository` delegate sang `<Xxx>EntityRepository` và thực hiện
-  mapping.
+  triển khai JPA của contract đó. Theo §6.4 nó là một class `@Repository`
+  delegate sang `<Xxx>EntityRepository` và map hai chiều, vì contract nói bằng
+  domain type còn Spring Data interface nói bằng dòng dữ liệu.
 - `<Xxx>EntityRepository` là Spring Data interface tầng thấp trên persistence
-  model tách riêng. Nó **không được** inject ra ngoài
+  model. Nó **không được** inject ra ngoài
   `infrastructure/persistence`.
 
 Quy ước bổ sung:
@@ -429,8 +427,8 @@ Quy ước bổ sung:
 ## 6. Domain model
 
 Domain object biểu diễn trạng thái và behavior nghiệp vụ. Nó trả lời *business
-cho phép điều gì*. Nó không bao giờ là model HTTP. Việc nó có đồng thời là
-persistence model hay không được quyết định theo §6.4.
+cho phép điều gì*. Nó không bao giờ là model HTTP, và cũng không bao giờ là
+persistence model (§6.4).
 
 ### 6.1 Khởi tạo và invariant
 
@@ -535,42 +533,56 @@ application/capability/UserSearchRepository        # read model: count(query), s
 infrastructure/persistence/JpaUserRepository       # implement cả hai
 ```
 
-### 6.4 Pragmatic JPA mapping
+### 6.4 Domain model không mang persistence mapping
 
-Project này **không** yêu cầu domain object luôn phải tách khỏi JPA mapping.
-
-Khi domain model và persistence model về cơ bản cùng một hình dạng, và JPA
-annotation không làm méo domain behavior, aggregate **có thể** mang mapping
-`jakarta.persistence` trực tiếp:
+Domain model **không được** mang mapping `jakarta.persistence` hay Hibernate.
+Aggregate, entity, value object trong `domain` gọi tên sự thật nghiệp vụ; còn
+bảng nào chứa chúng, tên cột là gì, fetch ra sao là câu trả lời của
+`infrastructure`. Vì vậy mỗi aggregate có ba phần:
 
 ```text
-domain/model/Order.java   có @Entity
+domain/model/Order.java                                   # không mapping, extends AuditableDomain
+infrastructure/persistence/entity/OrderEntity.java        # dòng dữ liệu, extends AuditableEntity
+infrastructure/persistence/mapper/OrderPersistenceMapper  # nối hai bên
 ```
 
-Trong trường hợp đó, `Jpa<Aggregate>Repository` thường là một Spring Data
-interface duy nhất extends cả `JpaRepository<...>` và domain contract. Không có
-model tách riêng và không có mapper.
+Được thi hành bởi `ArchitectureConformanceTest.aDomainCarriesNoPersistenceMapping`.
 
-Chỉ tách thành `Order` + `OrderEntity` + mapper khi có lý do thật:
+Vì sao sự tách này đáng giá một mapper:
 
-- schema legacy hoặc do hệ thống khác sở hữu;
-- persistence model khác domain model một cách đáng kể;
-- nhiều storage model cho cùng một aggregate;
-- aggregate phức tạp mà nhu cầu persistence làm méo domain;
-- read model hoặc query model đặc thù.
+- model đổi hình dạng được mà không cần migration, và bảng đổi được mà không
+  chạm vào business rule;
+- aggregate unit-test được mà không cần persistence provider trên classpath;
+- bảng thôi mặc định áp đặt hình dạng của model.
 
-**Không được** tạo ba object và hai mapper cho một CRUD model đơn giản nếu không
-có lý do nào ở trên.
+Quy tắc cho ba phần:
 
-Hai giới hạn luôn áp dụng:
-
-- Concern HTTP và Jackson **không được** leak vào `domain`. Không
+- **Reconstitute.** Aggregate không expose constructor hay builder public.
+  Persistence dựng lại nó qua static factory `reconstitute(...)` nhận **mọi**
+  field đã lưu, gồm cả lock version, mốc soft-delete và các giá trị audit. Nó
+  không kiểm lại invariant lúc tạo: một dòng đã lưu là một sự thật, không phải
+  một yêu cầu mới. Vì nhận đủ field, thêm một field vào aggregate sẽ làm mapper
+  vỡ compile cho tới khi dòng dữ liệu mang nó.
+- **Mapping.** Mapper khai `unmappedTargetPolicy = ERROR`. Đây là điều kiện
+  đúng đắn, không phải sự ngăn nắp: một lần ghi sẽ merge entity đã map lên dòng
+  đang lưu, nên một cột thường bị bỏ sót sẽ được merge vào thành `null` và giá
+  trị đang lưu mất. `deletedAt` là cột nguy hiểm nhất — bỏ sót nó là hồi sinh
+  một aggregate đã xoá.
+- **Repository.** `Jpa<Aggregate>Repository` là một class implement contract
+  của domain, uỷ thác cho một Spring Data interface trên entity và map hai
+  chiều. Nếu aggregate còn có read model phân trang, chính class đó implement
+  luôn application capability (§6.3), nên không sinh implementation thứ hai.
+- **Invariant.** Aggregate vẫn phải bảo vệ invariant (§6.1): mutation đi qua
+  business method, và lifecycle method của child entity giữ package-private để
+  chỉ aggregate root điều khiển được.
+- Concern **HTTP và Jackson** cũng **không được** leak vào `domain`. Không
   `@JsonProperty`, `@JsonIgnore`, servlet hoặc Spring Web type trên aggregate.
-- Aggregate có JPA mapping vẫn phải bảo vệ invariant (§6.1). Constructor
-  no-argument và setter mà Hibernate yêu cầu phải là `protected` hoặc
-  package-private, và mutation vẫn đi qua business method.
 
-Ghi lại lựa chọn này trong mô tả pull request khi module tách hai model.
+Chỗ duy nhất tầng api được gọi tên entity là
+`@ValidatePaging(sortModel = <Aggregate>Entity.class)`, vì annotation đó dựng
+allow-list sort bằng cách reflect các field `@Column`, còn domain model sẽ cho
+allow-list rỗng và reject mọi `sortBy`. Chỉ đúng ở tham số của annotation, không
+chỗ nào khác.
 
 ---
 
@@ -820,8 +832,8 @@ field hoặc transformation rule.
 
 Dùng mapper riêng khi:
 
-- persistence model tách riêng và aggregate phải được map sang nó (xem §6.4 —
-  phần lớn aggregate không cần điều này);
+- aggregate phải được map sang persistence model của nó, mà theo §6.4 là mọi
+  aggregate;
 - mapping có nhiều field, nested value, conversion hoặc ignored field;
 - mapping được tái sử dụng;
 - API model và application model cần thay đổi độc lập.
@@ -915,10 +927,10 @@ contract.
 
 ### 11.1 Quy tắc entity
 
-Đọc §6.4 trước để quyết định module có cần persistence model tách riêng hay
-không. Các quy tắc dưới đây áp dụng cho class nào mang JPA mapping.
+Theo §6.4, JPA mapping nằm trên persistence model trong
+`infrastructure/persistence/entity`, không bao giờ trên domain model. Các quy
+tắc dưới đây áp dụng cho nó.
 
-- Persistence model tách riêng chỉ được tạo khi có lý do liệt kê ở §6.4.
 - Mọi class có JPA mapping extends `AuditableEntity` khi common base phù hợp.
 - Mọi class có JPA mapping **bắt buộc** kế thừa hoặc khai báo trạng thái soft
   delete bằng `Instant deletedAt`, map tới cột SQL `deleted_at`.
@@ -1260,12 +1272,11 @@ Reject hoặc sửa mọi change có các pattern sau nếu chưa có ngoại l�
    client, broker client hoặc object-storage client.
 10. Module đọc hoặc ghi persistence model hoặc persistence implementation của
     module khác.
-11. Persistence model tách riêng kèm mapper cho một CRUD aggregate đơn giản mà
-    không có lý do theo §6.4.
+11. Domain model mang mapping `jakarta.persistence` hoặc Hibernate, trái §6.4 —
+    kể cả aggregate có hình dạng tình cờ trùng với bảng của nó.
 12. Tạo `Command`, `Query` hoặc `Result` cho boundary chỉ có một giá trị đơn
     giản, trái §4.7.
-13. Domain code import Spring, Jackson, servlet hoặc HTTP type, hoặc thêm JPA
-    mapping vào aggregate ngoài các điều kiện ở §6.4.
+13. Domain code import Spring, Jackson, servlet hoặc HTTP type.
 14. Domain exception chứa HTTP status hoặc response-format detail.
 15. Controller advice mới trùng chức năng common exception handler.
 16. Business failure dùng bare runtime exception.
@@ -1306,8 +1317,8 @@ Reject hoặc sửa mọi change có các pattern sau nếu chưa có ngoại l�
 
 - [ ] Đã đọc source, test, `AGENTS.md`, `LIBRARY.md` liên quan.
 - [ ] Change dùng thiết kế nhỏ nhất nhưng vẫn bảo vệ boundary có thật.
-- [ ] Domain code không phụ thuộc Spring, Jackson, servlet hoặc HTTP; mọi JPA
-  mapping trên aggregate thoả §6.4.
+- [ ] Domain code không phụ thuộc Spring, Jackson, servlet, HTTP hay
+  persistence mapping (§6.4).
 - [ ] Interface mới bảo vệ một boundary thật liệt kê ở §4.5.
 - [ ] Không có `adapter/in|out`, `port/in|out`, `*UseCase`, `*RepositoryPort`
   hoặc `*PersistenceAdapter` mới được thêm vào.

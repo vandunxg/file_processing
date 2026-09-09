@@ -227,8 +227,8 @@ Forbidden (**MUST NOT**):
   clients, object-storage clients, or any other infrastructure type.
 - module A → module B's `infrastructure`, or module B's persistence
   implementation, or module B's persistence model.
-- `domain` importing Spring, Jackson, servlet, or HTTP types. Direct
-  `jakarta.persistence` mapping on an aggregate is allowed only under §6.4.
+- `domain` importing Spring, Jackson, servlet, or HTTP types, or carrying
+  `jakarta.persistence` or Hibernate mapping (§6.4).
 
 `application` **MAY** use Spring transaction and component annotations.
 
@@ -386,9 +386,9 @@ Use names that reveal business intent.
 | Controller                           | `<Xxx>Controller`                       |
 | Request DTO                          | `<Xxx>Request`                          |
 | Response DTO                         | `<Xxx>Response`                         |
-| Separate persistence model           | `<Xxx>Entity`                           |
+| Persistence model                    | `<Xxx>Entity`                           |
 | JPA repository of the domain contract | `Jpa<Aggregate>Repository`             |
-| Spring Data interface over a separate persistence model | `<Xxx>EntityRepository` |
+| Spring Data interface over a persistence model | `<Xxx>EntityRepository`        |
 | Spring Data custom fragment          | `<Xxx>EntityRepositoryCustom`           |
 | Other infrastructure implementation  | `<Technology><Capability>`              |
 | Configuration                        | `<Xxx>Configuration`                    |
@@ -399,12 +399,11 @@ Repository naming, in detail:
 
 - `domain/<Aggregate>Repository` is the contract. It speaks in domain types.
 - `Jpa<Aggregate>Repository` in `infrastructure/persistence` is **always** the
-  JPA implementation of that contract. Under §6.4 it is usually a Spring Data
-  interface that extends both `JpaRepository<...>` and the domain contract, so
-  no extra class exists. When a separate persistence model is justified, it is
-  a `@Repository` class that delegates to `<Xxx>EntityRepository` and maps.
-- `<Xxx>EntityRepository` is the low-level Spring Data interface over a
-  separate persistence model. It **MUST NOT** be injected outside
+  JPA implementation of that contract. Per §6.4 it is a `@Repository` class that
+  delegates to `<Xxx>EntityRepository` and maps each way, because the contract
+  speaks domain types and the Spring Data interface speaks rows.
+- `<Xxx>EntityRepository` is the low-level Spring Data interface over the
+  persistence model. It **MUST NOT** be injected outside
   `infrastructure/persistence`.
 
 Additional conventions:
@@ -436,8 +435,8 @@ Additional conventions:
 ## 6. Domain model
 
 Domain objects express business state and behavior. They answer *what the
-business allows*. They are never HTTP models. Whether they are also the
-persistence model is decided by §6.4.
+business allows*. They are never HTTP models, and never the persistence model
+either (§6.4).
 
 ### 6.1 Construction and invariants
 
@@ -543,44 +542,57 @@ application/capability/UserSearchRepository        # read model: count(query), s
 infrastructure/persistence/JpaUserRepository       # implements both
 ```
 
-### 6.4 Pragmatic JPA mapping
+### 6.4 A domain model carries no persistence mapping
 
-This project does **not** require a domain object to be separated from its JPA
-mapping.
-
-When the domain model and the persistence model are effectively the same shape,
-and JPA annotations do not distort domain behavior, an aggregate **MAY** carry
-`jakarta.persistence` mapping directly:
+A domain model **MUST NOT** carry `jakarta.persistence` or Hibernate mapping. An
+aggregate, entity or value object in `domain` names business facts; which table
+holds them, under which column names, fetched how, is `infrastructure`'s answer.
+Every aggregate therefore has three parts:
 
 ```text
-domain/model/Order.java   with @Entity
+domain/model/Order.java                                   # no mapping, extends AuditableDomain
+infrastructure/persistence/entity/OrderEntity.java        # the row, extends AuditableEntity
+infrastructure/persistence/mapper/OrderPersistenceMapper  # between the two
 ```
 
-In that case `Jpa<Aggregate>Repository` is usually a single Spring Data
-interface that extends both `JpaRepository<...>` and the domain contract. No
-separate model and no mapper exist.
+Enforced by `ArchitectureConformanceTest.aDomainCarriesNoPersistenceMapping`.
 
-Split into `Order` + `OrderEntity` + a mapper only for a real reason:
+Why the separation is worth its mapper:
 
-- a legacy or externally-owned schema;
-- a persistence model that differs meaningfully from the domain model;
-- more than one storage model for the same aggregate;
-- a complex aggregate whose persistence needs distort the domain;
-- a specialised read or query model.
+- the model can be reshaped without a migration, and the table can be reshaped
+  without touching business rules;
+- an aggregate is unit-testable with no persistence provider on the classpath;
+- the table stops dictating the model's shape by default.
 
-**MUST NOT** create three objects and two mappers for a simple CRUD model with
-no such reason.
+Rules for the three parts:
 
-Two limits always apply:
-
-- HTTP and Jackson concerns **MUST NOT** leak into `domain`. No
+- **Reconstitution.** The aggregate exposes no public constructor or builder.
+  Persistence rebuilds it through a `reconstitute(...)` static factory that
+  takes **every** persisted field, including the lock version, the soft-delete
+  timestamp and the audit values. It does not re-check creation invariants: a
+  stored row is a fact, not a new request. Because it takes every field, adding
+  one to the aggregate fails to compile in the mapper until the row carries it.
+- **Mapping.** The mapper declares `unmappedTargetPolicy = ERROR`. This is load
+  bearing, not tidiness: a write merges the mapped entity over the stored row,
+  so a plain column left unmapped is merged in as `null` and the stored value is
+  lost. `deletedAt` is the dangerous one -- dropping it resurrects a retired
+  aggregate.
+- **Repository.** `Jpa<Aggregate>Repository` is a class implementing the domain
+  contract, delegating to a Spring Data interface over the entity and mapping
+  each way. Where the aggregate also has a paginated read model, the same class
+  implements that application capability (§6.3), so no second implementation
+  appears.
+- **Invariants.** The aggregate still preserves them (§6.1): mutation happens
+  through business methods, and a child entity's lifecycle methods stay
+  package-private so only its root may drive them.
+- **HTTP and Jackson** concerns **MUST NOT** leak into `domain` either. No
   `@JsonProperty`, `@JsonIgnore`, servlet, or Spring Web types on an aggregate.
-- A JPA-mapped aggregate still preserves its invariants (§6.1). A public
-  no-argument constructor and setters required by Hibernate are `protected` or
-  package-private, and mutation still happens through business methods.
 
-Record the choice in the pull-request description when a module splits the
-models.
+The one place the api layer may name an entity is
+`@ValidatePaging(sortModel = <Aggregate>Entity.class)`, because that annotation
+builds its sort allow-list by reflecting over `@Column` fields and a domain
+model would produce an empty one that rejects every `sortBy`. It is the
+annotation's argument and nothing else.
 
 ---
 
@@ -830,8 +842,8 @@ multiple fields or transformation rules.
 
 Use a dedicated mapper when:
 
-- a separate persistence model exists and the aggregate must be mapped to it
-  (see §6.4 — most aggregates do not need this);
+- an aggregate must be mapped to its persistence model, which per §6.4 is every
+  aggregate;
 - mapping has multiple fields, nested values, conversions, or ignored fields;
 - the same mapping is reused;
 - API and application models must evolve independently.
@@ -926,10 +938,10 @@ repository contracts.
 
 ### 11.1 Entity rules
 
-Read §6.4 first to decide whether the module needs a separate persistence
-model at all. The rules below apply to whichever class carries the JPA mapping.
+Per §6.4 the JPA mapping lives on the persistence model in
+`infrastructure/persistence/entity`, never on a domain model. The rules below
+apply to it.
 
-- A separate persistence model is created only for a reason listed in §6.4.
 - Every JPA-mapped class extends `AuditableEntity` when the common base
   applies.
 - Every JPA-mapped class **MUST** inherit or declare soft-delete state as
@@ -1283,12 +1295,11 @@ is documented:
    HTTP client, broker client, or object-storage client.
 10. A module reading or writing another module's persistence model or
     persistence implementation.
-11. A separate persistence model plus mappers for a simple CRUD aggregate with
-    no reason from §6.4.
+11. A domain model carrying `jakarta.persistence` or Hibernate mapping, against
+    §6.4 — including an aggregate whose shape happens to match its table.
 12. `Command`, `Query`, or `Result` types created for a trivial single-value
     boundary, against §4.7.
-13. Domain code importing Spring, Jackson, servlet, or HTTP types, or JPA
-    mapping added to an aggregate outside the conditions in §6.4.
+13. Domain code importing Spring, Jackson, servlet, or HTTP types.
 14. A domain exception carrying HTTP status or response-format details.
 15. A custom controller advice duplicating the common exception handler.
 16. Business failures represented by bare runtime exceptions.
@@ -1329,8 +1340,8 @@ is documented:
 
 - [ ] Relevant source, tests, `AGENTS.md`, and `LIBRARY.md` were inspected.
 - [ ] The change uses the smallest design that preserves real boundaries.
-- [ ] Domain code has no Spring, Jackson, servlet, or HTTP dependency; any
-  JPA mapping on an aggregate meets §6.4.
+- [ ] Domain code has no Spring, Jackson, servlet, HTTP, or persistence-mapping
+  dependency (§6.4).
 - [ ] New interfaces protect a real boundary listed in §4.5.
 - [ ] No new `adapter/in|out`, `port/in|out`, `*UseCase`, `*RepositoryPort`,
   or `*PersistenceAdapter` was introduced.
