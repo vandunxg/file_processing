@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.vandunxg.file_processing.fileimport.application.capability.CustomerImportStaging;
 import com.vandunxg.file_processing.fileimport.domain.ImportFileRepository;
 import com.vandunxg.file_processing.fileimport.domain.ProcessingJobRepository;
 import com.vandunxg.file_processing.fileimport.domain.model.AttemptStatus;
@@ -47,6 +48,7 @@ class ProcessingJobRunnerIT extends AuthIntegrationTestBase {
   @Autowired private ProcessingJobRepository jobs;
   @Autowired private ImportFileRepository files;
   @Autowired private InMemoryFileStorage storage;
+  @Autowired private CustomerImportStaging staging;
   @Autowired private JdbcTemplate jdbcTemplate;
   @Autowired private TransactionTemplate transactionTemplate;
 
@@ -54,6 +56,8 @@ class ProcessingJobRunnerIT extends AuthIntegrationTestBase {
   void reset() {
     transactionTemplate.executeWithoutResult(
         status -> {
+          jdbcTemplate.update("DELETE FROM customer_import_staging_issue");
+          jdbcTemplate.update("DELETE FROM customer_import_staging");
           jdbcTemplate.update("DELETE FROM customers");
           jdbcTemplate.update("DELETE FROM processing_attempt");
           jdbcTemplate.update("DELETE FROM processing_job");
@@ -349,6 +353,104 @@ class ProcessingJobRunnerIT extends AuthIntegrationTestBase {
     assertThat(jobs.findById(jobId)).isEmpty();
     assertThat(jobs.findByIdAndOwnerId(jobId, UUID.randomUUID())).isEmpty();
     assertThat(runner.runNextJob()).isFalse();
+  }
+
+  @Test
+  void recoveryLeavesTheLostAttemptsWorkspaceForTheSweepToRemove() {
+    UUID jobId = queue(HEADER + validRow("CUS_01"));
+    commandService.claimNextQueued();
+    stageRejectedRow(jobId, 1, 2);
+    goStale(jobId);
+
+    commandService.recoverStaleJob(jobId);
+
+    // A running attempt's workspace is off limits to the sweep, so the transition itself is what
+    // releases these rows -- and it is never at the mercy of the delete that removes them.
+    assertThat(jobs.findById(jobId).orElseThrow().getStatus()).isEqualTo(JobStatus.FAILED);
+    assertThat(staging.clearAbandoned()).isEqualTo(2);
+    assertThat(stagingRows()).isZero();
+    assertThat(stagingIssues()).isZero();
+  }
+
+  @Test
+  void theSweepRemovesWorkspaceRowsNoRunningAttemptOwnsAndSparesTheRest() {
+    UUID running = queue(HEADER + validRow("CUS_01"));
+    commandService.claimNextQueued();
+    stageRejectedRow(running, 1, 2);
+
+    UUID finished = queue(HEADER + validRow("CUS_02"));
+    runner.runNextJob();
+    // Whatever a failed best-effort cleanup could have left behind for a job that is already done.
+    stageRejectedRow(finished, 1, 2);
+
+    assertThat(staging.clearAbandoned()).isEqualTo(2);
+
+    assertThat(stagingRows()).isOne();
+    assertThat(
+            jdbcTemplate.queryForObject("SELECT job_id FROM customer_import_staging", UUID.class))
+        .isEqualTo(running);
+  }
+
+  @Test
+  void aRowWithSeveralIssuesReportsThemAllEvenWhenOnePageCannotHoldThem() {
+    // batch-size is two, so this single page has to carry one row's five issues plus a duplicate
+    // marker: the page limit bounds source rows, never report records.
+    UUID jobId =
+        queue(HEADER + ",,,,,\n" + validRow("CUS_01") + validRow("CUS_01") + validRow("CUS_02"));
+
+    runner.runNextJob();
+
+    ProcessingJob job = jobs.findById(jobId).orElseThrow();
+    assertThat(job.getStatus()).isEqualTo(JobStatus.COMPLETED_WITH_ERRORS);
+    assertThat(job.getProcessedRows()).isEqualTo(4);
+    assertThat(job.getValidRows()).isEqualTo(2);
+    assertThat(job.getInvalidRows()).isEqualTo(2);
+    assertThat(customerCount()).isEqualTo(2);
+
+    String report = storage.read(job.getErrorReportKey());
+    assertThat(report.lines().filter(line -> line.startsWith("2,")).count()).isEqualTo(5);
+    assertThat(report)
+        .contains("REQUIRED_FIELD")
+        .contains("DUPLICATE_EXTERNAL_ID_IN_FILE")
+        .satisfies(
+            content ->
+                assertThat(content.indexOf("REQUIRED_FIELD"))
+                    .isLessThan(content.indexOf("DUPLICATE_EXTERNAL_ID_IN_FILE")));
+  }
+
+  private long stagingRows() {
+    return jdbcTemplate.queryForObject("SELECT count(*) FROM customer_import_staging", Long.class);
+  }
+
+  private long stagingIssues() {
+    return jdbcTemplate.queryForObject(
+        "SELECT count(*) FROM customer_import_staging_issue", Long.class);
+  }
+
+  private void stageRejectedRow(UUID jobId, int attemptNumber, long rowNumber) {
+    transactionTemplate.executeWithoutResult(
+        status -> {
+          jdbcTemplate.update(
+              """
+              INSERT INTO customer_import_staging (
+                job_id, attempt_number, row_number, validation_passed, original_external_id,
+                original_full_name, original_email)
+              VALUES (?, ?, ?, false, 'CUS_STAGED', 'Nguyen Van A', 'not-an-email')
+              """,
+              jobId,
+              attemptNumber,
+              rowNumber);
+          jdbcTemplate.update(
+              """
+              INSERT INTO customer_import_staging_issue (
+                job_id, attempt_number, row_number, issue_order, external_id, error_code,
+                field_name, error_message)
+              VALUES (?, ?, ?, 0, 'CUS_STAGED', 'INVALID_EMAIL', 'email', 'Email is invalid')
+              """,
+              jobId,
+              attemptNumber,
+              rowNumber);
+        });
   }
 
   private void goStale(UUID jobId) {

@@ -42,10 +42,15 @@ import org.springframework.stereotype.Service;
  * batches, and a retry can safely rebuild staging from the immutable original file.
  *
  * <p>Rows stream through one staging batch at a time: the file is never read into memory, and the
- * batch list is the only buffer. After EOF, PostgreSQL resolves duplicate external IDs set-wise and
- * canonical rows merge in bounded batches. Processing is sequential because one atomic upsert per
- * batch already meets the throughput requirement, and concurrency here would buy little while
- * making cancellation and failure handling much harder to reason about.
+ * batch list is the only buffer. After EOF, PostgreSQL decides duplicate external IDs set-wise as
+ * each page is read, so no phase has to hold the whole file -- in heap or in one long transaction
+ * -- to know which rows are canonical. Processing is sequential because one atomic upsert per batch
+ * already meets the throughput requirement, and concurrency here would buy little while making
+ * cancellation and failure handling much harder to reason about.
+ *
+ * <p>Every phase after EOF checkpoints on the same clock as the parse loop. A phase that works in
+ * silence for longer than the stale-heartbeat threshold is declared lost while it is still running,
+ * and recovery then clears the workspace underneath it.
  */
 @Service
 @RequiredArgsConstructor
@@ -213,7 +218,7 @@ public class ProcessingJobRunner {
       if (stopped != null) {
         return stopped;
       }
-      return publishReport(job);
+      return publishReport(job, counters, checkpoint);
     }
   }
 
@@ -255,34 +260,38 @@ public class ProcessingJobRunner {
     }
   }
 
-  private Outcome publishReport(ProcessingJob job) {
+  /**
+   * Streams the report in source order, page by page.
+   *
+   * <p>Checkpointed like every other phase. A report for a file of mostly rejected rows takes long
+   * enough on its own to outlast the stale-heartbeat threshold, and a worker that goes quiet here
+   * is declared lost while it is still working -- which also clears the workspace it is reading
+   * from.
+   */
+  private Outcome publishReport(ProcessingJob job, Counters counters, Checkpoint checkpoint) {
     try (ErrorReportStore.Draft report = errorReportStore.open(job.getId())) {
       long afterRowNumber = 0;
-      int afterIssueOrder = -1;
-      int afterSource = -1;
       while (true) {
         List<StagedReportRow> records =
             customerImportStaging.reportRowsAfter(
-                job.getId(),
-                job.getCurrentAttempt(),
-                afterRowNumber,
-                afterIssueOrder,
-                afterSource,
-                properties.batchSize());
+                job.getId(), job.getCurrentAttempt(), afterRowNumber, properties.batchSize());
         if (records.isEmpty()) {
           break;
         }
         for (StagedReportRow record : records) {
           report.write(record.issue(), record.originalRow());
         }
-        StagedReportRow last = records.getLast();
-        afterRowNumber = last.issue().rowNumber();
-        afterIssueOrder = last.issueOrder();
-        afterSource = last.source();
+        afterRowNumber = records.getLast().issue().rowNumber();
 
         Outcome stopped = stopAtSafePoint(job);
         if (stopped != null) {
           return stopped;
+        }
+        if (checkpoint.isDue(counters.processedRows, Instant.now(clock))) {
+          if (persistProgress(job, counters)) {
+            return Outcome.stoppedByCancellation();
+          }
+          checkpoint.reset(counters.processedRows, Instant.now(clock));
         }
       }
       Outcome stopped = stopAtSafePoint(job);

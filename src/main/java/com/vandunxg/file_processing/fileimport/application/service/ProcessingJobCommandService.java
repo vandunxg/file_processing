@@ -7,7 +7,6 @@ import java.util.UUID;
 
 import com.vandunxg.file_processing.auth.domain.model.OperationType;
 import com.vandunxg.file_processing.fileimport.application.FileImportProperties;
-import com.vandunxg.file_processing.fileimport.application.capability.CustomerImportStaging;
 import com.vandunxg.file_processing.fileimport.application.capability.ErrorReportStore;
 import com.vandunxg.file_processing.fileimport.application.capability.FileImportMetrics;
 import com.vandunxg.file_processing.fileimport.application.capability.FileStorage;
@@ -40,7 +39,6 @@ public class ProcessingJobCommandService {
   private final ProcessingJobRepository processingJobRepository;
   private final ImportFileRepository importFileRepository;
   private final ErrorReportStore errorReportStore;
-  private final CustomerImportStaging customerImportStaging;
   private final FileStorage fileStorage;
   private final FileImportProperties properties;
   private final FileImportAuditService auditService;
@@ -226,10 +224,12 @@ public class ProcessingJobCommandService {
     }
     job.fail("WORKER_LOST", "Worker stopped reporting progress", now);
     processingJobRepository.save(job);
-    // Unlike ordinary failures, a lost process never reaches the runner's finally block. The
-    // attempt-scoped workspace holds PII only to generate a report, so recovery clears it as part
-    // of the same short transaction that declares the attempt terminal.
-    customerImportStaging.clear(job.getId(), job.getCurrentAttempt());
+    // A lost process never reaches the runner's finally block, so the PII it staged is left for
+    // the sweep. Deleting it here instead would put the terminal transition at the mercy of that
+    // delete: inside this transaction a failure marks it rollback-only and the job stays PROCESSING
+    // with a dead worker, and after it commits the write would join a transaction nothing will
+    // commit. Declaring the attempt terminal is what makes the rows abandoned, and the sweep -- run
+    // right after this scan -- is what removes them.
     log.warn("[recover] jobId={} marked failed after lost worker", jobId);
     auditService.record(OperationType.STALE_JOB_MARKED_FAILED, jobId, null, now);
   }

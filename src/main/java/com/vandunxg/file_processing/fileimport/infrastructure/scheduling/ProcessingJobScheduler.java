@@ -8,6 +8,7 @@ import java.util.concurrent.RejectedExecutionException;
 
 import com.vandunxg.file_processing.auth.domain.model.OperationType;
 import com.vandunxg.file_processing.fileimport.application.FileImportProperties;
+import com.vandunxg.file_processing.fileimport.application.capability.CustomerImportStaging;
 import com.vandunxg.file_processing.fileimport.application.capability.ErrorReportStore;
 import com.vandunxg.file_processing.fileimport.application.capability.FileStorage;
 import com.vandunxg.file_processing.fileimport.application.service.FileImportAuditService;
@@ -57,6 +58,7 @@ public class ProcessingJobScheduler {
   private final ImportFileRepository importFileRepository;
   private final FileStorage fileStorage;
   private final ErrorReportStore errorReportStore;
+  private final CustomerImportStaging customerImportStaging;
   private final FileImportProperties properties;
   private final Executor workerExecutor;
   private final ProcessingWorkerControl workerControl;
@@ -71,6 +73,7 @@ public class ProcessingJobScheduler {
       ImportFileRepository importFileRepository,
       FileStorage fileStorage,
       ErrorReportStore errorReportStore,
+      CustomerImportStaging customerImportStaging,
       FileImportProperties properties,
       @Qualifier("fileImportWorkerExecutor") Executor workerExecutor,
       ProcessingWorkerControl workerControl,
@@ -83,6 +86,7 @@ public class ProcessingJobScheduler {
     this.importFileRepository = importFileRepository;
     this.fileStorage = fileStorage;
     this.errorReportStore = errorReportStore;
+    this.customerImportStaging = customerImportStaging;
     this.properties = properties;
     this.workerExecutor = workerExecutor;
     this.workerControl = workerControl;
@@ -123,8 +127,38 @@ public class ProcessingJobScheduler {
       for (ProcessingJob job : stale) {
         recoverOne(job);
       }
+      if (!stale.isEmpty()) {
+        // Declaring those attempts terminal is what makes their workspace rows abandoned. Sweeping
+        // here rather than inside the transition keeps a failed PII delete from rolling the
+        // transition back, and still removes the PII within this scan rather than a sweep later.
+        sweepAbandonedStaging();
+      }
     } catch (RuntimeException exception) {
       log.error("[recover] stale job scan failed", exception);
+    }
+  }
+
+  /**
+   * Removes import workspace rows that no running attempt owns.
+   *
+   * <p>The runner and stale-job recovery both clear their own attempt, but both do so best-effort:
+   * neither may turn a failed PII deletion into a failed import. This sweep is what makes the
+   * deletion eventual rather than optional, and it runs often because those rows hold customer PII.
+   */
+  @Scheduled(
+      fixedDelayString = "${app.file-import.staging-sweep-interval:5m}",
+      initialDelayString = "${app.file-import.staging-sweep-interval:5m}")
+  public void sweepAbandonedStaging() {
+    try {
+      int removed = customerImportStaging.clearAbandoned();
+      if (removed > 0) {
+        log.info("[staging-sweep] removed {} abandoned workspace rows", removed);
+      }
+    } catch (RuntimeException exception) {
+      // A scheduled method that throws stops being rescheduled, and the sweep is the last line of
+      // defence for this PII -- it must come back on the next tick.
+      log.error(
+          "[staging-sweep] failed causeType={}", exception.getClass().getSimpleName(), exception);
     }
   }
 

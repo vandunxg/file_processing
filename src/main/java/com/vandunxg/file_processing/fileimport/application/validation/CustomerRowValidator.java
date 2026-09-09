@@ -69,15 +69,6 @@ public final class CustomerRowValidator {
         issues);
   }
 
-  /** Normalization used by duplicate detection even when another field makes the row invalid. */
-  public static String normalizeExternalId(String value) {
-    return normalize(value);
-  }
-
-  public static boolean isValidExternalId(String value) {
-    return !value.isEmpty() && value.length() <= 64 && EXTERNAL_ID.matcher(value).matches();
-  }
-
   private static void validateExternalId(
       ParsedCustomerRow row, String externalId, List<ValidationIssue> issues) {
     if (externalId.isEmpty()) {
