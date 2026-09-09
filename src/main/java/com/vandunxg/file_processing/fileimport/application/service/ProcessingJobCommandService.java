@@ -194,12 +194,15 @@ public class ProcessingJobCommandService {
   @Transactional
   public void requestRetry(UUID jobId, UUID ownerId, boolean admin) {
     ProcessingJob job = requireVisible(jobId, ownerId, admin);
-    requireReplayableOriginal(job);
     try {
       job.requestRetry(admin ? AttemptTrigger.ADMIN_RETRY : AttemptTrigger.USER_RETRY);
     } catch (ProcessingJobRuleViolation violation) {
       throw new FileImportException(FileImportErrorCode.from(violation.getRule()), violation);
     }
+    // Deliberately after the state rule. A job that has not finished is not retryable for a reason
+    // the caller can act on -- waiting -- and answering "the original is gone" first reports a
+    // second-order problem as the cause and hides the real one. Nothing is saved if this throws.
+    requireReplayableOriginal(job);
     processingJobRepository.save(job);
     log.info("[retry-requested] jobId={} attemptsSoFar={}", jobId, job.getCurrentAttempt());
     auditService.record(OperationType.JOB_RETRY_REQUESTED, jobId, ownerId, Instant.now(clock));
