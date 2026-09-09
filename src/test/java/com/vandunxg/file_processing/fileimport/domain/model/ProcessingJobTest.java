@@ -75,7 +75,7 @@ class ProcessingJobTest {
     ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
     job.claim(NOW);
 
-    job.recordProgress(3, 2, 1, 1, 1, NOW.plusSeconds(1));
+    job.recordProgress(new RowCounters(3, 2, 1, 1, 1), NOW.plusSeconds(1));
 
     assertThat(job.getProcessedRows()).isEqualTo(3);
     assertThat(job.getValidRows()).isEqualTo(2);
@@ -89,9 +89,9 @@ class ProcessingJobTest {
   void recordProgressRejectsADecreasingProcessedRowCount() {
     ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
     job.claim(NOW);
-    job.recordProgress(3, 2, 1, 1, 1, NOW.plusSeconds(1));
+    job.recordProgress(new RowCounters(3, 2, 1, 1, 1), NOW.plusSeconds(1));
 
-    assertThatThrownBy(() -> job.recordProgress(2, 1, 1, 1, 0, NOW.plusSeconds(2)))
+    assertThatThrownBy(() -> job.recordProgress(new RowCounters(2, 1, 1, 1, 0), NOW.plusSeconds(2)))
         .isInstanceOf(ProcessingJobRuleViolation.class)
         .extracting(exception -> ((ProcessingJobRuleViolation) exception).getRule())
         .isEqualTo(ProcessingJobRule.PROGRESS_CANNOT_DECREASE);
@@ -102,7 +102,7 @@ class ProcessingJobTest {
     ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
     job.claim(NOW);
 
-    assertThatThrownBy(() -> job.recordProgress(3, 1, 1, 1, 0, NOW.plusSeconds(1)))
+    assertThatThrownBy(() -> job.recordProgress(new RowCounters(3, 1, 1, 1, 0), NOW.plusSeconds(1)))
         .isInstanceOf(ProcessingJobRuleViolation.class)
         .extracting(exception -> ((ProcessingJobRuleViolation) exception).getRule())
         .isEqualTo(ProcessingJobRule.INVALID_COUNTERS);
@@ -112,7 +112,7 @@ class ProcessingJobTest {
   void completePublishesAReportOnlyWhenInvalidRowsExist() {
     ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
     job.claim(NOW);
-    job.recordProgress(3, 2, 1, 1, 1, NOW.plusSeconds(1));
+    job.recordProgress(new RowCounters(3, 2, 1, 1, 1), NOW.plusSeconds(1));
 
     job.complete("reports/job.csv", NOW.plusSeconds(2));
 
@@ -125,7 +125,7 @@ class ProcessingJobTest {
   void completeRejectsAReportWhenAllRowsAreValid() {
     ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
     job.claim(NOW);
-    job.recordProgress(2, 2, 0, 1, 1, NOW.plusSeconds(1));
+    job.recordProgress(new RowCounters(2, 2, 0, 1, 1), NOW.plusSeconds(1));
 
     assertThatThrownBy(() -> job.complete("reports/job.csv", NOW.plusSeconds(2)))
         .isInstanceOf(ProcessingJobRuleViolation.class)
@@ -137,7 +137,7 @@ class ProcessingJobTest {
   void completeRejectsMissingReportWhenInvalidRowsExist() {
     ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
     job.claim(NOW);
-    job.recordProgress(1, 0, 1, 0, 0, NOW.plusSeconds(1));
+    job.recordProgress(new RowCounters(1, 0, 1, 0, 0), NOW.plusSeconds(1));
 
     assertThatThrownBy(() -> job.complete(null, NOW.plusSeconds(2)))
         .isInstanceOf(ProcessingJobRuleViolation.class)
@@ -150,7 +150,7 @@ class ProcessingJobTest {
     ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
     job.claim(NOW);
 
-    assertThatThrownBy(() -> job.recordProgress(1, 1, 0, 1, 1, NOW.plusSeconds(1)))
+    assertThatThrownBy(() -> job.recordProgress(new RowCounters(1, 1, 0, 1, 1), NOW.plusSeconds(1)))
         .isInstanceOf(ProcessingJobRuleViolation.class)
         .extracting(exception -> ((ProcessingJobRuleViolation) exception).getRule())
         .isEqualTo(ProcessingJobRule.INVALID_COUNTERS);
@@ -160,7 +160,7 @@ class ProcessingJobTest {
   void retryKeepsFailedAttemptAndDefersTheNextAttemptUntilClaim() {
     ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
     job.claim(NOW);
-    job.recordProgress(2, 2, 0, 1, 1, NOW.plusSeconds(1));
+    job.recordProgress(new RowCounters(2, 2, 0, 1, 1), NOW.plusSeconds(1));
     job.fail("DATABASE_BATCH_FAILED", "database batch failed", NOW.plusSeconds(2));
 
     job.requestRetry(AttemptTrigger.USER_RETRY);
@@ -224,7 +224,7 @@ class ProcessingJobTest {
   void requestCancellationRejectsASuccessfullyCompletedJob() {
     ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
     job.claim(NOW);
-    job.recordProgress(1, 1, 0, 1, 0, NOW.plusSeconds(1));
+    job.recordProgress(new RowCounters(1, 1, 0, 1, 0), NOW.plusSeconds(1));
     job.complete(null, NOW.plusSeconds(2));
 
     assertThatThrownBy(job::requestCancellation)
@@ -237,7 +237,7 @@ class ProcessingJobTest {
   void retryRejectsASuccessfullyCompletedJob() {
     ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
     job.claim(NOW);
-    job.recordProgress(1, 1, 0, 1, 0, NOW.plusSeconds(1));
+    job.recordProgress(new RowCounters(1, 1, 0, 1, 0), NOW.plusSeconds(1));
     job.complete(null, NOW.plusSeconds(2));
 
     assertThatThrownBy(() -> job.requestRetry(AttemptTrigger.USER_RETRY))
@@ -251,7 +251,8 @@ class ProcessingJobTest {
     ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
     job.claim(NOW);
 
-    assertThatThrownBy(() -> job.recordProgress(0, -1, 1, 0, -1, NOW.plusSeconds(1)))
+    assertThatThrownBy(
+            () -> job.recordProgress(new RowCounters(0, -1, 1, 0, -1), NOW.plusSeconds(1)))
         .isInstanceOf(ProcessingJobRuleViolation.class)
         .extracting(exception -> ((ProcessingJobRuleViolation) exception).getRule())
         .isEqualTo(ProcessingJobRule.INVALID_COUNTERS);
@@ -279,7 +280,7 @@ class ProcessingJobTest {
     ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
     job.claim(NOW);
 
-    job.recordProgress(10, 10, 0, 8, 2, 100L, NOW.plusSeconds(1));
+    job.recordProgress(new RowCounters(10, 10, 0, 8, 2), 100L, NOW.plusSeconds(1));
 
     assertThat(job.getTotalRows()).isEqualTo(100L);
     assertThat(job.getProgressPercent()).isEqualTo(10);
@@ -316,7 +317,7 @@ class ProcessingJobTest {
   void recordProgressRejectsAJobThatHasNotBeenClaimed() {
     ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
 
-    assertThatThrownBy(() -> job.recordProgress(1, 1, 0, 1, 0, NOW.plusSeconds(1)))
+    assertThatThrownBy(() -> job.recordProgress(new RowCounters(1, 1, 0, 1, 0), NOW.plusSeconds(1)))
         .isInstanceOf(ProcessingJobRuleViolation.class);
   }
 
@@ -324,7 +325,7 @@ class ProcessingJobTest {
   void workerLossFailsTheAttemptAndRequiresAnExplicitRetry() {
     ProcessingJob job = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
     job.claim(NOW);
-    job.recordProgress(5, 5, 0, 5, 0, NOW.plusSeconds(1));
+    job.recordProgress(new RowCounters(5, 5, 0, 5, 0), NOW.plusSeconds(1));
 
     job.fail("WORKER_LOST", "worker stopped", NOW.plusSeconds(2));
 
@@ -394,12 +395,12 @@ class ProcessingJobTest {
   void onlyARunThatRejectedRowsHasAReport() {
     ProcessingJob withErrors = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
     withErrors.claim(NOW);
-    withErrors.recordProgress(2, 1, 1, 1, 0, NOW);
+    withErrors.recordProgress(new RowCounters(2, 1, 1, 1, 0), NOW);
     withErrors.complete("reports/job.csv", NOW.plusSeconds(1));
 
     ProcessingJob clean = ProcessingJob.queue(UUID.randomUUID(), UUID.randomUUID(), NOW);
     clean.claim(NOW);
-    clean.recordProgress(2, 2, 0, 2, 0, NOW);
+    clean.recordProgress(new RowCounters(2, 2, 0, 2, 0), NOW);
     clean.complete(null, NOW.plusSeconds(1));
 
     assertThat(withErrors.hasErrorReport()).isTrue();

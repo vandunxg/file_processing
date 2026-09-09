@@ -18,6 +18,7 @@ import com.vandunxg.file_processing.fileimport.domain.model.AttemptTrigger;
 import com.vandunxg.file_processing.fileimport.domain.model.JobStatus;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingAttempt;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
+import com.vandunxg.file_processing.fileimport.domain.model.RowCounters;
 import com.vandunxg.file_processing.testsupport.AuthIntegrationTestBase;
 import com.vandunxg.file_processing.testsupport.PostgresIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
@@ -197,10 +198,10 @@ class JpaProcessingJobRepositoryIT extends AuthIntegrationTestBase {
 
     ProcessingJob winner = repository.findById(queued.getId()).orElseThrow();
     ProcessingJob loser = repository.findById(queued.getId()).orElseThrow();
-    winner.recordProgress(2, 2, 0, 2, 0, NOW.plusSeconds(1));
+    winner.recordProgress(new RowCounters(2, 2, 0, 2, 0), NOW.plusSeconds(1));
     repository.save(winner);
 
-    loser.recordProgress(4, 4, 0, 4, 0, NOW.plusSeconds(2));
+    loser.recordProgress(new RowCounters(4, 4, 0, 4, 0), NOW.plusSeconds(2));
     assertThatThrownBy(() -> repository.save(loser))
         .isInstanceOf(OptimisticLockingFailureException.class);
     assertThat(repository.findById(queued.getId()).orElseThrow().getProcessedRows()).isEqualTo(2);

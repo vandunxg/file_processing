@@ -15,6 +15,7 @@ import com.vandunxg.file_processing.fileimport.domain.model.ImportFile;
 import com.vandunxg.file_processing.fileimport.domain.model.JobStatus;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingAttempt;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
+import com.vandunxg.file_processing.fileimport.domain.model.RowCounters;
 import com.vandunxg.file_processing.fileimport.domain.model.StorageProvider;
 import com.vandunxg.file_processing.testsupport.AuthIntegrationTestBase;
 import com.vandunxg.file_processing.testsupport.InMemoryFileStorage;
@@ -264,7 +265,7 @@ class ProcessingJobRunnerIT extends AuthIntegrationTestBase {
     String reportKey = "reports/" + jobId + ".csv";
     storage.put(reportKey, "row_number,external_id\n2,CUS_01\n");
 
-    commandService.complete(jobId, 2, 1, 1, 1, 0, reportKey);
+    commandService.complete(jobId, new RowCounters(2, 1, 1, 1, 0), reportKey);
 
     ProcessingJob job = jobs.findById(jobId).orElseThrow();
     assertThat(job.getStatus()).isEqualTo(JobStatus.CANCELLED);

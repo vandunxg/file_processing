@@ -11,6 +11,7 @@ import com.vandunxg.file_processing.fileimport.domain.model.AttemptTrigger;
 import com.vandunxg.file_processing.fileimport.domain.model.JobStatus;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingAttempt;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
+import com.vandunxg.file_processing.fileimport.domain.model.RowCounters;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -19,8 +20,9 @@ import org.junit.jupiter.api.Test;
  * field is therefore the guard: it fails when a field is added to either side and not carried
  * across, which column-by-column assertions would not keep up with.
  *
- * <p>Every value below is distinct on purpose. The five row counters are consecutive parameters of
- * the same type in both reconstitution factories, where a swapped pair would compile silently.
+ * <p>Every value below is distinct on purpose, so a field landing in the wrong place shows up. The
+ * totals deliberately do not add up: reconstitution replays a stored row without judging it, and a
+ * round trip that only worked for arithmetically valid rows would not prove that.
  */
 class ProcessingJobPersistenceMapperTest {
 
@@ -73,11 +75,13 @@ class ProcessingJobPersistenceMapperTest {
             AttemptStatus.FAILED,
             NOW.plusSeconds(1),
             NOW.plusSeconds(2),
-            11L,
-            12L,
-            13L,
-            14L,
-            15L,
+            RowCounters.builder()
+                .processedRows(11)
+                .validRows(12)
+                .invalidRows(13)
+                .insertedRows(14)
+                .updatedRows(15)
+                .build(),
             "ATTEMPT_ERROR",
             "attempt failed",
             NOW.plusSeconds(3),
@@ -91,11 +95,13 @@ class ProcessingJobPersistenceMapperTest {
         UUID.fromString("00000000-0000-0000-0000-0000000000c1"),
         UUID.fromString("00000000-0000-0000-0000-0000000000d1"),
         JobStatus.COMPLETED_WITH_ERRORS,
-        21L,
-        22L,
-        23L,
-        24L,
-        25L,
+        RowCounters.builder()
+            .processedRows(21)
+            .validRows(22)
+            .invalidRows(23)
+            .insertedRows(24)
+            .updatedRows(25)
+            .build(),
         26L,
         27,
         28,

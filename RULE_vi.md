@@ -533,6 +533,15 @@ application/capability/UserSearchRepository        # read model: count(query), s
 infrastructure/persistence/JpaUserRepository       # implement cả hai
 ```
 
+Read model **nên** chỉ trả những gì view của nó cần, nhưng trả về aggregate là
+chấp nhận được và là hệ quả tự nhiên của paging base dùng chung.
+`BaseEntityRepositoryCustom<E extends AuditableEntity, Q>` trả `List<E>`, nên
+làm projection có nghĩa là tự viết lại paging, ordering và xử lý `sortBy`, rồi
+tự giữ allow-list mà `@ValidatePaging` kiểm cho đồng bộ. Đổi lại, map một trang
+aggregate chỉ tốn thêm một query cho collection con, mà `@BatchSize` đã chặn ở
+một query mỗi trang. Chọn projection khi view thật sự hẹp và nóng; đừng làm nó
+chỉ để thoả luật, và ghi rõ trong pull request đã chọn hướng nào.
+
 ### 6.4 Domain model không mang persistence mapping
 
 Domain model **không được** mang mapping `jakarta.persistence` hay Hibernate.

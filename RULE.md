@@ -542,6 +542,16 @@ application/capability/UserSearchRepository        # read model: count(query), s
 infrastructure/persistence/JpaUserRepository       # implements both
 ```
 
+A read model **SHOULD** return only what its view needs, but returning the
+aggregate is acceptable and is what the house paging base leads to.
+`BaseEntityRepositoryCustom<E extends AuditableEntity, Q>` returns `List<E>`, so
+a projection means writing the paging, ordering and `sortBy` handling by hand
+and keeping the allow-list `@ValidatePaging` checks in sync with it. Against
+that, mapping a page of aggregates costs one extra query for their child
+collections, which `@BatchSize` already bounds to one per page. Prefer a
+projection where a view is genuinely narrow and hot; do not build one to satisfy
+the rule alone, and say in the pull request which way it went.
+
 ### 6.4 A domain model carries no persistence mapping
 
 A domain model **MUST NOT** carry `jakarta.persistence` or Hibernate mapping. An

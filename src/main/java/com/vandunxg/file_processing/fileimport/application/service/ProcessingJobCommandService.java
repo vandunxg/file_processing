@@ -18,6 +18,7 @@ import com.vandunxg.file_processing.fileimport.domain.exception.ProcessingJobRul
 import com.vandunxg.file_processing.fileimport.domain.model.AttemptTrigger;
 import com.vandunxg.file_processing.fileimport.domain.model.JobStatus;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
+import com.vandunxg.file_processing.fileimport.domain.model.RowCounters;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -68,33 +69,19 @@ public class ProcessingJobCommandService {
    * checkpoint it is tolerable.
    */
   @Transactional
-  public boolean recordProgress(
-      UUID jobId,
-      long processedRows,
-      long validRows,
-      long invalidRows,
-      long insertedRows,
-      long updatedRows) {
+  public boolean recordProgress(UUID jobId, RowCounters counters) {
     ProcessingJob job = require(jobId);
-    job.recordProgress(
-        processedRows, validRows, invalidRows, insertedRows, updatedRows, Instant.now(clock));
+    job.recordProgress(counters, Instant.now(clock));
     processingJobRepository.save(job);
     return job.isCancellationRequested();
   }
 
   @Transactional
-  public void complete(
-      UUID jobId,
-      long processedRows,
-      long validRows,
-      long invalidRows,
-      long insertedRows,
-      long updatedRows,
-      String errorReportKey) {
+  public void complete(UUID jobId, RowCounters counters, String errorReportKey) {
     Instant now = Instant.now(clock);
     ProcessingJob job = require(jobId);
-    job.recordProgress(
-        processedRows, validRows, invalidRows, insertedRows, updatedRows, processedRows, now);
+    // The file has been read to the end, so what was processed is also the total.
+    job.recordProgress(counters, counters.processedRows(), now);
     if (job.isCancellationRequested()) {
       // Cancellation landed after the worker's last safe-point check. The run happens to be
       // finished, but the answer to the caller is still "cancelled", and a cancelled job publishes
@@ -117,10 +104,10 @@ public class ProcessingJobCommandService {
         "[complete] jobId={} status={} processed={} invalid={}",
         jobId,
         job.getStatus(),
-        processedRows,
-        invalidRows);
+        counters.processedRows(),
+        counters.invalidRows());
     auditService.record(OperationType.JOB_COMPLETED, jobId, null, now);
-    metrics.jobFinished(job.getStatus(), validRows, invalidRows);
+    metrics.jobFinished(job.getStatus(), counters.validRows(), counters.invalidRows());
   }
 
   @Transactional

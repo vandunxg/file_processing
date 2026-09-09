@@ -14,6 +14,7 @@ import com.vandunxg.file_processing.fileimport.domain.ProcessingJobRepository;
 import com.vandunxg.file_processing.fileimport.domain.model.FileChecksum;
 import com.vandunxg.file_processing.fileimport.domain.model.ImportFile;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
+import com.vandunxg.file_processing.fileimport.domain.model.RowCounters;
 import com.vandunxg.file_processing.fileimport.domain.model.StorageProvider;
 import com.vandunxg.file_processing.testsupport.AuthIntegrationTestBase;
 import com.vandunxg.file_processing.testsupport.InMemoryFileStorage;
@@ -114,7 +115,7 @@ class ProcessingJobQueryServiceIT extends AuthIntegrationTestBase {
                 StorageProvider.R2));
     ProcessingJob job = jobs.save(ProcessingJob.queue(file.getId(), ownerId, Instant.now()));
     ProcessingJob claimed = jobs.claimNextQueued(Instant.now()).orElseThrow();
-    claimed.recordProgress(2, 1, 1, 1, 0, Instant.now());
+    claimed.recordProgress(new RowCounters(2, 1, 1, 1, 0), Instant.now());
     claimed.complete(REPORT_KEY, Instant.now());
     jobs.save(claimed);
     return job;

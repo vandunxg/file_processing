@@ -4,6 +4,7 @@ import java.util.List;
 
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingAttempt;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
+import com.vandunxg.file_processing.fileimport.domain.model.RowCounters;
 import com.vandunxg.file_processing.fileimport.infrastructure.persistence.entity.ProcessingAttemptEntity;
 import com.vandunxg.file_processing.fileimport.infrastructure.persistence.entity.ProcessingJobEntity;
 import org.mapstruct.Mapper;
@@ -43,11 +44,12 @@ public abstract class ProcessingJobPersistenceMapper {
         entity.getImportFileId(),
         entity.getOwnerId(),
         entity.getStatus(),
-        entity.getProcessedRows(),
-        entity.getValidRows(),
-        entity.getInvalidRows(),
-        entity.getInsertedRows(),
-        entity.getUpdatedRows(),
+        counters(
+            entity.getProcessedRows(),
+            entity.getValidRows(),
+            entity.getInvalidRows(),
+            entity.getInsertedRows(),
+            entity.getUpdatedRows()),
         entity.getTotalRows(),
         entity.getProgressPercent(),
         entity.getCurrentAttempt(),
@@ -84,11 +86,12 @@ public abstract class ProcessingJobPersistenceMapper {
         entity.getStatus(),
         entity.getStartedAt(),
         entity.getFinishedAt(),
-        entity.getProcessedRows(),
-        entity.getValidRows(),
-        entity.getInvalidRows(),
-        entity.getInsertedRows(),
-        entity.getUpdatedRows(),
+        counters(
+            entity.getProcessedRows(),
+            entity.getValidRows(),
+            entity.getInvalidRows(),
+            entity.getInsertedRows(),
+            entity.getUpdatedRows()),
         entity.getErrorCode(),
         entity.getErrorSummary(),
         entity.getDeletedAt(),
@@ -96,6 +99,17 @@ public abstract class ProcessingJobPersistenceMapper {
         entity.getCreatedAt(),
         entity.getLastModifiedBy(),
         entity.getLastModifiedAt());
+  }
+
+  private static RowCounters counters(
+      long processed, long valid, long invalid, long inserted, long updated) {
+    return RowCounters.builder()
+        .processedRows(processed)
+        .validRows(valid)
+        .invalidRows(invalid)
+        .insertedRows(inserted)
+        .updatedRows(updated)
+        .build();
   }
 
   public abstract ProcessingJobEntity toEntity(ProcessingJob domain);

@@ -111,11 +111,7 @@ public class ProcessingJob extends AuditableDomain {
       UUID importFileId,
       UUID ownerId,
       JobStatus status,
-      long processedRows,
-      long validRows,
-      long invalidRows,
-      long insertedRows,
-      long updatedRows,
+      RowCounters counters,
       Long totalRows,
       Integer progressPercent,
       int currentAttempt,
@@ -135,11 +131,11 @@ public class ProcessingJob extends AuditableDomain {
       Instant lastModifiedAt) {
     ProcessingJob job = new ProcessingJob(id, importFileId, ownerId, createdAt);
     job.status = status;
-    job.processedRows = processedRows;
-    job.validRows = validRows;
-    job.invalidRows = invalidRows;
-    job.insertedRows = insertedRows;
-    job.updatedRows = updatedRows;
+    job.processedRows = counters.processedRows();
+    job.validRows = counters.validRows();
+    job.invalidRows = counters.invalidRows();
+    job.insertedRows = counters.insertedRows();
+    job.updatedRows = counters.updatedRows();
     job.totalRows = totalRows;
     job.progressPercent = progressPercent;
     job.currentAttempt = currentAttempt;
@@ -199,46 +195,32 @@ public class ProcessingJob extends AuditableDomain {
     status = JobStatus.CANCELLATION_REQUESTED;
   }
 
-  public void recordProgress(
-      long processedRows,
-      long validRows,
-      long invalidRows,
-      long insertedRows,
-      long updatedRows,
-      Instant heartbeatAt) {
+  /**
+   * Records a checkpoint of the run in progress.
+   *
+   * <p>The state check runs before the totals are judged, so a caller writing to a job that is no
+   * longer running is told that and not something about arithmetic: whether the job still belongs
+   * to it is the part it can act on.
+   */
+  public void recordProgress(RowCounters counters, Instant heartbeatAt) {
     if (!hasRunningAttempt()) {
       throw new ProcessingJobRuleViolation(ProcessingJobRule.ONLY_RUNNING_JOB_CAN_RECORD_PROGRESS);
     }
-    if (processedRows < 0
-        || validRows < 0
-        || invalidRows < 0
-        || insertedRows < 0
-        || updatedRows < 0
-        || processedRows != validRows + invalidRows
-        || insertedRows + updatedRows > validRows) {
-      throw new ProcessingJobRuleViolation(ProcessingJobRule.INVALID_COUNTERS);
-    }
-    if (processedRows < this.processedRows) {
+    counters.requireConsistent();
+    if (counters.processedRows() < this.processedRows) {
       throw new ProcessingJobRuleViolation(ProcessingJobRule.PROGRESS_CANNOT_DECREASE);
     }
-    this.processedRows = processedRows;
-    this.validRows = validRows;
-    this.invalidRows = invalidRows;
-    this.insertedRows = insertedRows;
-    this.updatedRows = updatedRows;
+    this.processedRows = counters.processedRows();
+    this.validRows = counters.validRows();
+    this.invalidRows = counters.invalidRows();
+    this.insertedRows = counters.insertedRows();
+    this.updatedRows = counters.updatedRows();
     this.heartbeatAt = heartbeatAt;
   }
 
   /** Progress once the file has been read to the end and the row count is known. */
-  public void recordProgress(
-      long processedRows,
-      long validRows,
-      long invalidRows,
-      long insertedRows,
-      long updatedRows,
-      long totalRows,
-      Instant heartbeatAt) {
-    recordProgress(processedRows, validRows, invalidRows, insertedRows, updatedRows, heartbeatAt);
+  public void recordProgress(RowCounters counters, long totalRows, Instant heartbeatAt) {
+    recordProgress(counters, heartbeatAt);
     this.totalRows = totalRows;
     this.progressPercent = totalRows == 0 ? 100 : (int) ((processedRows * 100) / totalRows);
   }
@@ -259,17 +241,7 @@ public class ProcessingJob extends AuditableDomain {
     status = invalidRows == 0 ? JobStatus.COMPLETED : JobStatus.COMPLETED_WITH_ERRORS;
     this.errorReportKey = errorReportKey;
     this.finishedAt = finishedAt;
-    currentAttempt()
-        .finish(
-            AttemptStatus.SUCCEEDED,
-            finishedAt,
-            processedRows,
-            validRows,
-            invalidRows,
-            insertedRows,
-            updatedRows,
-            null,
-            null);
+    currentAttempt().finish(AttemptStatus.SUCCEEDED, finishedAt, counters(), null, null);
   }
 
   /** Ends a run that hit a system failure. Rejected rows are not a failure -- they complete. */
@@ -282,17 +254,7 @@ public class ProcessingJob extends AuditableDomain {
     this.errorCode = errorCode;
     this.errorSummary = errorSummary;
     this.finishedAt = finishedAt;
-    currentAttempt()
-        .finish(
-            AttemptStatus.FAILED,
-            finishedAt,
-            processedRows,
-            validRows,
-            invalidRows,
-            insertedRows,
-            updatedRows,
-            errorCode,
-            errorSummary);
+    currentAttempt().finish(AttemptStatus.FAILED, finishedAt, counters(), errorCode, errorSummary);
   }
 
   /**
@@ -333,17 +295,7 @@ public class ProcessingJob extends AuditableDomain {
     }
     status = JobStatus.CANCELLED;
     this.finishedAt = finishedAt;
-    currentAttempt()
-        .finish(
-            AttemptStatus.CANCELLED,
-            finishedAt,
-            processedRows,
-            validRows,
-            invalidRows,
-            insertedRows,
-            updatedRows,
-            null,
-            null);
+    currentAttempt().finish(AttemptStatus.CANCELLED, finishedAt, counters(), null, null);
   }
 
   public boolean isCancellationRequested() {
@@ -386,6 +338,17 @@ public class ProcessingJob extends AuditableDomain {
 
   private boolean hasRunningAttempt() {
     return status == JobStatus.PROCESSING || status == JobStatus.CANCELLATION_REQUESTED;
+  }
+
+  /** The job's totals as they stand, for the attempt that is reporting them. */
+  private RowCounters counters() {
+    return RowCounters.builder()
+        .processedRows(processedRows)
+        .validRows(validRows)
+        .invalidRows(invalidRows)
+        .insertedRows(insertedRows)
+        .updatedRows(updatedRows)
+        .build();
   }
 
   private ProcessingAttempt currentAttempt() {

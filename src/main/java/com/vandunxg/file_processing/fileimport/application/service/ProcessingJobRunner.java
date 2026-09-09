@@ -27,6 +27,7 @@ import com.vandunxg.file_processing.fileimport.domain.ImportFileRepository;
 import com.vandunxg.file_processing.fileimport.domain.exception.ProcessingJobRuleViolation;
 import com.vandunxg.file_processing.fileimport.domain.model.ImportFile;
 import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
+import com.vandunxg.file_processing.fileimport.domain.model.RowCounters;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -136,14 +137,7 @@ public class ProcessingJobRunner {
         counters.invalidRows,
         counters.insertedRows,
         counters.updatedRows);
-    processingJobCommandService.complete(
-        job.getId(),
-        counters.processedRows,
-        counters.validRows,
-        counters.invalidRows,
-        counters.insertedRows,
-        counters.updatedRows,
-        outcome.reportKey());
+    processingJobCommandService.complete(job.getId(), counters.snapshot(), outcome.reportKey());
   }
 
   private Outcome process(ProcessingJob job, ImportFile file, Counters counters)
@@ -320,13 +314,7 @@ public class ProcessingJobRunner {
   /** Returns true when the job has been asked to stop. */
   private boolean persistProgress(ProcessingJob job, Counters counters) {
     try {
-      return processingJobCommandService.recordProgress(
-          job.getId(),
-          counters.processedRows,
-          counters.validRows,
-          counters.invalidRows,
-          counters.insertedRows,
-          counters.updatedRows);
+      return processingJobCommandService.recordProgress(job.getId(), counters.snapshot());
     } catch (OptimisticLockingFailureException conflict) {
       log.debug("[run] jobId={} checkpoint skipped, job changed concurrently", job.getId());
       // The write that won was most likely the cancellation request itself.
@@ -363,13 +351,7 @@ public class ProcessingJobRunner {
    */
   private void checkpointBeforeFailure(ProcessingJob job, Counters counters) {
     try {
-      processingJobCommandService.recordProgress(
-          job.getId(),
-          counters.processedRows,
-          counters.validRows,
-          counters.invalidRows,
-          counters.insertedRows,
-          counters.updatedRows);
+      processingJobCommandService.recordProgress(job.getId(), counters.snapshot());
     } catch (RuntimeException exception) {
       log.warn(
           "[run] could not checkpoint before failure jobId={} causeType={}",
@@ -440,6 +422,11 @@ public class ProcessingJobRunner {
     }
   }
 
+  /**
+   * The totals as the run accumulates them, incremented row by row. {@link #snapshot()} is the one
+   * place they become the immutable value the job is told about, so no boundary unpacks them into
+   * loose arguments again.
+   */
   private static final class Counters {
 
     private long processedRows;
@@ -447,5 +434,15 @@ public class ProcessingJobRunner {
     private long invalidRows;
     private long insertedRows;
     private long updatedRows;
+
+    private RowCounters snapshot() {
+      return RowCounters.builder()
+          .processedRows(processedRows)
+          .validRows(validRows)
+          .invalidRows(invalidRows)
+          .insertedRows(insertedRows)
+          .updatedRows(updatedRows)
+          .build();
+    }
   }
 }

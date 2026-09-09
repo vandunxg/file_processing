@@ -77,11 +77,7 @@ public class ProcessingAttempt extends AuditableDomain {
       AttemptStatus status,
       Instant startedAt,
       Instant finishedAt,
-      long processedRows,
-      long validRows,
-      long invalidRows,
-      long insertedRows,
-      long updatedRows,
+      RowCounters counters,
       String errorCode,
       String errorSummary,
       Instant deletedAt,
@@ -92,11 +88,11 @@ public class ProcessingAttempt extends AuditableDomain {
     ProcessingAttempt attempt =
         new ProcessingAttempt(id, jobId, attemptNumber, trigger, status, startedAt, deletedAt);
     attempt.finishedAt = finishedAt;
-    attempt.processedRows = processedRows;
-    attempt.validRows = validRows;
-    attempt.invalidRows = invalidRows;
-    attempt.insertedRows = insertedRows;
-    attempt.updatedRows = updatedRows;
+    attempt.processedRows = counters.processedRows();
+    attempt.validRows = counters.validRows();
+    attempt.invalidRows = counters.invalidRows();
+    attempt.insertedRows = counters.insertedRows();
+    attempt.updatedRows = counters.updatedRows();
     attempt.errorCode = errorCode;
     attempt.errorSummary = errorSummary;
     attempt.setCreatedBy(createdBy);
@@ -109,20 +105,16 @@ public class ProcessingAttempt extends AuditableDomain {
   void finish(
       AttemptStatus status,
       Instant finishedAt,
-      long processedRows,
-      long validRows,
-      long invalidRows,
-      long insertedRows,
-      long updatedRows,
+      RowCounters counters,
       String errorCode,
       String errorSummary) {
     this.status = status;
     this.finishedAt = finishedAt;
-    this.processedRows = processedRows;
-    this.validRows = validRows;
-    this.invalidRows = invalidRows;
-    this.insertedRows = insertedRows;
-    this.updatedRows = updatedRows;
+    this.processedRows = counters.processedRows();
+    this.validRows = counters.validRows();
+    this.invalidRows = counters.invalidRows();
+    this.insertedRows = counters.insertedRows();
+    this.updatedRows = counters.updatedRows();
     this.errorCode = errorCode;
     this.errorSummary = errorSummary;
   }
