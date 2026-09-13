@@ -14,9 +14,9 @@ app:
     progress-time-interval: PT2S
     stale-heartbeat-threshold: PT2M
     worker-threads: 1
-    poll-interval: PT1S
-    recovery-interval: PT1M
-    staging-sweep-interval: PT5M
+    poll-interval: PT10M
+    recovery-interval: PT10M
+    staging-sweep-interval: PT10M
     retention-cleanup-interval: PT1H
     storage:
       r2:
