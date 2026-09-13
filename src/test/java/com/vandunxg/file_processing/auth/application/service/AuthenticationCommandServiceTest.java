@@ -420,7 +420,8 @@ class AuthenticationCommandServiceTest {
             5,
             Duration.ofMinutes(15),
             Duration.ofMinutes(15));
-    AuthProperties.Refresh refresh = new AuthProperties.Refresh(Duration.ofDays(7));
-    return new AuthProperties(null, null, login, refresh, null, null, null, null, null);
+    AuthProperties.Refresh refresh = new AuthProperties.Refresh(Duration.ofDays(7), true);
+    return new AuthProperties(
+        null, null, login, refresh, null, null, null, null, null, null, null, null);
   }
 }

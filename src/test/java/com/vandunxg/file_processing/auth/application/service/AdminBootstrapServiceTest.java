@@ -156,6 +156,8 @@ class BootstrapAdminServiceTest {
         null,
         null,
         null,
+        null,
+        null,
         null);
   }
 

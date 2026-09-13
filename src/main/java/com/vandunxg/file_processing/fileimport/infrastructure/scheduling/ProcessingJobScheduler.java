@@ -96,8 +96,8 @@ public class ProcessingJobScheduler {
   }
 
   @Scheduled(
-      fixedDelayString = "${app.file-import.poll-interval:1s}",
-      initialDelayString = "${app.file-import.poll-interval:1s}")
+      fixedDelayString = "${app.file-import.poll-interval}",
+      initialDelayString = "${app.file-import.poll-interval}")
   public void pollQueuedJobs() {
     if (workerControl.isStopping()) {
       return;
@@ -118,8 +118,8 @@ public class ProcessingJobScheduler {
   }
 
   @Scheduled(
-      fixedDelayString = "${app.file-import.recovery-interval:1m}",
-      initialDelayString = "${app.file-import.recovery-interval:1m}")
+      fixedDelayString = "${app.file-import.recovery-interval}",
+      initialDelayString = "${app.file-import.recovery-interval}")
   public void recoverAbandonedJobs() {
     try {
       Instant staleBefore = Instant.now(clock).minus(properties.staleHeartbeatThreshold());
@@ -146,8 +146,8 @@ public class ProcessingJobScheduler {
    * deletion eventual rather than optional, and it runs often because those rows hold customer PII.
    */
   @Scheduled(
-      fixedDelayString = "${app.file-import.staging-sweep-interval:5m}",
-      initialDelayString = "${app.file-import.staging-sweep-interval:5m}")
+      fixedDelayString = "${app.file-import.staging-sweep-interval}",
+      initialDelayString = "${app.file-import.staging-sweep-interval}")
   public void sweepAbandonedStaging() {
     try {
       int removed = customerImportStaging.clearAbandoned();
@@ -163,7 +163,7 @@ public class ProcessingJobScheduler {
   }
 
   /** Purges retained objects but deliberately keeps the job and file metadata for audit history. */
-  @Scheduled(fixedDelayString = "${app.file-import.retention-cleanup-interval:1h}")
+  @Scheduled(fixedDelayString = "${app.file-import.retention-cleanup-interval}")
   public void cleanExpiredObjects() {
     for (ImportFile file : importFileRepository.findExpired(Instant.now(clock))) {
       processingJobRepository

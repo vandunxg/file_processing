@@ -34,15 +34,6 @@ public record FileImportProperties(
     int workerThreads) {
 
   public FileImportProperties {
-    maxFileSize = maxFileSize == null ? DataSize.ofMegabytes(500) : maxFileSize;
-    batchSize = batchSize == 0 ? 1_000 : batchSize;
-    progressRowInterval = progressRowInterval == 0 ? 5_000 : progressRowInterval;
-    progressTimeInterval =
-        progressTimeInterval == null ? Duration.ofSeconds(2) : progressTimeInterval;
-    staleHeartbeatThreshold =
-        staleHeartbeatThreshold == null ? Duration.ofMinutes(2) : staleHeartbeatThreshold;
-    workerThreads = workerThreads == 0 ? 1 : workerThreads;
-
     requirePositive(retention, "File import retention");
     requirePositive(progressTimeInterval, "Progress time interval");
     requirePositive(staleHeartbeatThreshold, "Stale heartbeat threshold");

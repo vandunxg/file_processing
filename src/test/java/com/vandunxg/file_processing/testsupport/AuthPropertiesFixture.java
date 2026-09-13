@@ -28,8 +28,10 @@ public final class AuthPropertiesFixture {
             5,
             Duration.ofMinutes(15),
             Duration.ofMinutes(15)),
-        new AuthProperties.Refresh(Duration.ofHours(168)),
+        new AuthProperties.Refresh(Duration.ofHours(168), true),
         new AuthProperties.Session(Duration.ofMinutes(5)),
+        new AuthProperties.Bootstrap(
+            new AuthProperties.Bootstrap.Admin(false, "", "", "", "System Administrator")),
         new AuthProperties.Jwt(
             "test-issuer",
             "test-audience",
@@ -41,6 +43,13 @@ public final class AuthPropertiesFixture {
             List.of()),
         new AuthProperties.EmailVerification(
             Duration.ofMinutes(15), "https://app.example.com/verify", 5),
+        new AuthProperties.PasswordReset(
+            Duration.ofMinutes(15),
+            "https://app.example.com/reset-password",
+            20,
+            5,
+            Duration.ofMinutes(15)),
+        new AuthProperties.Cleanup(Duration.ofHours(1), 100),
         new AuthProperties.Redis(
             new AuthProperties.Redis.Throttle("test:throttle:", Duration.ofHours(1)),
             new AuthProperties.Redis.EmailVerificationKeys(
