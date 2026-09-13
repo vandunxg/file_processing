@@ -50,4 +50,17 @@ class ConfigurationDefaultsExternalizationTest {
     assertThat(fileImportProperties).doesNotContain(" == null ?", " == 0 ?");
     assertThat(authProperties).doesNotContain("public AuthProperties(", "public Refresh(Duration");
   }
+
+  @Test
+  void enables_rabbitmq_for_the_dev_profile() throws IOException {
+    String devYaml = Files.readString(Path.of("src/main/resources/application-dev.yml"));
+
+    assertThat(devYaml)
+        .contains(
+            "rabbitmq:\n    enabled: true",
+            "host: ${RABBITMQ_HOST:localhost}",
+            "port: ${RABBITMQ_PORT:5672}",
+            "username: ${RABBITMQ_USERNAME:rabbitmq_user}",
+            "password: ${RABBITMQ_PASSWORD:rabbitmq_password}");
+  }
 }
