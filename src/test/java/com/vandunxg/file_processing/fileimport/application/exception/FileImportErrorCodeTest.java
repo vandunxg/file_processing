@@ -15,7 +15,9 @@ import java.util.Properties;
 import com.vandunxg.file_processing.fileimport.domain.exception.ProcessingJobRule;
 import org.junit.jupiter.api.Test;
 
-/** Guards the error contract required by RULE.md section 7: prefixes, codes, and i18n keys. */
+/**
+ * Guards the error contract required by the error-handling skill: prefixes, codes, and i18n keys.
+ */
 class FileImportErrorCodeTest {
 
   private static final List<String> ALLOWED_PREFIXES = List.of("FILE_IMPORT_", "PROCESSING_JOB_");

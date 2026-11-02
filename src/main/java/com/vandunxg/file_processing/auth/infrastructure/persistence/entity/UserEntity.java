@@ -40,15 +40,18 @@ public class UserEntity extends AuditableEntity {
   private String normalizedUsername;
 
   @Column(name = "email", nullable = false, length = 254)
+  @ToString.Exclude
   private String email;
 
   @Column(name = "normalized_email", nullable = false, length = 254)
+  @ToString.Exclude
   private String normalizedEmail;
 
   @Column(name = "display_name", nullable = false, length = 150)
   private String displayName;
 
   @Column(name = "password_hash", nullable = false, length = 255)
+  @ToString.Exclude
   private String passwordHash;
 
   @Enumerated(EnumType.STRING)

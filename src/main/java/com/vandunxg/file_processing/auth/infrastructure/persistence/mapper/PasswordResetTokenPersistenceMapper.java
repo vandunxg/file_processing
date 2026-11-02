@@ -5,7 +5,9 @@ import java.util.List;
 import com.vandunxg.common.models.mapper.EntityMapper;
 import com.vandunxg.file_processing.auth.domain.model.PasswordResetToken;
 import com.vandunxg.file_processing.auth.infrastructure.persistence.entity.PasswordResetTokenEntity;
+import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.MappingConstants;
 import org.mapstruct.ReportingPolicy;
 
@@ -20,6 +22,10 @@ public interface PasswordResetTokenPersistenceMapper
   PasswordResetToken toDomain(PasswordResetTokenEntity entity);
 
   @Override
+  @BeanMapping(ignoreUnmappedSourceProperties = {"createdBy", "lastModifiedBy", "lastModifiedAt"})
+  @Mapping(target = "createdBy", ignore = true)
+  @Mapping(target = "lastModifiedBy", ignore = true)
+  @Mapping(target = "lastModifiedAt", ignore = true)
   PasswordResetTokenEntity toEntity(PasswordResetToken domain);
 
   @Override

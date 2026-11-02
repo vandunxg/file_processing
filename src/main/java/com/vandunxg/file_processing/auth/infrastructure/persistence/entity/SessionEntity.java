@@ -46,6 +46,7 @@ public class SessionEntity extends AuditableEntity {
   private String userAgent;
 
   @Column(name = "ip_address_hash", length = 64)
+  @ToString.Exclude
   private String ipAddressHash;
 
   @Column(name = "issued_at", nullable = false)

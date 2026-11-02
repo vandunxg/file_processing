@@ -1,5 +1,6 @@
 package com.vandunxg.file_processing.auth.infrastructure.persistence;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -44,10 +45,13 @@ public interface UserEntityRepository
   @Query(
       """
       UPDATE UserEntity u
-      SET u.credentialVersion = u.credentialVersion + 1
+      SET u.credentialVersion = u.credentialVersion + 1,
+          u.version = u.version + 1,
+          u.lastModifiedAt = :now
       WHERE u.id IN :userIds AND u.deletedAt IS NULL
       """)
-  int bumpCredentialVersionFor(@Param("userIds") Collection<UUID> userIds);
+  int bumpCredentialVersionFor(
+      @Param("userIds") Collection<UUID> userIds, @Param("now") Instant now);
 
   @Query(
       "select count(u) from UserEntity u join UserRoleEntity ur on ur.userId = u.id "

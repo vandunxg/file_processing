@@ -55,7 +55,7 @@ public interface UserRepository {
    *
    * @return how many users were updated
    */
-  int bumpCredentialVersionFor(Collection<UUID> userIds);
+  int bumpCredentialVersionFor(Collection<UUID> userIds, Instant now);
 
   /** Adds one role assignment to the user aggregate. */
   UserRole assignRole(UserRole userRole);

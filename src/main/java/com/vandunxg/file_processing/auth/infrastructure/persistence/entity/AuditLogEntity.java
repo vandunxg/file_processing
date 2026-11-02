@@ -55,9 +55,11 @@ public class AuditLogEntity extends AuditableEntity {
 
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "data", columnDefinition = "jsonb")
+  @ToString.Exclude
   private Map<String, Object> data;
 
   @Column(name = "ip_address", length = 64)
+  @ToString.Exclude
   private String ipAddress;
 
   @Column(name = "browser", length = 64)

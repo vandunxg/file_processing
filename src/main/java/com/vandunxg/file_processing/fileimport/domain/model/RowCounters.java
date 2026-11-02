@@ -24,10 +24,10 @@ public record RowCounters(
    * invalid rows it is made of, more rows written than were found valid, or a negative total.
    *
    * <p>Deliberately a method rather than a constructor guard, for two reasons. Reconstitution
-   * replays a stored row, which is a fact and not a new request ({@code RULE.md} §6.4) -- judging
-   * it here would make a legacy row that never satisfied the rule unreadable. And the aggregate
-   * checks its own state first, so a caller writing to a job that is no longer running learns that,
-   * rather than being told about arithmetic it can do nothing about.
+   * replays a stored row, which is a fact and not a new request (skill {@code domain-modeling}) --
+   * judging it here would make a legacy row that never satisfied the rule unreadable. And the
+   * aggregate checks its own state first, so a caller writing to a job that is no longer running
+   * learns that, rather than being told about arithmetic it can do nothing about.
    */
   public void requireConsistent() {
     if (processedRows < 0

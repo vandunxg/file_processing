@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -85,6 +86,7 @@ class FileImportControllerIT extends AuthIntegrationTestBase {
   @Autowired private InMemoryFileStorage storage;
   @Autowired private MultipartProperties multipartProperties;
   @Autowired private FileImportProperties fileImportProperties;
+  @Autowired private Clock clock;
 
   @BeforeEach
   void reset() {
@@ -473,7 +475,9 @@ class FileImportControllerIT extends AuthIntegrationTestBase {
                 filename,
                 "imports/" + fileId + ".csv",
                 UUID.randomUUID().toString().replace("-", "").repeat(2),
-                Timestamp.from(createdAt.plusSeconds(86_400)),
+                // Retention is judged against the application clock, not createdAt: a deadline
+                // derived from the fixed NOW would expire once real time passes it and hide RETRY.
+                Timestamp.from(clock.instant().plus(Duration.ofDays(1))),
                 Timestamp.from(createdAt),
                 Timestamp.from(createdAt)));
     ProcessingJob job = jobRepository.save(ProcessingJob.queue(fileId, ownerId, createdAt));

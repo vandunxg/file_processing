@@ -18,7 +18,7 @@ public interface SessionEntityRepository extends JpaRepository<SessionEntity, UU
   Optional<SessionEntity> findByIdAndDeletedAtIsNull(UUID id);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
-  @Query("SELECT s FROM SessionEntity s WHERE s.id = :id")
+  @Query("SELECT s FROM SessionEntity s WHERE s.id = :id AND s.deletedAt IS NULL")
   Optional<SessionEntity> findByIdForUpdate(@Param("id") UUID id);
 
   List<SessionEntity> findAllByUserIdAndDeletedAtIsNullAndRevokedAtIsNullOrderByLastUsedAtDesc(
@@ -28,7 +28,10 @@ public interface SessionEntityRepository extends JpaRepository<SessionEntity, UU
   @Query(
       """
       UPDATE SessionEntity s
-      SET s.revokedAt = :now, s.revokedReason = :reason
+      SET s.revokedAt = :now,
+          s.revokedReason = :reason,
+          s.version = s.version + 1,
+          s.lastModifiedAt = :now
       WHERE s.userId = :userId
         AND s.revokedAt IS NULL
         AND s.deletedAt IS NULL
@@ -43,7 +46,10 @@ public interface SessionEntityRepository extends JpaRepository<SessionEntity, UU
   @Query(
       """
       UPDATE SessionEntity s
-      SET s.revokedAt = :now, s.revokedReason = :reason
+      SET s.revokedAt = :now,
+          s.revokedReason = :reason,
+          s.version = s.version + 1,
+          s.lastModifiedAt = :now
       WHERE s.userId IN :userIds
         AND s.revokedAt IS NULL
         AND s.deletedAt IS NULL

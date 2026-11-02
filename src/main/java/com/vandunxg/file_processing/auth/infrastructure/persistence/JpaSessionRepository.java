@@ -41,6 +41,7 @@ public class JpaSessionRepository implements SessionRepository {
             initialRefreshTokenHash,
             session.getIssuedAt(),
             null,
+            null,
             null));
   }
 
@@ -62,7 +63,7 @@ public class JpaSessionRepository implements SessionRepository {
   @Transactional(readOnly = true)
   public Optional<UUID> resolveSessionIdByRefreshHash(String refreshHash) {
     return refreshTokenEntityRepository
-        .findByTokenHashAndConsumedAtIsNullAndRevokedAtIsNull(refreshHash)
+        .findByTokenHashAndConsumedAtIsNullAndRevokedAtIsNullAndDeletedAtIsNull(refreshHash)
         .map(RefreshTokenEntity::getSessionId);
   }
 
@@ -104,6 +105,7 @@ public class JpaSessionRepository implements SessionRepository {
             token.get().getId(),
             newRefreshHash,
             lastUsedAt,
+            null,
             null,
             null));
     return true;

@@ -14,26 +14,28 @@ import org.springframework.data.repository.query.Param;
 
 public interface RefreshTokenEntityRepository extends JpaRepository<RefreshTokenEntity, UUID> {
 
-  Optional<RefreshTokenEntity> findByTokenHashAndConsumedAtIsNullAndRevokedAtIsNull(
-      String tokenHash);
+  Optional<RefreshTokenEntity>
+      findByTokenHashAndConsumedAtIsNullAndRevokedAtIsNullAndDeletedAtIsNull(String tokenHash);
 
   @Query(
       """
       SELECT t FROM RefreshTokenEntity t
       WHERE t.tokenHash = :tokenHash
+        AND t.deletedAt IS NULL
         AND (t.consumedAt IS NOT NULL OR t.revokedAt IS NOT NULL)
       """)
   Optional<RefreshTokenEntity> findReusedByTokenHash(@Param("tokenHash") String tokenHash);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
-  @Query("SELECT t FROM RefreshTokenEntity t WHERE t.tokenHash = :tokenHash")
+  @Query(
+      "SELECT t FROM RefreshTokenEntity t WHERE t.tokenHash = :tokenHash AND t.deletedAt IS NULL")
   Optional<RefreshTokenEntity> findByTokenHashForUpdate(@Param("tokenHash") String tokenHash);
 
   @Modifying
   @Query(
       """
       UPDATE RefreshTokenEntity t
-      SET t.revokedAt = :now
+      SET t.revokedAt = :now, t.lastModifiedAt = :now
       WHERE t.sessionId = :sessionId AND t.revokedAt IS NULL
       """)
   int revokeAllForSession(@Param("sessionId") UUID sessionId, @Param("now") Instant now);
@@ -46,7 +48,7 @@ public interface RefreshTokenEntityRepository extends JpaRepository<RefreshToken
   @Query(
       """
       UPDATE RefreshTokenEntity t
-      SET t.revokedAt = :now
+      SET t.revokedAt = :now, t.lastModifiedAt = :now
       WHERE t.revokedAt IS NULL
         AND t.sessionId IN (SELECT s.id FROM SessionEntity s WHERE s.userId IN :userIds)
       """)

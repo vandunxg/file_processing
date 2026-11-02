@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.vandunxg.common.models.domain.AuditableDomain;
 import com.vandunxg.file_processing.auth.domain.exception.AuthRule;
 import com.vandunxg.file_processing.auth.domain.exception.AuthRuleViolation;
 import lombok.AccessLevel;
@@ -19,8 +20,8 @@ import lombok.experimental.SuperBuilder;
 @NoArgsConstructor
 @AllArgsConstructor
 @Setter(AccessLevel.PRIVATE)
-@EqualsAndHashCode(of = "id")
-public class PasswordResetToken {
+@EqualsAndHashCode(callSuper = false, of = "id")
+public class PasswordResetToken extends AuditableDomain {
 
   private UUID id;
   private UUID userId;
@@ -29,6 +30,7 @@ public class PasswordResetToken {
   private Instant expiresAt;
   private Instant usedAt;
   private String ipAddressHash;
+  private Instant deletedAt;
 
   public static PasswordResetToken issue(
       UUID id, UUID userId, String tokenHash, Instant now, Duration ttl, String ipAddressHash) {

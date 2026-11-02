@@ -64,6 +64,7 @@ public class PostgresCustomerImportStaging implements CustomerImportStaging {
         WHERE earlier.job_id = staging.job_id
           AND earlier.attempt_number = staging.attempt_number
           AND earlier.validation_passed
+          AND earlier.deleted_at IS NULL
           AND earlier.normalized_external_id = staging.normalized_external_id
           AND earlier.row_number < staging.row_number
       )
@@ -79,7 +80,7 @@ public class PostgresCustomerImportStaging implements CustomerImportStaging {
              count(*) FILTER (WHERE NOT validation_passed) AS field_invalid_rows,
              count(DISTINCT normalized_external_id) AS canonical_rows
       FROM customer_import_staging
-      WHERE job_id = ? AND attempt_number = ?
+      WHERE job_id = ? AND attempt_number = ? AND deleted_at IS NULL
       """;
 
   private static final String CANONICAL_ROWS =
@@ -94,6 +95,7 @@ public class PostgresCustomerImportStaging implements CustomerImportStaging {
       WHERE staging.job_id = ?
         AND staging.attempt_number = ?
         AND staging.validation_passed
+        AND staging.deleted_at IS NULL
         AND staging.row_number > ?
         AND NOT %s
       ORDER BY staging.row_number ASC
@@ -119,6 +121,7 @@ public class PostgresCustomerImportStaging implements CustomerImportStaging {
         FROM customer_import_staging staging
         WHERE staging.job_id = ?
           AND staging.attempt_number = ?
+          AND staging.deleted_at IS NULL
           AND staging.row_number > ?
           AND (NOT staging.validation_passed OR %s)
         ORDER BY staging.row_number ASC
@@ -138,6 +141,7 @@ public class PostgresCustomerImportStaging implements CustomerImportStaging {
         ON issue.job_id = staging.job_id
        AND issue.attempt_number = staging.attempt_number
        AND issue.row_number = staging.row_number
+       AND issue.deleted_at IS NULL
       ORDER BY staging.row_number ASC, issue.issue_order ASC NULLS FIRST
       """
           .formatted(EARLIER_ROW_CLAIMED_THE_ID);
@@ -163,6 +167,7 @@ public class PostgresCustomerImportStaging implements CustomerImportStaging {
         WHERE job.id = staging.job_id
           AND job.current_attempt = staging.attempt_number
           AND job.status IN ('PROCESSING', 'CANCELLATION_REQUESTED')
+          AND job.deleted_at IS NULL
       )
       """;
 

@@ -15,7 +15,9 @@ import java.util.Properties;
 import com.vandunxg.file_processing.auth.domain.exception.AuthRule;
 import org.junit.jupiter.api.Test;
 
-/** Guards the error contract required by RULE.md section 7: prefixes, codes, and i18n keys. */
+/**
+ * Guards the error contract required by the error-handling skill: prefixes, codes, and i18n keys.
+ */
 class AuthErrorCodeTest {
 
   private static final List<String> ALLOWED_PREFIXES = List.of("AUTH_", "USER_", "ROLE_");
@@ -48,7 +50,8 @@ class AuthErrorCodeTest {
    * Reads each bundle file directly instead of through {@link java.util.ResourceBundle}. A resource
    * bundle resolves a missing key against its parent, so {@code messages_en} would inherit anything
    * present in the base {@code messages} file and this guard could never fail for English — which
-   * is exactly the case it exists to catch. RULE.md section 7.3 requires the key in every file.
+   * is exactly the case it exists to catch. The error-handling skill requires the key in every
+   * file.
    */
   @Test
   void everyErrorNameHasAMessageInEveryBundleFile() {
@@ -91,10 +94,11 @@ class AuthErrorCodeTest {
    * passed while AUTH_PASSWORD_POLICY_VIOLATION went 40001 -> 42202 and
    * AUTH_PASSWORD_CONFIRMATION_MISMATCH went 40003 -> 42203.
    *
-   * <p>Those two renumberings are deliberate and accepted: RULE.md section 7.2 forbids renumbering
-   * a published code without an API compatibility decision, and the decision is recorded in
-   * docs/specs/auth-module-requirements.md under the error catalog. Both old codes carried a 400
-   * prefix while returning 422, which section 7.1 does not allow. Every other code kept its number.
+   * <p>Those two renumberings are deliberate and accepted: the error-handling skill forbids
+   * renumbering a published code without an API compatibility decision, and the decision is
+   * recorded in docs/specs/auth-module-requirements.md under the error catalog. Both old codes
+   * carried a 400 prefix while returning 422, which section 7.1 does not allow. Every other code
+   * kept its number.
    *
    * <p>Changing any entry below is an API break: update the client contract and the spec first.
    */
