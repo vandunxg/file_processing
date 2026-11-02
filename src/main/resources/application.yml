@@ -1,6 +1,181 @@
+spring:
+  application:
+    name: file_processing
+    version: 1.0.0
+
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
+  main:
+    banner-mode: console
+
+  jackson:
+    default-property-inclusion: non_null
+
+  web:
+    resources:
+      add-mappings: false
+    error:
+      include-message: never
+      include-binding-errors: never
+      include-stacktrace: never
+      include-exception: false
+      whitelabel:
+        enabled: false
+
+  messages:
+    basename: i18n/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+    use-code-as-default-message: false
+
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: ${spring.application.name}-hikari
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT:30000}
+      validation-timeout: ${DB_VALIDATION_TIMEOUT:5000}
+      idle-timeout: ${DB_IDLE_TIMEOUT:600000}
+      max-lifetime: ${DB_MAX_LIFETIME:1800000}
+      keepalive-time: ${DB_KEEPALIVE_TIME:300000}
+      auto-commit: false
+
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+          batch_size: ${HIBERNATE_BATCH_SIZE:50}
+        order_inserts: true
+        order_updates: true
+        batch_versioned_data: true
+        generate_statistics: false
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+    validate-on-migrate: true
+    clean-disabled: true
+    out-of-order: false
+
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: ${app.file-import.max-file-size}
+      max-request-size: ${app.file-import.max-file-size}
+
+  lifecycle:
+    timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:30s}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+  shutdown: graceful
+
+  compression:
+    enabled: true
+    min-response-size: 2KB
+    mime-types:
+      - application/json
+      - application/xml
+      - text/html
+      - text/xml
+      - text/plain
+      - text/css
+      - application/javascript
+
+  servlet:
+    context-path: ${SERVER_CONTEXT_PATH:/}
+
+  forward-headers-strategy: framework
+
+management:
+  endpoints:
+    web:
+      base-path: /actuator
+      exposure:
+        include:
+          - health
+          - info
+          - metrics
+          - prometheus
+
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: ${SPRING_PROFILES_ACTIVE:dev}
+
+  tracing:
+    sampling:
+      probability: 1.0
+    export:
+      zipkin:
+        enabled: false
+
+logging:
+  file:
+    path: /var/log/file-processing
+
+  level:
+    root: INFO
+    org.springframework: INFO
+    org.hibernate.SQL: INFO
+    org.hibernate.orm.jdbc.bind: INFO
+
+  pattern:
+    console: >-
+      %d{yyyy-MM-dd HH:mm:ss.SSS}
+      %-5level
+      [%thread]
+      [%X{traceId:-},%X{spanId:-}]
+      %logger{36}
+      - %msg%n
+
+  logback:
+    rollingpolicy:
+      max-file-size: 100MB
+      max-history: 30
+      total-size-cap: 10GB
+      clean-history-on-start: false
+
 springdoc:
   api-docs:
+    enabled: true
+    path: /api-docs
     url: http://localhost:8080
+
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui
+    display-request-duration: true
+    operations-sorter: method
+    tags-sorter: alpha
+    persist-authorization: true
+
+  packages-to-scan:
+    - com.vandunxg.file_processing.auth.api
+
+  paths-to-match:
+    - ${app.api.prefix}/${app.api.version}/**
 
 app:
   api:
