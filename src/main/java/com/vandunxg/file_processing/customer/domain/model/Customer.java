@@ -21,11 +21,11 @@ public class Customer {
 
   private final UUID id;
   private final String externalId;
-  private final String fullName;
-  private final String email;
-  private final String phone;
-  private final LocalDate dateOfBirth;
-  private final String address;
+  @ToString.Exclude private final String fullName;
+  @ToString.Exclude private final String email;
+  @ToString.Exclude private final String phone;
+  @ToString.Exclude private final LocalDate dateOfBirth;
+  @ToString.Exclude private final String address;
   private final UUID lastImportJobId;
 
   private Customer(

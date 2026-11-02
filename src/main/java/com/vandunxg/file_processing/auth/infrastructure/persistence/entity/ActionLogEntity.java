@@ -49,12 +49,14 @@ public class ActionLogEntity extends AuditableEntity {
   private String requestMethod;
 
   @Column(name = "ip_address", length = 64)
+  @ToString.Exclude
   private String ipAddress;
 
   @Column(name = "user_agent", length = 512)
   private String userAgent;
 
   @Column(name = "request_data", columnDefinition = "TEXT")
+  @ToString.Exclude
   private String requestData;
 
   @Column(name = "status_code", nullable = false)
@@ -64,6 +66,7 @@ public class ActionLogEntity extends AuditableEntity {
   private String errorMessage;
 
   @Column(name = "request_param", columnDefinition = "TEXT")
+  @ToString.Exclude
   private String requestParam;
 
   @Column(name = "deleted_at")

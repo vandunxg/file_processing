@@ -13,7 +13,7 @@ import lombok.experimental.SuperBuilder;
 @NoArgsConstructor
 @AllArgsConstructor
 @Setter(AccessLevel.PRIVATE)
-@EqualsAndHashCode(callSuper = false)
+@EqualsAndHashCode(callSuper = false, of = "id")
 public class AuditLog extends AuditableDomain {
 
   private UUID id;
