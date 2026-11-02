@@ -41,9 +41,9 @@ class RowCountersTest {
   }
 
   /**
-   * Reconstitution replays a stored row, which is a fact rather than a new request (RULE.md §6.4).
-   * Judging it here would make a legacy row that never satisfied the rule unreadable, so the check
-   * is a method the caller invokes and not a constructor guard.
+   * Reconstitution replays a stored row, which is a fact rather than a new request (skill
+   * domain-modeling). Judging it here would make a legacy row that never satisfied the rule
+   * unreadable, so the check is a method the caller invokes and not a constructor guard.
    */
   @Test
   void constructionAcceptsInconsistentStoredTotalsSoAFactStaysReadable() {

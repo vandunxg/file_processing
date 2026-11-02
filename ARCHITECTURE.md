@@ -5,24 +5,18 @@ This document defines the target architecture and package structure for
 human contributors. Detailed coding, security, logging, testing, and library
 rules remain in their owning documents instead of being duplicated here.
 
-Read this file before creating a module, moving code across layers, adding an
-abstraction, or refactoring legacy Hexagonal packages.
-
-<!-- prettier-ignore -->
-> [!IMPORTANT]
-> Target architecture: **Pragmatic Modular DDD** inside one modular monolith.
-> Existing `adapter/*`, `application/port/*`, `*UseCase`, `*RepositoryPort`,
-> and `*PersistenceAdapter` code is legacy implementation pending migration.
-> It is not a template for new code.
+Read this file before creating a module, moving code across layers, or adding
+an abstraction. Target architecture: **Pragmatic Modular DDD** inside one
+modular monolith.
 
 ## Source of truth and reading order
 
 Use project documents in this order:
 
-1. `AGENTS.md` - business behavior, product requirements, and invariants.
+1. `docs/requirement/` - business behavior, product requirements, and invariants.
 2. `ARCHITECTURE.md` - module boundaries, layers, and dependency direction.
-3. `RULE.md` - implementation and engineering rules.
-4. `LIBRARY.md` - reusable APIs from `vandunxg-common`.
+3. `skills/` - implementation and engineering conventions (routed from `AGENTS.md`).
+4. `skills/vandunxg-common/` - reusable APIs from `vandunxg-common`.
 5. Relevant feature specs under `docs/`.
 6. Existing source and tests as implementation evidence.
 
@@ -135,7 +129,7 @@ empty packages to match a diagram.
 ## Layer responsibilities
 
 Each layer has one primary responsibility. Detailed naming and implementation
-rules remain in `RULE.md`.
+rules live in the convention skills under `skills/`.
 
 ### API
 
@@ -214,7 +208,7 @@ concepts into the domain model.
 
 A domain model carries no persistence mapping either. Where its facts are
 stored is `infrastructure`'s answer, so every aggregate is a domain model, an
-entity and a mapper between them. The normative rule lives in `RULE.md` §6.4.
+entity and a mapper between them. The normative rule lives in the `domain-modeling` skill.
 
 ### Infrastructure
 
@@ -284,7 +278,7 @@ caller's session) qualify; a field-for-field copy of the response does not.
 
 `@ValidatePaging(sortModel = X.class)` builds its allow-list by reflecting over
 `@jakarta.persistence.Column` fields, so it only accepts a JPA entity. Domain
-models carry no persistence mapping (`RULE.md` §6.4) and would produce an empty
+models carry no persistence mapping (`domain-modeling` skill) and would produce an empty
 allow-list that rejects every `sortBy`. Use the entity, and keep the reference
 confined to that annotation — imported for nothing else, never mapped, never
 returned. `ArchitectureConformanceTest` allows exactly that much and no more.
@@ -359,7 +353,7 @@ infrastructure/persistence/entity/<Aggregate>Entity.java        the row
 infrastructure/persistence/mapper/<Aggregate>PersistenceMapper  between them
 ```
 
-`RULE.md` §6.4 is normative: it covers reconstitution, why the mapper declares
+The `domain-modeling` skill is normative: it covers reconstitution, why the mapper declares
 `unmappedTargetPolicy = ERROR`, and how the repository satisfies both the
 aggregate contract and a paginated read model without a second implementation.
 `ArchitectureConformanceTest.aDomainCarriesNoPersistenceMapping` enforces it.
@@ -421,7 +415,7 @@ terminal job state
 ```
 
 Do not create unbounded queues, futures, threads, or in-memory row collections.
-`AGENTS.md` remains authoritative for business and non-functional constraints.
+`docs/requirement/` remains authoritative for business and non-functional constraints.
 
 ## Interface decision rule
 
@@ -463,34 +457,6 @@ Avoid default architecture-pattern names:
 *OutboundAdapter
 ```
 
-## Legacy Hexagonal migration guard
-
-Existing source may still contain:
-
-```text
-adapter/in
-adapter/out
-application/port/in
-application/port/out
-*UseCase
-*RepositoryPort
-*PersistenceAdapter
-```
-
-Treat these as legacy implementation.
-
-When changing legacy code:
-
-1. Do not add new Hexagonal ceremony.
-2. Preserve behavior and public contracts first.
-3. Migrate only the approved boundary/scope.
-4. Keep tests passing through each migration step.
-5. Remove obsolete types only after callers migrate.
-6. Do not perform repository-wide package renames inside unrelated work.
-
-Temporary coexistence of legacy and target packages is acceptable during a
-controlled migration. New dependency violations are not.
-
 ## Architecture complexity levels
 
 Use the smallest level that protects the business.
@@ -527,8 +493,8 @@ Before implementation or review, verify:
 - Does every aggregate keep its mapping in `infrastructure`, not on the model?
 - Is the transaction boundary explicit and bounded?
 - Are concurrency and idempotency requirements preserved?
-- Does the change extend legacy Hexagonal structure unnecessarily?
-- Did the change reuse existing capabilities from `LIBRARY.md`?
+- Does the change introduce Hexagonal ceremony (ports, adapters, use-case interfaces)?
+- Did the change reuse existing capabilities from `vandunxg-common`?
 - Do tests protect the changed invariant and boundary?
 
 ## Required AI-agent workflow
@@ -536,11 +502,11 @@ Before implementation or review, verify:
 For non-trivial work, AI agents must:
 
 ```text
-1. Read relevant AGENTS.md / feature requirements.
+1. Read relevant requirements under `docs/requirement/`.
 2. Identify the owning module and aggregate.
 3. Read ARCHITECTURE.md.
-4. Read relevant RULE.md sections.
-5. Search LIBRARY.md before creating reusable infrastructure.
+4. Load the matching convention skills (see `AGENTS.md` routing).
+5. Check `vandunxg-common` before creating reusable infrastructure.
 6. Inspect current source, callers, migrations, and tests.
 7. Define dependency and transaction boundaries in the plan.
 8. Implement the smallest correct change.
@@ -548,58 +514,28 @@ For non-trivial work, AI agents must:
 10. Report architecture deviations explicitly.
 ```
 
-Historical implementation plans never override this contract or `RULE.md`.
+Historical implementation plans never override this contract or the convention skills.
 
 ## Documentation ownership
 
 Keep project knowledge separated:
 
 ```text
-AGENTS.md        business behavior and requirements
-ARCHITECTURE.md  architecture shape and dependency boundaries
-RULE.md          coding and engineering contract
-LIBRARY.md       shared-library API contract
-docs/**          feature specs, designs, plans, historical records
+AGENTS.md            agent routing, project facts, always-on guardrails
+docs/requirement/**  business behavior and requirements
+ARCHITECTURE.md      architecture shape and dependency boundaries
+skills/**            coding conventions and shared-library API contract
+docs/**              feature specs, designs, plans, historical records
 ```
 
 Do not copy large sections between these files. Link to the owning document.
 Duplicated rules drift and eventually contradict each other.
 
-## Recommended size for AI rule files
-
-There is no universal byte limit. The goal is to keep mandatory context small
-enough that an AI agent can read it completely while retaining task context.
-
-Recommended targets for this repository:
-
-```text
-ARCHITECTURE.md   10-20 KB   focused architecture contract
-RULE.md           15-30 KB   engineering rules and verification gates
-AGENTS.md         business-only; move feature detail to docs/**
-LIBRARY.md        search/read only relevant sections; it may remain large
-```
-
-Treat about **30 KB** as a practical soft ceiling for an always-read `RULE.md`.
-When it grows beyond that, move tutorials, long examples, feature-specific
-requirements, library catalogs, and historical migration detail into focused
-documents.
-
-A good `RULE.md` keeps only high-value instructions that affect generated code:
-
-- rule precedence and MUST/MAY strength;
-- implementation constraints;
-- naming and code-style rules;
-- error/security/logging/transaction/testing rules;
-- prohibited patterns;
-- required verification gates.
-
-Optimize rule files for **compliance**, not maximum completeness.
-
 ## Definition of architecture compliance
 
 A change is compliant when:
 
-- business behavior still matches `AGENTS.md` and approved specs;
+- business behavior still matches `docs/requirement/` and approved specs;
 - new code follows module-first Pragmatic DDD;
 - dependency direction is valid;
 - aggregate ownership is preserved;
@@ -607,7 +543,7 @@ A change is compliant when:
 - abstractions are justified by current requirements;
 - no new Hexagonal ceremony is introduced;
 - transaction and high-volume resource constraints remain safe;
-- applicable `RULE.md` verification gates pass.
+- `./mvnw spotless:apply && ./mvnw verify` passes.
 
 If a required feature cannot satisfy this contract, create an explicit
 architecture decision/change request instead of hiding the violation.

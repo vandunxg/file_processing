@@ -159,9 +159,9 @@ class ArchitectureConformanceTest {
    *
    * <p>The mapping describes the row, not the business rule. An aggregate that names its own
    * columns cannot be reshaped without a migration, cannot be unit-tested without a persistence
-   * provider, and quietly invites the table's shape to dictate the model's. {@code RULE.md §6.4}
-   * makes the separation mandatory; this is the executable form of that rule, because a rule kept
-   * only in prose erodes.
+   * provider, and quietly invites the table's shape to dictate the model's. The {@code
+   * domain-modeling} skill makes the separation mandatory; this is the executable form of that
+   * rule, because a rule kept only in prose erodes.
    */
   @Test
   void aDomainCarriesNoPersistenceMapping() {
