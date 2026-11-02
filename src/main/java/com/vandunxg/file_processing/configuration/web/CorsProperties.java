@@ -1,12 +1,12 @@
 package com.vandunxg.file_processing.configuration.web;
 
+import java.time.Duration;
+import java.util.List;
+
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
-
-import java.time.Duration;
-import java.util.List;
 
 /**
  * Browser-facing CORS contract of this service.
@@ -20,26 +20,26 @@ import java.util.List;
 @Validated
 @ConfigurationProperties(prefix = "app.web.cors")
 public record CorsProperties(
-  /**
-   * Origin patterns a browser may call this API from, e.g. {@code http://localhost:5173}.
-   *
-   * <p>Patterns rather than plain origins: {@code allowCredentials = true} forbids the {@code *}
-   * wildcard, and Spring echoes the matched origin back instead, which is what the browser
-   * requires when the request carries the refresh cookie.
-   */
-  @NotEmpty List<String> allowedOriginPatterns,
-  @NotEmpty List<String> allowedMethods,
-  @NotEmpty List<String> allowedHeaders,
-  /**
-   * Response headers the browser is allowed to read. Only the CORS-safelisted headers are
-   * readable by default, so anything the front end acts on — {@code Retry-After} for throttling,
-   * {@code Content-Disposition} for the error-report download — has to be named here.
-   */
-  List<String> exposedHeaders,
-  /** Must stay true: the refresh-token flow is cookie based. */
-  boolean allowCredentials,
-  /** How long a browser may cache a preflight result. */
-  @NotNull Duration maxAge) {
+    /**
+     * Origin patterns a browser may call this API from, e.g. {@code http://localhost:5173}.
+     *
+     * <p>Patterns rather than plain origins: {@code allowCredentials = true} forbids the {@code *}
+     * wildcard, and Spring echoes the matched origin back instead, which is what the browser
+     * requires when the request carries the refresh cookie.
+     */
+    @NotEmpty List<String> allowedOriginPatterns,
+    @NotEmpty List<String> allowedMethods,
+    @NotEmpty List<String> allowedHeaders,
+    /**
+     * Response headers the browser is allowed to read. Only the CORS-safelisted headers are
+     * readable by default, so anything the front end acts on — {@code Retry-After} for throttling,
+     * {@code Content-Disposition} for the error-report download — has to be named here.
+     */
+    List<String> exposedHeaders,
+    /** Must stay true: the refresh-token flow is cookie based. */
+    boolean allowCredentials,
+    /** How long a browser may cache a preflight result. */
+    @NotNull Duration maxAge) {
 
   /**
    * Copies defensively but leaves {@code null} alone, so a missing key is reported by {@link
