@@ -3,6 +3,7 @@ package com.vandunxg.file_processing.auth.infrastructure.persistence.entity;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.vandunxg.common.models.entities.AuditableEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -19,8 +20,8 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@EqualsAndHashCode(of = "id")
-public class RefreshTokenEntity {
+@EqualsAndHashCode(callSuper = false, of = "id")
+public class RefreshTokenEntity extends AuditableEntity {
 
   @Id
   @Column(name = "id")
@@ -43,4 +44,7 @@ public class RefreshTokenEntity {
 
   @Column(name = "revoked_at")
   private Instant revokedAt;
+
+  @Column(name = "deleted_at")
+  private Instant deletedAt;
 }

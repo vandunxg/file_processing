@@ -121,11 +121,11 @@ public class JpaUserRepository implements UserRepository, UserSearchRepository {
   }
 
   @Override
-  public int bumpCredentialVersionFor(java.util.Collection<UUID> userIds) {
+  public int bumpCredentialVersionFor(java.util.Collection<UUID> userIds, Instant now) {
     if (userIds.isEmpty()) {
       return 0;
     }
-    int updated = userEntityRepository.bumpCredentialVersionFor(userIds);
+    int updated = userEntityRepository.bumpCredentialVersionFor(userIds, now);
     log.info("[bumpCredentialVersionFor] invalidated credentials users={}", updated);
     return updated;
   }

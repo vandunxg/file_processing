@@ -11,5 +11,5 @@ import org.springframework.stereotype.Repository;
 public interface AuditLogEntityRepository
     extends JpaRepository<AuditLogEntity, UUID>, AuditLogEntityRepositoryCustom {
 
-  List<AuditLogEntity> findAllByOrderByChangedAtDesc();
+  List<AuditLogEntity> findAllByDeletedAtIsNullOrderByChangedAtDesc();
 }

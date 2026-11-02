@@ -33,7 +33,7 @@ public class JpaAuditLogRepository implements AuditLogRepository, AuditLogSearch
   @Override
   public List<AuditLog> findAll() {
     return auditLogPersistenceMapper.toDomain(
-        auditLogEntityRepository.findAllByOrderByChangedAtDesc());
+        auditLogEntityRepository.findAllByDeletedAtIsNullOrderByChangedAtDesc());
   }
 
   @Override

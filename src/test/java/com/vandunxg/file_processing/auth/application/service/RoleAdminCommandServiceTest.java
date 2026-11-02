@@ -107,7 +107,7 @@ class RoleAdminCommandServiceTest {
 
     // Batched, not one locked read-modify-write per holder of the role: a widely-held role would
     // otherwise hold one row lock per member for the length of the transaction.
-    verify(userRepository).bumpCredentialVersionFor(List.of(userId));
+    verify(userRepository).bumpCredentialVersionFor(eq(List.of(userId)), any(Instant.class));
     verify(sessionRepository)
         .revokeAllForUsers(
             eq(List.of(userId)),

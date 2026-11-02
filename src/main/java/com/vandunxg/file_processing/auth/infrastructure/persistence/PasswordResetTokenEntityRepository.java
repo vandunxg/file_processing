@@ -16,12 +16,14 @@ public interface PasswordResetTokenEntityRepository
     extends JpaRepository<PasswordResetTokenEntity, UUID> {
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
-  @Query("select t from PasswordResetTokenEntity t where t.tokenHash = :tokenHash")
+  @Query(
+      "select t from PasswordResetTokenEntity t where t.tokenHash = :tokenHash and t.deletedAt is null")
   Optional<PasswordResetTokenEntity> findByTokenHashForUpdate(@Param("tokenHash") String tokenHash);
 
   @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query(
-      "update PasswordResetTokenEntity t set t.usedAt = :now where t.userId = :userId and t.usedAt is null")
+      "update PasswordResetTokenEntity t set t.usedAt = :now, t.lastModifiedAt = :now "
+          + "where t.userId = :userId and t.usedAt is null and t.deletedAt is null")
   void invalidateAllForUser(@Param("userId") UUID userId, @Param("now") Instant now);
 
   @Modifying(flushAutomatically = true, clearAutomatically = true)
