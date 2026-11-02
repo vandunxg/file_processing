@@ -6,6 +6,16 @@ app:
   api:
     prefix: /api
     version: v1
+  web:
+    cors:
+      allowed-origin-patterns:
+        - http://localhost:5173
+        - http://localhost:3000
+      allowed-methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+      allowed-headers: ["*"]
+      exposed-headers: [Retry-After, Content-Disposition, Location]
+      allow-credentials: true
+      max-age: PT30M
   file-import:
     max-file-size: 500MB
     retention: PT720H
