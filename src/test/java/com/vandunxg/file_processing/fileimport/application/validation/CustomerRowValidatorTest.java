@@ -55,4 +55,35 @@ class CustomerRowValidatorTest {
             ValidationErrorCode.DATE_OF_BIRTH_IN_FUTURE,
             ValidationErrorCode.ADDRESS_TOO_LONG);
   }
+
+  @Test
+  void acceptsAPhoneAlreadyInInternationalForm() {
+    var result = validator.validate(row("CUS_02", "+84 912.345.678"));
+
+    assertThat(result.issues()).isEmpty();
+    assertThat(result.row().orElseThrow().phone()).isEqualTo("+84912345678");
+  }
+
+  @Test
+  void rejectsAnExternalIdWithCharactersOutsideTheAllowedSet() {
+    var result = validator.validate(row("CUS 02!", "0912345678"));
+
+    assertThat(result.issues())
+        .extracting(ValidationIssue::code)
+        .containsExactly(ValidationErrorCode.INVALID_EXTERNAL_ID);
+  }
+
+  @Test
+  void rejectsAnExternalIdLongerThanTheColumnAllows() {
+    var result = validator.validate(row("C".repeat(65), "0912345678"));
+
+    assertThat(result.issues())
+        .extracting(ValidationIssue::code)
+        .containsExactly(ValidationErrorCode.INVALID_EXTERNAL_ID);
+  }
+
+  private static ParsedCustomerRow row(String externalId, String phone) {
+    return new ParsedCustomerRow(
+        3, externalId, "Nguyen Van A", "a@example.com", phone, "2000-01-02", "1 Main Street");
+  }
 }

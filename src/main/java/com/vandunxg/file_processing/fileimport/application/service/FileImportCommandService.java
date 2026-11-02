@@ -1,0 +1,192 @@
+package com.vandunxg.file_processing.fileimport.application.service;
+
+import java.io.IOException;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.UUID;
+
+import com.vandunxg.file_processing.auth.domain.model.OperationType;
+import com.vandunxg.file_processing.fileimport.application.FileImportProperties;
+import com.vandunxg.file_processing.fileimport.application.capability.CustomerCsvReader;
+import com.vandunxg.file_processing.fileimport.application.capability.FileImportMetrics;
+import com.vandunxg.file_processing.fileimport.application.capability.FileStorage;
+import com.vandunxg.file_processing.fileimport.application.command.UploadFileCommand;
+import com.vandunxg.file_processing.fileimport.application.exception.CsvErrorCode;
+import com.vandunxg.file_processing.fileimport.application.exception.CsvFormatException;
+import com.vandunxg.file_processing.fileimport.application.exception.DuplicateFileException;
+import com.vandunxg.file_processing.fileimport.application.exception.FileImportErrorCode;
+import com.vandunxg.file_processing.fileimport.application.exception.FileImportException;
+import com.vandunxg.file_processing.fileimport.application.result.DuplicateFileResult;
+import com.vandunxg.file_processing.fileimport.application.result.UploadFileResult;
+import com.vandunxg.file_processing.fileimport.domain.ImportFileRepository;
+import com.vandunxg.file_processing.fileimport.domain.ProcessingJobRepository;
+import com.vandunxg.file_processing.fileimport.domain.model.FileChecksum;
+import com.vandunxg.file_processing.fileimport.domain.model.ImportFile;
+import com.vandunxg.file_processing.fileimport.domain.model.ProcessingJob;
+import com.vandunxg.file_processing.fileimport.domain.model.StorageProvider;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
+
+/**
+ * Accepts an upload and queues it for processing.
+ *
+ * <p>The request stores and validates the file, then commits one {@link ImportFile} and one queued
+ * {@link ProcessingJob}. It never reads a data row: a 500 MB file cannot be processed inside an
+ * HTTP request, so the caller gets a job to watch instead of a result to wait for.
+ *
+ * <p>Object storage is slow and external, so it stays outside the database transaction. That leaves
+ * a window where a stored object has no metadata row yet, which is why every failure path deletes
+ * the object it created.
+ */
+@Service
+@RequiredArgsConstructor
+@Slf4j(topic = "FILE-IMPORT-COMMAND")
+public class FileImportCommandService {
+
+  private final FileStorage fileStorage;
+  private final CustomerCsvReader customerCsvReader;
+  private final ImportFileRepository importFileRepository;
+  private final ProcessingJobRepository processingJobRepository;
+  private final FileImportProperties properties;
+  private final TransactionTemplate transactionTemplate;
+  private final FileImportAuditService auditService;
+  private final FileImportMetrics metrics;
+  private final Clock clock;
+
+  public UploadFileResult upload(UploadFileCommand command) {
+    if (command.contentLength() > properties.maxFileSize().toBytes()) {
+      throw new FileImportException(FileImportErrorCode.FILE_IMPORT_FILE_TOO_LARGE);
+    }
+    String storageKey = "imports/" + UUID.randomUUID();
+    FileStorage.StoredObject stored =
+        fileStorage.store(
+            storageKey, command.contentType(), command.contentLength(), command.content());
+    try {
+      validateStoredCsv(storageKey);
+      duplicateIfPresent(command.ownerId(), FileChecksum.of(stored.checksumSha256()));
+      return register(command, storageKey, stored);
+    } catch (DuplicateFileException exception) {
+      cleanUp(storageKey);
+      metrics.uploadDuplicate();
+      throw exception;
+    } catch (DataIntegrityViolationException exception) {
+      // The unique constraint, not the earlier lookup, is what decides a duplicate: two concurrent
+      // uploads of the same bytes can both pass a pre-check and only one may win here.
+      cleanUp(storageKey);
+      if (!isChecksumDuplicate(exception)) {
+        // A foreign-key, check, or unrelated unique-constraint failure is an operational fault,
+        // not a statement about this upload's content. Never hide it behind a misleading 409.
+        throw exception;
+      }
+      log.info("[upload] duplicate rejected ownerId={}", command.ownerId());
+      metrics.uploadDuplicate();
+      duplicateIfPresent(command.ownerId(), FileChecksum.of(stored.checksumSha256()));
+      throw new FileImportException(FileImportErrorCode.FILE_IMPORT_DUPLICATE_FILE, exception);
+    } catch (RuntimeException exception) {
+      cleanUp(storageKey);
+      throw exception;
+    }
+  }
+
+  private UploadFileResult register(
+      UploadFileCommand command, String storageKey, FileStorage.StoredObject stored) {
+    Instant now = Instant.now(clock);
+    ImportFile file =
+        ImportFile.register(
+            command.ownerId(),
+            command.originalFilename(),
+            storageKey,
+            FileChecksum.of(stored.checksumSha256()),
+            stored.sizeBytes(),
+            stored.contentType(),
+            now.plus(properties.retention()),
+            stored.bucket(),
+            StorageProvider.R2);
+
+    UploadFileResult result =
+        transactionTemplate.execute(
+            status -> {
+              ImportFile savedFile = importFileRepository.save(file);
+              ProcessingJob job =
+                  processingJobRepository.save(
+                      ProcessingJob.queue(savedFile.getId(), savedFile.getOwnerId(), now));
+              return new UploadFileResult(
+                  savedFile.getId(),
+                  job.getId(),
+                  job.getStatus(),
+                  savedFile.getOriginalFilename(),
+                  savedFile.getSizeBytes(),
+                  savedFile.getChecksum().value(),
+                  now);
+            });
+
+    log.info(
+        "[upload] accepted fileId={} jobId={} ownerId={}",
+        result.fileId(),
+        result.jobId(),
+        command.ownerId());
+    auditService.record(OperationType.FILE_UPLOADED, result.fileId(), command.ownerId(), now);
+    auditService.record(OperationType.JOB_CREATED, result.jobId(), command.ownerId(), now);
+    metrics.uploadAccepted(result.sizeBytes());
+    return result;
+  }
+
+  private void validateStoredCsv(String storageKey) {
+    try (var input = fileStorage.open(storageKey)) {
+      customerCsvReader.validateHeader(input);
+    } catch (CsvFormatException exception) {
+      // A bad header and an unparseable body are different problems for the uploader: one means the
+      // columns are wrong, the other that the file is not really CSV.
+      throw new FileImportException(errorFor(exception.code()), exception);
+    } catch (IOException exception) {
+      throw new FileImportException(FileImportErrorCode.FILE_IMPORT_STORAGE_UNAVAILABLE, exception);
+    }
+  }
+
+  private static FileImportErrorCode errorFor(CsvErrorCode code) {
+    return switch (code) {
+      case INVALID_CSV_HEADER -> FileImportErrorCode.FILE_IMPORT_INVALID_CSV_HEADER;
+      case MAXIMUM_ROWS_EXCEEDED -> FileImportErrorCode.FILE_IMPORT_FILE_TOO_LARGE;
+      case MALFORMED_CSV -> FileImportErrorCode.FILE_IMPORT_MALFORMED_CSV;
+    };
+  }
+
+  private void cleanUp(String storageKey) {
+    try {
+      fileStorage.delete(storageKey);
+    } catch (RuntimeException cleanupException) {
+      log.warn("[upload] failed to clean up stored object key={}", storageKey, cleanupException);
+    }
+  }
+
+  private static boolean isChecksumDuplicate(DataIntegrityViolationException exception) {
+    Throwable current = exception;
+    while (current != null) {
+      String message = current.getMessage();
+      if (message != null && message.contains("import_files_owner_checksum_uk")) {
+        return true;
+      }
+      current = current.getCause();
+    }
+    return false;
+  }
+
+  private void duplicateIfPresent(UUID ownerId, FileChecksum checksum) {
+    importFileRepository
+        .findByOwnerIdAndChecksum(ownerId, checksum)
+        .ifPresent(
+            file -> {
+              var job = processingJobRepository.findByImportFileId(file.getId()).orElseThrow();
+              throw new DuplicateFileException(
+                  new DuplicateFileResult(
+                      file.getId(),
+                      job.getId(),
+                      job.getStatus(),
+                      file.getCreatedAt(),
+                      FileImportErrorCode.FILE_IMPORT_DUPLICATE_FILE.name()));
+            });
+  }
+}

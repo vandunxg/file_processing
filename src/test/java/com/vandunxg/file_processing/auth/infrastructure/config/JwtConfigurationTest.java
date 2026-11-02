@@ -31,6 +31,7 @@ class JwtConfigurationTest {
             null,
             null,
             null,
+            null,
             new AuthProperties.Jwt(
                 "issuer",
                 "audience",
@@ -40,6 +41,8 @@ class JwtConfigurationTest {
                 "current",
                 null,
                 List.of()),
+            null,
+            null,
             null,
             null,
             null);
@@ -60,6 +63,7 @@ class JwtConfigurationTest {
             null,
             null,
             null,
+            null,
             new AuthProperties.Jwt(
                 "issuer",
                 "audience",
@@ -71,6 +75,8 @@ class JwtConfigurationTest {
                 List.of(
                     new AuthProperties.Jwt.PublicKey(
                         "current", pemBase64(verificationKeyPair, false)))),
+            null,
+            null,
             null,
             null,
             null);
@@ -91,6 +97,7 @@ class JwtConfigurationTest {
             null,
             null,
             null,
+            null,
             new AuthProperties.Jwt(
                 "issuer",
                 "audience",
@@ -102,6 +109,8 @@ class JwtConfigurationTest {
                 List.of(
                     new AuthProperties.Jwt.PublicKey("current", publicKey),
                     new AuthProperties.Jwt.PublicKey("current", publicKey))),
+            null,
+            null,
             null,
             null,
             null);
@@ -122,6 +131,7 @@ class JwtConfigurationTest {
             null,
             null,
             null,
+            null,
             new AuthProperties.Jwt(
                 "issuer",
                 "audience",
@@ -133,6 +143,8 @@ class JwtConfigurationTest {
                 List.of(
                     new AuthProperties.Jwt.PublicKey("current", pemBase64(current, false)),
                     new AuthProperties.Jwt.PublicKey("previous", pemBase64(previous, false)))),
+            null,
+            null,
             null,
             null,
             null);

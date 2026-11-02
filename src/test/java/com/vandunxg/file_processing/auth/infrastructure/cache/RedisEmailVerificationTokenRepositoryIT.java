@@ -58,8 +58,11 @@ class RedisEmailVerificationTokenRepositoryIT {
             defaults.login(),
             defaults.refresh(),
             defaults.session(),
+            defaults.bootstrap(),
             defaults.jwt(),
             defaults.emailVerification(),
+            defaults.passwordReset(),
+            defaults.cleanup(),
             new AuthProperties.Redis(
                 defaults.redis().throttle(),
                 new AuthProperties.Redis.EmailVerificationKeys(

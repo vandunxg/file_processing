@@ -97,8 +97,11 @@ class RedisAuthThrottleIT {
             defaults.login(),
             defaults.refresh(),
             defaults.session(),
+            defaults.bootstrap(),
             defaults.jwt(),
             defaults.emailVerification(),
+            defaults.passwordReset(),
+            defaults.cleanup(),
             new AuthProperties.Redis(
                 new AuthProperties.Redis.Throttle(prefix, Duration.ofHours(1)),
                 defaults.redis().emailVerification(),

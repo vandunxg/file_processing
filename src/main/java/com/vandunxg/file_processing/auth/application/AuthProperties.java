@@ -24,70 +24,6 @@ public record AuthProperties(
   @ConstructorBinding
   public AuthProperties {}
 
-  /**
-   * Keeps existing programmatic construction disabled unless bootstrap is explicitly configured.
-   */
-  public AuthProperties(
-      Password password,
-      Register register,
-      Login login,
-      Refresh refresh,
-      Session session,
-      Jwt jwt,
-      EmailVerification emailVerification,
-      Redis redis,
-      Amqp amqp) {
-    this(
-        password,
-        register,
-        login,
-        refresh,
-        session,
-        new Bootstrap(new Bootstrap.Admin(false, "", "", "", "System Administrator")),
-        jwt,
-        emailVerification,
-        new PasswordReset(
-            Duration.ofMinutes(15),
-            "https://app.example.com/reset-password",
-            20,
-            5,
-            Duration.ofMinutes(15)),
-        new Cleanup(Duration.ofHours(1), 100),
-        redis,
-        amqp);
-  }
-
-  public AuthProperties(
-      Password password,
-      Register register,
-      Login login,
-      Refresh refresh,
-      Session session,
-      Bootstrap bootstrap,
-      Jwt jwt,
-      EmailVerification emailVerification,
-      Redis redis,
-      Amqp amqp) {
-    this(
-        password,
-        register,
-        login,
-        refresh,
-        session,
-        bootstrap,
-        jwt,
-        emailVerification,
-        new PasswordReset(
-            Duration.ofMinutes(15),
-            "https://app.example.com/reset-password",
-            20,
-            5,
-            Duration.ofMinutes(15)),
-        new Cleanup(Duration.ofHours(1), 100),
-        redis,
-        amqp);
-  }
-
   public record Password(String encoder, int bcryptCost, int minLength, int maxLength) {}
 
   public record Register(int maxAttemptsPerHour) {}
@@ -112,10 +48,6 @@ public record AuthProperties(
 
     @ConstructorBinding
     public Refresh {}
-
-    public Refresh(Duration tokenTtl) {
-      this(tokenTtl, true);
-    }
   }
 
   public record Session(Duration credentialVersionCacheTtl) {}

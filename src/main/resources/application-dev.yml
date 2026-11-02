@@ -49,7 +49,11 @@ spring:
       enabled: true
 
   rabbitmq:
-    enable: true
+    enabled: true
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:rabbitmq_user}
+    password: ${RABBITMQ_PASSWORD:rabbitmq_password}
 
   web:
     error:

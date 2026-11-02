@@ -212,9 +212,9 @@ role.assignPermission(...)
 Do not leak HTTP, servlet, Redis, RabbitMQ, MinIO, or other infrastructure
 concepts into the domain model.
 
-Direct JPA mapping on a domain model is allowed only when persistence shape and
-domain shape align and the mapping does not distort domain behavior. The
-normative decision rule lives in `RULE.md`.
+A domain model carries no persistence mapping either. Where its facts are
+stored is `infrastructure`'s answer, so every aggregate is a domain model, an
+entity and a mapper between them. The normative rule lives in `RULE.md` §6.4.
 
 ### Infrastructure
 
@@ -284,9 +284,10 @@ caller's session) qualify; a field-for-field copy of the response does not.
 
 `@ValidatePaging(sortModel = X.class)` builds its allow-list by reflecting over
 `@jakarta.persistence.Column` fields, so it only accepts a JPA entity. Domain
-models carry no persistence annotations and would produce an empty allow-list
-that rejects every `sortBy`. Use the entity, and keep the reference confined to
-that annotation.
+models carry no persistence mapping (`RULE.md` §6.4) and would produce an empty
+allow-list that rejects every `sortBy`. Use the entity, and keep the reference
+confined to that annotation — imported for nothing else, never mapped, never
+returned. `ArchitectureConformanceTest` allows exactly that much and no more.
 
 ## Module ownership and communication
 
@@ -349,24 +350,23 @@ Do not use architecture-pattern suffixes as the default:
 
 ## Persistence decision
 
-Do not mechanically create separate domain/entity/mapper models.
-
-Use this rule:
+There is no decision to make. A domain model never carries persistence mapping,
+so every aggregate has three parts:
 
 ```text
-Domain model ~= persistence model
-        |
-        +--> direct JPA mapping may be acceptable
-
-Domain and persistence models differ materially
-        |
-        +--> separate persistence model + mapper
+domain/model/<Aggregate>.java                                  no mapping
+infrastructure/persistence/entity/<Aggregate>Entity.java        the row
+infrastructure/persistence/mapper/<Aggregate>PersistenceMapper  between them
 ```
 
-Separate models only for concrete reasons such as legacy schemas, conflicting
-persistence relationships, multiple representations, or reporting/read models.
+`RULE.md` §6.4 is normative: it covers reconstitution, why the mapper declares
+`unmappedTargetPolicy = ERROR`, and how the repository satisfies both the
+aggregate contract and a paginated read model without a second implementation.
+`ArchitectureConformanceTest.aDomainCarriesNoPersistenceMapping` enforces it.
 
-Never expose JPA entities directly from controllers.
+Never expose JPA entities directly from controllers. The single exception is the
+paging sort model described above, which is the annotation's argument and
+nothing else.
 
 ## Transaction boundaries
 
@@ -524,7 +524,7 @@ Before implementation or review, verify:
 - Are technical details isolated in `infrastructure`?
 - Does any module import another module's infrastructure implementation?
 - Is every new interface justified by a real boundary?
-- Is every duplicated model/mapper justified?
+- Does every aggregate keep its mapping in `infrastructure`, not on the model?
 - Is the transaction boundary explicit and bounded?
 - Are concurrency and idempotency requirements preserved?
 - Does the change extend legacy Hexagonal structure unnecessarily?

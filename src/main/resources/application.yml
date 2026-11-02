@@ -1,0 +1,114 @@
+springdoc:
+  api-docs:
+    url: http://localhost:8080
+
+app:
+  api:
+    prefix: /api
+    version: v1
+  file-import:
+    max-file-size: 500MB
+    retention: PT720H
+    batch-size: 1000
+    progress-row-interval: 5000
+    progress-time-interval: PT2S
+    stale-heartbeat-threshold: PT2M
+    worker-threads: 1
+    poll-interval: PT10M
+    recovery-interval: PT10M
+    staging-sweep-interval: PT10M
+    retention-cleanup-interval: PT1H
+    storage:
+      r2:
+        endpoint: ${R2_ENDPOINT}
+        access-key-id: ${R2_ACCESS_KEY_ID}
+        secret-access-key: ${R2_SECRET_ACCESS_KEY}
+        bucket: ${R2_BUCKET}
+        api-call-timeout: PT30S
+  auth:
+    password:
+      encoder: bcrypt
+      bcrypt-cost: 10
+      min-length: 8
+      max-length: 128
+    register:
+      max-attempts-per-hour: 10
+    login:
+      ip-max-per-window: 20
+      ip-window: PT1H
+      username-max-per-window: 5
+      username-window: PT15M
+      refresh-ip-max-per-window: 60
+      refresh-ip-window: PT1M
+      max-failures: 5
+      failure-window: PT15M
+      lock-duration: PT15M
+    refresh:
+      token-ttl: PT168H
+      cookie-secure: true
+    session:
+      credential-version-cache-ttl: PT5M
+    bootstrap:
+      admin:
+        enabled: false
+        username: ""
+        email: ""
+        password: ""
+        display-name: System Administrator
+    jwt:
+      issuer: file-processing
+      audience: file-processing-api
+      access-token-ttl: PT15M
+      password-change-token-ttl: PT5M
+      clock-skew: PT60S
+      active-kid: ${APP_AUTH_JWT_ACTIVE_KID}
+      private-key-pem-base64: ${APP_AUTH_JWT_PRIVATE_KEY_PEM_BASE64}
+      public-keys:
+        - kid: ${APP_AUTH_JWT_ACTIVE_KID}
+          pem-base64: ${APP_AUTH_JWT_PUBLIC_KEY_PEM_BASE64}
+    email-verification:
+      token-ttl: PT24H
+      base-url: http://localhost:5173/verify-email
+      resend-max-attempts-per-hour: 10
+    password-reset:
+      token-ttl: PT15M
+      base-url: https://app.example.com/reset-password
+      ip-max-attempts-per-hour: 20
+      identifier-max-attempts-per-window: 5
+      identifier-window: PT15M
+    cleanup:
+      cadence: PT1H
+      batch-size: 100
+    redis:
+      throttle:
+        key-prefix: "auth:throttle:"
+        window: PT1H
+      email-verification:
+        token-key-prefix: "auth:email-verify:token:"
+        user-key-prefix: "auth:email-verify:user:"
+      session:
+        key-prefix: "auth:session:"
+      refresh:
+        key-prefix: "auth:refresh:"
+        used-key-prefix: "auth:refresh:used:"
+        reuse-detection-window: PT60S
+      credential-version:
+        key-prefix: "auth:user:cv:"
+      user-sessions:
+        key-prefix: "auth:user:sessions:"
+    amqp:
+      exchange: auth.events
+      routing-key:
+        action-log: auth.action-log.recorded
+        audit-log: auth.audit-log.recorded
+        verification-email: auth.email.verification-requested
+        session-persist: auth.session.persist
+        session-update: auth.session.update
+        session-revoke: auth.session.revoke
+      queue:
+        action-log: auth.action-log.queue
+        audit-log: auth.audit-log.queue
+        verification-email: auth.email-verification.queue
+        session-persist: auth.session-persist.queue
+        session-update: auth.session-update.queue
+        session-revoke: auth.session-revoke.queue
