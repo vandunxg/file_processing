@@ -29,10 +29,10 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "Current user sessions", description = "Authenticated caller session management")
 public class CurrentUserSessionController {
 
-  private static final String HTTP_HEADER_SET_COOKIE = "Set-Cookie";
   private final SessionQueryService sessionQueryService;
   private final SessionCommandService sessionCommandService;
   private final AuthWebMapper webMapper;
+  private final AuthCookies authCookies;
 
   @Operation(summary = "List the caller's active sessions")
   @GetMapping
@@ -76,8 +76,6 @@ public class CurrentUserSessionController {
     sessionCommandService.revokeAll(
         new RevokeAllSessionsCommand(
             principal.userId(), RevocationReason.USER_TRIGGERED, IpUtils.getRemoteIp(http)));
-    response.setHeader(
-        HTTP_HEADER_SET_COOKIE, "fps_refresh=; Path=/api/v1/auth; Max-Age=0; HttpOnly");
-    response.addHeader(HTTP_HEADER_SET_COOKIE, "fps_csrf=; Path=/api/v1/auth; Max-Age=0");
+    authCookies.clear(response);
   }
 }

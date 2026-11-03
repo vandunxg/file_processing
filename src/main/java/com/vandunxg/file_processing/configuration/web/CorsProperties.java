@@ -3,6 +3,7 @@ package com.vandunxg.file_processing.configuration.web;
 import java.time.Duration;
 import java.util.List;
 
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -21,13 +22,12 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "app.web.cors")
 public record CorsProperties(
     /**
-     * Origin patterns a browser may call this API from, e.g. {@code http://localhost:5173}.
+     * Origins a browser may call this API from, e.g. {@code http://localhost:5173}.
      *
-     * <p>Patterns rather than plain origins: {@code allowCredentials = true} forbids the {@code *}
-     * wildcard, and Spring echoes the matched origin back instead, which is what the browser
-     * requires when the request carries the refresh cookie.
+     * <p>The cookie-based refresh flow requires an explicit allowlist. Wildcards would let any
+     * origin pass the Origin validation that protects refresh requests.
      */
-    @NotEmpty List<String> allowedOriginPatterns,
+    @NotEmpty List<@NotBlank String> allowedOrigins,
     @NotEmpty List<String> allowedMethods,
     @NotEmpty List<String> allowedHeaders,
     /**
@@ -47,10 +47,15 @@ public record CorsProperties(
    * validation ever runs.
    */
   public CorsProperties {
-    allowedOriginPatterns = copyOrNull(allowedOriginPatterns);
+    allowedOrigins = copyOrNull(allowedOrigins);
     allowedMethods = copyOrNull(allowedMethods);
     allowedHeaders = copyOrNull(allowedHeaders);
     exposedHeaders = exposedHeaders == null ? List.of() : List.copyOf(exposedHeaders);
+    if (allowedOrigins != null
+        && allowedOrigins.stream().anyMatch(origin -> origin.contains("*"))) {
+      throw new IllegalArgumentException(
+          "Credentialed CORS requires explicit allowed origins, not wildcards");
+    }
   }
 
   private static List<String> copyOrNull(List<String> values) {

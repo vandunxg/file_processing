@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.vandunxg.file_processing.auth.infrastructure.security.ActionLoggingFilter;
 import com.vandunxg.file_processing.auth.infrastructure.security.CustomAuthenticationFilter;
+import com.vandunxg.file_processing.configuration.web.ApiProperties;
 import com.vandunxg.file_processing.testsupport.AuthIntegrationTestBase;
 import com.vandunxg.file_processing.testsupport.PostgresIntegrationTest;
 import org.junit.jupiter.api.Test;
@@ -22,11 +23,12 @@ class SecurityConfigurationIT extends AuthIntegrationTestBase {
   @Autowired private FilterChainProxy filterChainProxy;
   @Autowired private ActionLoggingFilter actionLoggingFilter;
   @Autowired private CustomAuthenticationFilter customAuthenticationFilter;
+  @Autowired private ApiProperties apiProperties;
   @Autowired private MockMvc mockMvc;
 
   @Test
   void runsActionLoggingAfterBearerAuthentication() {
-    var filters = filterChainProxy.getFilters("/api/v1/me");
+    var filters = filterChainProxy.getFilters(apiProperties.basePath() + "/me");
     int bearerFilterIndex =
         filters.indexOf(
             filters.stream()
@@ -39,7 +41,7 @@ class SecurityConfigurationIT extends AuthIntegrationTestBase {
 
   @Test
   void runsCustomAuthenticationAfterBearerAuthentication() {
-    var filters = filterChainProxy.getFilters("/api/v1/me");
+    var filters = filterChainProxy.getFilters(apiProperties.basePath() + "/me");
     int bearerFilterIndex =
         filters.indexOf(
             filters.stream()
@@ -58,7 +60,7 @@ class SecurityConfigurationIT extends AuthIntegrationTestBase {
    */
   @Test
   void excludesAContributedPublicPathFromTheSecurityFilterChain() {
-    assertThat(filterChainProxy.getFilters("/api/v1/auth/login")).isEmpty();
+    assertThat(filterChainProxy.getFilters(apiProperties.authPath() + "/login")).isEmpty();
   }
 
   /**
@@ -68,13 +70,13 @@ class SecurityConfigurationIT extends AuthIntegrationTestBase {
    */
   @Test
   void installsBearerTokenAuthenticationThroughAModuleContribution() {
-    assertThat(filterChainProxy.getFilters("/api/v1/me"))
+    assertThat(filterChainProxy.getFilters(apiProperties.basePath() + "/me"))
         .anyMatch(BearerTokenAuthenticationFilter.class::isInstance);
   }
 
   /** A path no module contributed still needs a bearer token. */
   @Test
   void requiresAuthenticationForPathsNoModuleContributed() throws Exception {
-    mockMvc.perform(get("/api/v1/me")).andExpect(status().isUnauthorized());
+    mockMvc.perform(get(apiProperties.basePath() + "/me")).andExpect(status().isUnauthorized());
   }
 }

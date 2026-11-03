@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import com.vandunxg.file_processing.configuration.security.ModuleSecurityContributor;
+import com.vandunxg.file_processing.configuration.web.ApiProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -16,7 +17,8 @@ class AuthSecurityContributorTest {
           mock(JwtDecoder.class),
           mock(Converter.class),
           mock(CustomAuthenticationFilter.class),
-          mock(ActionLoggingFilter.class));
+          mock(ActionLoggingFilter.class),
+          new ApiProperties("/gateway", "v2"));
 
   /**
    * The composition root no longer knows these routes, so this list is the only place that records
@@ -27,14 +29,14 @@ class AuthSecurityContributorTest {
   void declaresEveryAuthEndpointServedWithoutAuthentication() {
     assertThat(contributor.publicPaths())
         .containsExactly(
-            "/api/v1/auth/register",
-            "/api/v1/auth/verify-email",
-            "/api/v1/auth/resend-verification",
-            "/api/v1/auth/forgot-password",
-            "/api/v1/auth/reset-password",
-            "/api/v1/auth/complete-password-change",
-            "/api/v1/auth/login",
-            "/api/v1/auth/refresh",
-            "/api/v1/certificate/.well-known/jwks.json");
+            "/gateway/v2/auth/register",
+            "/gateway/v2/auth/verify-email",
+            "/gateway/v2/auth/resend-verification",
+            "/gateway/v2/auth/forgot-password",
+            "/gateway/v2/auth/reset-password",
+            "/gateway/v2/auth/complete-password-change",
+            "/gateway/v2/auth/login",
+            "/gateway/v2/auth/refresh",
+            "/gateway/v2/certificate/.well-known/jwks.json");
   }
 }

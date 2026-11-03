@@ -7,6 +7,7 @@ import com.vandunxg.common.web.security.ForbiddenTokenFilter;
 import com.vandunxg.common.web.security.NoHandlerFoundFilter;
 import com.vandunxg.common.web.security.RegexPermissionEvaluator;
 import com.vandunxg.common.web.support.CustomAuthenticationEntryPoint;
+import com.vandunxg.file_processing.configuration.web.ApiProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NullMarked;
@@ -43,8 +44,6 @@ public class SecurityConfiguration {
     "/", "/health", "/ready", "/ws/**", "/api/public/**"
   };
 
-  private static final String[] AUTHENTICATED_URLS = {"/api/**"};
-
   private static final String[] ACTUATOR_PROBE_URLS = {
     "/actuator/health/liveness", "/actuator/health/readiness"
   };
@@ -75,6 +74,7 @@ public class SecurityConfiguration {
   private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
   private final NoHandlerFoundFilter noHandlerFoundFilter;
   private final ForbiddenTokenFilter forbiddenTokenFilter;
+  private final ApiProperties apiProperties;
 
   @Bean
   public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -108,7 +108,7 @@ public class SecurityConfiguration {
                   .hasAuthority(ALL_MANAGER_PERMISSION)
                   .requestMatchers("/actuator/**")
                   .denyAll()
-                  .requestMatchers(AUTHENTICATED_URLS)
+                  .requestMatchers(apiProperties.basePath() + "/**")
                   .authenticated();
             })
         .exceptionHandling(

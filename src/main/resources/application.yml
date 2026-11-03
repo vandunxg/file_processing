@@ -183,7 +183,7 @@ app:
     version: v1
   web:
     cors:
-      allowed-origin-patterns:
+      allowed-origins:
         - http://localhost:5173
         - http://localhost:3000
       allowed-methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]

@@ -26,13 +26,11 @@ import org.springframework.web.filter.CorsFilter;
 @Slf4j(topic = "WEB-CORS")
 public class WebCorsConfiguration {
 
-  /** Every browser-facing route of this service lives under the API prefix. */
-  private static final String API_PATH_PATTERN = "/api/**";
-
   @Bean
-  public FilterRegistrationBean<CorsFilter> corsFilterRegistration(CorsProperties properties) {
+  public FilterRegistrationBean<CorsFilter> corsFilterRegistration(
+      CorsProperties properties, ApiProperties apiProperties) {
     CorsConfiguration configuration = new CorsConfiguration();
-    configuration.setAllowedOriginPatterns(properties.allowedOriginPatterns());
+    configuration.setAllowedOrigins(properties.allowedOrigins());
     configuration.setAllowedMethods(properties.allowedMethods());
     configuration.setAllowedHeaders(properties.allowedHeaders());
     configuration.setExposedHeaders(properties.exposedHeaders());
@@ -40,11 +38,11 @@ public class WebCorsConfiguration {
     configuration.setMaxAge(properties.maxAge());
 
     UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-    source.registerCorsConfiguration(API_PATH_PATTERN, configuration);
+    source.registerCorsConfiguration(apiProperties.basePath() + "/**", configuration);
 
     log.info(
-        "[cors] allowedOriginPatterns={} allowCredentials={}",
-        properties.allowedOriginPatterns(),
+        "[cors] allowedOrigins={} allowCredentials={}",
+        properties.allowedOrigins(),
         properties.allowCredentials());
 
     FilterRegistrationBean<CorsFilter> registration =

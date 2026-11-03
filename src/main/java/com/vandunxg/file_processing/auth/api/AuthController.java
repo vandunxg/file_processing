@@ -1,8 +1,5 @@
 package com.vandunxg.file_processing.auth.api;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.time.Duration;
 import java.util.UUID;
 
 import com.vandunxg.common.models.dto.response.Response;
@@ -11,9 +8,7 @@ import com.vandunxg.file_processing.auth.api.dto.request.*;
 import com.vandunxg.file_processing.auth.api.dto.response.LoginResponse;
 import com.vandunxg.file_processing.auth.api.dto.response.RegisterResponse;
 import com.vandunxg.file_processing.auth.api.mapper.AuthWebMapper;
-import com.vandunxg.file_processing.auth.application.AuthProperties;
 import com.vandunxg.file_processing.auth.application.capability.PasswordChangeTokenReader;
-import com.vandunxg.file_processing.auth.application.capability.RefreshTokenGenerator;
 import com.vandunxg.file_processing.auth.application.command.LogoutCommand;
 import com.vandunxg.file_processing.auth.application.command.RefreshTokenCommand;
 import com.vandunxg.file_processing.auth.application.exception.AuthErrorCode;
@@ -23,6 +18,7 @@ import com.vandunxg.file_processing.auth.application.service.PasswordCommandServ
 import com.vandunxg.file_processing.auth.application.service.RegistrationCommandService;
 import com.vandunxg.file_processing.auth.application.service.SessionCommandService;
 import com.vandunxg.file_processing.configuration.security.AuthenticatedUser;
+import com.vandunxg.file_processing.configuration.web.CorsProperties;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
@@ -37,9 +33,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseCookie;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.cors.CorsConfiguration;
 
 @RestController
 @RequestMapping("${app.api.prefix}/${app.api.version}/auth")
@@ -48,7 +44,6 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "Authentication", description = "Public authentication and authenticated session flows")
 public class AuthController {
 
-  private static final String AUTH_COOKIE_PATH = "/api/v1/auth";
   private static final String REFRESH_COOKIE = "fps_refresh";
   private static final String CSRF_COOKIE = "fps_csrf";
   private static final String CSRF_HEADER = "X-CSRF-Token";
@@ -59,8 +54,8 @@ public class AuthController {
   private final SessionCommandService sessionCommandService;
   private final AuthWebMapper webMapper;
   private final PasswordChangeTokenReader passwordChangeTokenReader;
-  private final RefreshTokenGenerator refreshTokenGenerator;
-  private final AuthProperties authProperties;
+  private final AuthCookies authCookies;
+  private final CorsProperties corsProperties;
 
   @Operation(summary = "Register a new operator account")
   @SecurityRequirements
@@ -151,7 +146,7 @@ public class AuthController {
     log.info("[login] username={}", request.getUsername());
     var command = webMapper.toCommand(request, clientIp(http), userAgent(http));
     var result = authenticationCommandService.login(command);
-    setAuthCookies(response, result.refreshToken());
+    authCookies.write(response, result.refreshToken());
     return Response.of(webMapper.toResponse(result));
   }
 
@@ -194,7 +189,7 @@ public class AuthController {
           String csrfHeader,
       HttpServletRequest http,
       HttpServletResponse response) {
-    if (!csrfMatches(csrfCookie, csrfHeader)) {
+    if (!originIsAllowed(http) || !authCookies.csrfMatches(csrfCookie, csrfHeader)) {
       throw new AuthException(AuthErrorCode.AUTH_CSRF_TOKEN_INVALID);
     }
     var command =
@@ -204,7 +199,7 @@ public class AuthController {
             .userAgent(userAgent(http))
             .build();
     var result = sessionCommandService.refresh(command);
-    setAuthCookies(response, result.refreshToken());
+    authCookies.write(response, result.refreshToken());
     return Response.of(webMapper.toResponse(result));
   }
 
@@ -222,7 +217,7 @@ public class AuthController {
             .userId(principal.userId())
             .ipAddress(clientIp(http))
             .build());
-    clearAuthCookies(response);
+    authCookies.clear(response);
   }
 
   private String clientIp(HttpServletRequest http) {
@@ -237,43 +232,13 @@ public class AuthController {
     return ua.length() > 255 ? ua.substring(0, 255) : ua;
   }
 
-  private void setAuthCookies(HttpServletResponse response, String refreshToken) {
-    if (refreshToken == null) {
-      return;
+  private boolean originIsAllowed(HttpServletRequest http) {
+    String origin = http.getHeader(HttpHeaders.ORIGIN);
+    if (origin == null) {
+      return false;
     }
-    response.addHeader(
-        HttpHeaders.SET_COOKIE, cookie(REFRESH_COOKIE, refreshToken, true).toString());
-    response.addHeader(
-        HttpHeaders.SET_COOKIE,
-        cookie(CSRF_COOKIE, refreshTokenGenerator.generate(), false).toString());
-  }
-
-  private ResponseCookie cookie(String name, String value, boolean httpOnly) {
-    return cookie(name, value, httpOnly, authProperties.refresh().tokenTtl());
-  }
-
-  private ResponseCookie cookie(String name, String value, boolean httpOnly, Duration maxAge) {
-    return ResponseCookie.from(name, value)
-        .httpOnly(httpOnly)
-        .secure(authProperties.refresh().cookieSecure())
-        .sameSite("Strict")
-        .path(AUTH_COOKIE_PATH)
-        .maxAge(maxAge)
-        .build();
-  }
-
-  private void clearAuthCookies(HttpServletResponse response) {
-    response.addHeader(
-        HttpHeaders.SET_COOKIE, cookie(REFRESH_COOKIE, "", true, Duration.ZERO).toString());
-    response.addHeader(
-        HttpHeaders.SET_COOKIE, cookie(CSRF_COOKIE, "", false, Duration.ZERO).toString());
-  }
-
-  private static boolean csrfMatches(String csrfCookie, String csrfHeader) {
-    return csrfCookie != null
-        && csrfHeader != null
-        && MessageDigest.isEqual(
-            csrfCookie.getBytes(StandardCharsets.UTF_8),
-            csrfHeader.getBytes(StandardCharsets.UTF_8));
+    CorsConfiguration configuration = new CorsConfiguration();
+    configuration.setAllowedOrigins(corsProperties.allowedOrigins());
+    return configuration.checkOrigin(origin) != null;
   }
 }

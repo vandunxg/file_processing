@@ -1,6 +1,7 @@
 package com.vandunxg.file_processing.configuration.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
 import java.time.Duration;
 import java.util.List;
@@ -9,11 +10,13 @@ import jakarta.servlet.Filter;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.web.filter.CorsFilter;
 
 /**
  * The refresh-token flow is cookie based, so a browser only reaches it when the preflight answers
@@ -77,6 +80,55 @@ class WebCorsConfigurationTest {
   }
 
   @Test
+  void rejectsWildcardOriginsForCredentialedRequests() {
+    assertThatIllegalArgumentException()
+        .isThrownBy(
+            () ->
+                new CorsProperties(
+                    List.of("*"),
+                    List.of("POST"),
+                    List.of("X-CSRF-Token"),
+                    List.of(),
+                    true,
+                    Duration.ofMinutes(30)))
+        .withMessageContaining("explicit allowed origins");
+  }
+
+  @Test
+  void rejectsWildcardOriginsWhenCredentialsAreDisabled() {
+    assertThatIllegalArgumentException()
+        .isThrownBy(
+            () ->
+                new CorsProperties(
+                    List.of("*"),
+                    List.of("POST"),
+                    List.of("X-CSRF-Token"),
+                    List.of(),
+                    false,
+                    Duration.ofMinutes(30)))
+        .withMessageContaining("explicit allowed origins");
+  }
+
+  @Test
+  void coversTheConfiguredApiPath() throws Exception {
+    FilterRegistrationBean<CorsFilter> registration =
+        new WebCorsConfiguration()
+            .corsFilterRegistration(properties(), new ApiProperties("/gateway", "v2"));
+    MockHttpServletResponse response = new MockHttpServletResponse();
+
+    registration
+        .getFilter()
+        .doFilter(
+            preflightRequest(FRONTEND_ORIGIN, "/gateway/v2/auth/refresh", "POST"),
+            response,
+            new MockFilterChain());
+
+    assertThat(response.getStatus()).isEqualTo(200);
+    assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN))
+        .isEqualTo(FRONTEND_ORIGIN);
+  }
+
+  @Test
   void coversEveryAuthRouteIncludingTheOnesSpringSecurityIgnores() throws Exception {
     for (String path :
         List.of(
@@ -107,7 +159,7 @@ class WebCorsConfigurationTest {
     new ApplicationContextRunner()
         .withUserConfiguration(BindingHarness.class)
         .withPropertyValues(
-            "app.web.cors.allowed-origin-patterns=http://localhost:5173,http://localhost:3000",
+            "app.web.cors.allowed-origins=http://localhost:5173,http://localhost:3000",
             "app.web.cors.allowed-methods=GET,POST,PUT,PATCH,DELETE,OPTIONS",
             "app.web.cors.allowed-headers=*",
             "app.web.cors.exposed-headers=Retry-After,Content-Disposition,Location",
@@ -118,7 +170,7 @@ class WebCorsConfigurationTest {
               assertThat(context).hasNotFailed();
               CorsProperties bound = context.getBean(CorsProperties.class);
 
-              assertThat(bound.allowedOriginPatterns())
+              assertThat(bound.allowedOrigins())
                   .containsExactly("http://localhost:5173", "http://localhost:3000");
               assertThat(bound.allowedMethods()).contains("OPTIONS");
               assertThat(bound.exposedHeaders()).contains("Retry-After", "Content-Disposition");
@@ -134,6 +186,19 @@ class WebCorsConfigurationTest {
         .withPropertyValues(
             "app.web.cors.allowed-methods=GET",
             "app.web.cors.allowed-headers=*",
+            "app.web.cors.allow-credentials=true",
+            "app.web.cors.max-age=PT30M")
+        .run(context -> assertThat(context).hasFailed());
+  }
+
+  @Test
+  void refusesToStartWithAWildcardCredentialedOrigin() {
+    new ApplicationContextRunner()
+        .withUserConfiguration(BindingHarness.class)
+        .withPropertyValues(
+            "app.web.cors.allowed-origins=*",
+            "app.web.cors.allowed-methods=POST",
+            "app.web.cors.allowed-headers=X-CSRF-Token",
             "app.web.cors.allow-credentials=true",
             "app.web.cors.max-age=PT30M")
         .run(context -> assertThat(context).hasFailed());
@@ -164,7 +229,8 @@ class WebCorsConfigurationTest {
   private static org.springframework.boot.web.servlet.FilterRegistrationBean<
           org.springframework.web.filter.CorsFilter>
       registration() {
-    return new WebCorsConfiguration().corsFilterRegistration(properties());
+    return new WebCorsConfiguration()
+        .corsFilterRegistration(properties(), new ApiProperties("/api", "v1"));
   }
 
   /** Mirrors the shipped defaults in {@code application.yml}. */

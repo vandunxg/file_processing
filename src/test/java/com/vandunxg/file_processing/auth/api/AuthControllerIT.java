@@ -37,6 +37,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -342,13 +343,15 @@ class AuthControllerIT extends AuthIntegrationTestBase {
     assertThat(refreshCookie.getAttribute("SameSite")).isEqualTo("Strict");
     assertThat(refreshCookie.getMaxAge()).isPositive();
 
-    Cookie csrfCookie = result.getResponse().getCookie("fps_csrf");
+    Cookie csrfCookie = activeCookie(result, "fps_csrf");
     assertThat(csrfCookie).isNotNull();
     assertThat(csrfCookie.isHttpOnly()).isFalse();
     assertThat(csrfCookie.getSecure()).isFalse();
-    assertThat(csrfCookie.getPath()).isEqualTo(BASE_URL);
+    assertThat(csrfCookie.getPath()).isEqualTo("/");
     assertThat(csrfCookie.getAttribute("SameSite")).isEqualTo("Strict");
     assertThat(csrfCookie.getMaxAge()).isPositive();
+    assertThat(result.getResponse().getHeaders(HttpHeaders.SET_COOKIE))
+        .anyMatch(header -> header.startsWith("fps_csrf=; Path=/api/v1/auth; Max-Age=0"));
   }
 
   @Test
@@ -360,8 +363,33 @@ class AuthControllerIT extends AuthIntegrationTestBase {
                 .cookie(
                     new Cookie("fps_refresh", "refresh-token"),
                     new Cookie("fps_csrf", "csrf-token")))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void refresh_returnsCsrfTokenInvalid_whenOriginIsMissing() throws Exception {
+    mockMvc
+        .perform(
+            post(BASE_URL + "/refresh")
+                .header("X-CSRF-Token", "csrf-token")
+                .cookie(
+                    new Cookie("fps_refresh", "refresh-token"),
+                    new Cookie("fps_csrf", "csrf-token")))
         .andExpect(status().isForbidden())
         .andExpect(jsonPath("$.error").value("AUTH_CSRF_TOKEN_INVALID"));
+  }
+
+  @Test
+  void refresh_returnsCsrfTokenInvalid_whenOriginIsNotAllowed() throws Exception {
+    mockMvc
+        .perform(
+            post(BASE_URL + "/refresh")
+                .header("Origin", "https://attacker.example")
+                .header("X-CSRF-Token", "csrf-token")
+                .cookie(
+                    new Cookie("fps_refresh", "refresh-token"),
+                    new Cookie("fps_csrf", "csrf-token")))
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -382,13 +410,14 @@ class AuthControllerIT extends AuthIntegrationTestBase {
                     .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isOk())
             .andReturn();
-    Cookie refreshCookie = loginResult.getResponse().getCookie("fps_refresh");
-    Cookie csrfCookie = loginResult.getResponse().getCookie("fps_csrf");
+    Cookie refreshCookie = activeCookie(loginResult, "fps_refresh");
+    Cookie csrfCookie = activeCookie(loginResult, "fps_csrf");
 
     MvcResult refreshResult =
         mockMvc
             .perform(
                 post(BASE_URL + "/refresh")
+                    .header("Origin", "http://localhost:5173")
                     .header("X-CSRF-Token", csrfCookie.getValue())
                     .cookie(refreshCookie, csrfCookie)
                     .header("X-Real-IP", "203.0.114.8"))
@@ -396,10 +425,11 @@ class AuthControllerIT extends AuthIntegrationTestBase {
             .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
             .andReturn();
 
-    assertThat(refreshResult.getResponse().getCookie("fps_refresh").getValue())
+    assertThat(activeCookie(refreshResult, "fps_refresh").getValue())
         .isNotEqualTo(refreshCookie.getValue());
-    assertThat(refreshResult.getResponse().getCookie("fps_csrf").getValue())
+    assertThat(activeCookie(refreshResult, "fps_csrf").getValue())
         .isNotEqualTo(csrfCookie.getValue());
+    assertThat(activeCookie(refreshResult, "fps_csrf").getPath()).isEqualTo("/");
   }
 
   @Test
@@ -418,6 +448,7 @@ class AuthControllerIT extends AuthIntegrationTestBase {
 
     assertThat(result.getResponse().getCookie("fps_refresh").getMaxAge()).isZero();
     assertThat(result.getResponse().getCookie("fps_csrf").getMaxAge()).isZero();
+    assertThat(result.getResponse().getCookie("fps_csrf").getPath()).isEqualTo("/");
   }
 
   @Test
@@ -438,6 +469,7 @@ class AuthControllerIT extends AuthIntegrationTestBase {
 
     assertThat(result.getResponse().getCookie("fps_refresh").getMaxAge()).isZero();
     assertThat(result.getResponse().getCookie("fps_csrf").getMaxAge()).isZero();
+    assertThat(result.getResponse().getCookie("fps_csrf").getPath()).isEqualTo("/");
   }
 
   private UUID saveActiveUser(String username, String password, String displayName) {
@@ -460,6 +492,13 @@ class AuthControllerIT extends AuthIntegrationTestBase {
             .emailVerifiedAt(now)
             .build());
     return userId;
+  }
+
+  private static Cookie activeCookie(MvcResult result, String name) {
+    return Arrays.stream(result.getResponse().getCookies())
+        .filter(cookie -> cookie.getName().equals(name) && cookie.getMaxAge() > 0)
+        .findFirst()
+        .orElseThrow();
   }
 
   @Test

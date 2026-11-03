@@ -3,6 +3,7 @@ package com.vandunxg.file_processing.auth.infrastructure.security;
 import java.util.List;
 
 import com.vandunxg.file_processing.configuration.security.ModuleSecurityContributor;
+import com.vandunxg.file_processing.configuration.web.ApiProperties;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NullMarked;
 import org.springframework.core.annotation.Order;
@@ -33,27 +34,25 @@ public class AuthSecurityContributor implements ModuleSecurityContributor {
    */
   public static final int ORDER = 100;
 
-  /** Copied verbatim from the composition root's former {@code PUBLIC_URLS}. */
-  private static final List<String> PUBLIC_PATHS =
-      List.of(
-          "/api/v1/auth/register",
-          "/api/v1/auth/verify-email",
-          "/api/v1/auth/resend-verification",
-          "/api/v1/auth/forgot-password",
-          "/api/v1/auth/reset-password",
-          "/api/v1/auth/complete-password-change",
-          "/api/v1/auth/login",
-          "/api/v1/auth/refresh",
-          "/api/v1/certificate/.well-known/jwks.json");
-
   private final JwtDecoder jwtDecoder;
   private final Converter<Jwt, AbstractAuthenticationToken> jwtAuthenticationConverter;
   private final CustomAuthenticationFilter customAuthenticationFilter;
   private final ActionLoggingFilter actionLoggingFilter;
+  private final ApiProperties apiProperties;
 
   @Override
   public List<String> publicPaths() {
-    return PUBLIC_PATHS;
+    String authPath = apiProperties.authPath();
+    return List.of(
+        authPath + "/register",
+        authPath + "/verify-email",
+        authPath + "/resend-verification",
+        authPath + "/forgot-password",
+        authPath + "/reset-password",
+        authPath + "/complete-password-change",
+        authPath + "/login",
+        authPath + "/refresh",
+        apiProperties.basePath() + "/certificate/.well-known/jwks.json");
   }
 
   @Override
