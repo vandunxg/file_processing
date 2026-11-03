@@ -9,6 +9,7 @@ import java.util.Optional;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.vandunxg.common.utils.Constants;
 import com.vandunxg.common.utils.IdUtils;
@@ -61,9 +62,16 @@ public class ActionLoggingFilter extends OncePerRequestFilter {
 
   private static final List<String> MASK_FIELD_NAME =
       List.of(
-          "password", "currentPassword", "newPassword", "clientSecret", "token", "refreshToken");
+          "password",
+          "currentPassword",
+          "newPassword",
+          "temporaryPassword",
+          "clientSecret",
+          "token",
+          "refreshToken");
 
   private static final String MASKED_VALUE = "********";
+  private static final String UNPARSEABLE_BODY = "[redacted-unparseable-body]";
 
   private final ActionLogEventPublisher actionLogEventPublisher;
 
@@ -182,7 +190,9 @@ public class ActionLoggingFilter extends OncePerRequestFilter {
   private @Nullable String getRequestParams(HttpServletRequest request) {
     try {
       ObjectMapper objectMapper = new ObjectMapper();
-      return objectMapper.writeValueAsString(request.getParameterMap());
+      JsonNode parameters = objectMapper.valueToTree(request.getParameterMap());
+      mask(parameters);
+      return objectMapper.writeValueAsString(parameters);
     } catch (Exception e) {
       return null;
     }
@@ -237,17 +247,28 @@ public class ActionLoggingFilter extends OncePerRequestFilter {
       ObjectMapper objectMapper = new ObjectMapper();
       JsonNode rootNode = objectMapper.readTree(body);
 
-      MASK_FIELD_NAME.forEach(field -> mask(rootNode, field));
+      mask(rootNode);
 
       return objectMapper.writeValueAsString(rootNode);
     } catch (Exception e) {
-      return body;
+      return UNPARSEABLE_BODY;
     }
   }
 
-  private static void mask(JsonNode rootNode, String fieldName) {
-    if (rootNode instanceof ObjectNode objectNode && rootNode.has(fieldName)) {
-      objectNode.put(fieldName, MASKED_VALUE);
+  private static void mask(JsonNode node) {
+    if (node instanceof ObjectNode objectNode) {
+      objectNode
+          .properties()
+          .forEach(
+              entry -> {
+                if (MASK_FIELD_NAME.contains(entry.getKey())) {
+                  objectNode.put(entry.getKey(), MASKED_VALUE);
+                } else {
+                  mask(entry.getValue());
+                }
+              });
+    } else if (node instanceof ArrayNode arrayNode) {
+      arrayNode.forEach(ActionLoggingFilter::mask);
     }
   }
 }

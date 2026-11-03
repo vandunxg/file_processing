@@ -80,6 +80,70 @@ class ActionLoggingFilterTest {
     RequestContextHolder.resetRequestAttributes();
   }
 
+  @Test
+  void doFilterInternal_redactsNestedAndTemporaryCredentialsFromFailedRequest()
+      throws ServletException, IOException {
+    UUID userId = UUID.randomUUID();
+    SecurityContextHolder.getContext()
+        .setAuthentication(new UserAuthentication(jwt(userId), List.of(), userId));
+    MockHttpServletRequest request =
+        new MockHttpServletRequest("POST", "/api/v1/users/id/reset-password");
+    request.setServletPath("/api/v1/users/id/reset-password");
+    request.setAttribute(CustomAuthenticationFilter.AUTHENTICATED_USERNAME_ATTRIBUTE, "operator");
+    request.setContentType("application/json");
+    request.setContent(
+        "{\"temporaryPassword\":\"temporary-secret\",\"nested\":{\"token\":\"nested-secret\"}}"
+            .getBytes());
+    MockHttpServletResponse response = new MockHttpServletResponse();
+    RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+
+    new ActionLoggingFilter(actionLogEventPublisher)
+        .doFilterInternal(
+            request,
+            response,
+            (servletRequest, servletResponse) ->
+                ((jakarta.servlet.http.HttpServletResponse) servletResponse).setStatus(400));
+
+    ArgumentCaptor<ActionLog> captor = ArgumentCaptor.forClass(ActionLog.class);
+    verify(actionLogEventPublisher).publish(captor.capture());
+    assertThat(captor.getValue().getRequestData())
+        .doesNotContain("temporary-secret", "nested-secret")
+        .contains("********");
+
+    SecurityContextHolder.clearContext();
+    RequestContextHolder.resetRequestAttributes();
+  }
+
+  @Test
+  void doFilterInternal_redactsSensitiveQueryParametersAndMalformedBodies()
+      throws ServletException, IOException {
+    UUID userId = UUID.randomUUID();
+    SecurityContextHolder.getContext()
+        .setAuthentication(new UserAuthentication(jwt(userId), List.of(), userId));
+    MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/customers");
+    request.setServletPath("/api/v1/customers");
+    request.setContentType("application/json");
+    request.setContent("{\"token\":\"body-secret\"".getBytes());
+    request.addParameter("refreshToken", "query-secret");
+    MockHttpServletResponse response = new MockHttpServletResponse();
+    RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+
+    new ActionLoggingFilter(actionLogEventPublisher)
+        .doFilterInternal(
+            request,
+            response,
+            (servletRequest, servletResponse) ->
+                ((jakarta.servlet.http.HttpServletResponse) servletResponse).setStatus(400));
+
+    ArgumentCaptor<ActionLog> captor = ArgumentCaptor.forClass(ActionLog.class);
+    verify(actionLogEventPublisher).publish(captor.capture());
+    assertThat(captor.getValue().getRequestData()).doesNotContain("body-secret");
+    assertThat(captor.getValue().getRequestParam()).doesNotContain("query-secret");
+
+    SecurityContextHolder.clearContext();
+    RequestContextHolder.resetRequestAttributes();
+  }
+
   private static Jwt jwt(UUID userId) {
     Instant now = Instant.parse("2026-07-27T00:00:00Z");
     return Jwt.withTokenValue("test-token")
