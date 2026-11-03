@@ -52,6 +52,7 @@ public class PasswordCommandService {
 
   private static final String IP_THROTTLE_PREFIX = "password-reset:ip:";
   private static final String IDENTIFIER_THROTTLE_PREFIX = "password-reset:identifier:";
+  private static final String DUMMY_PASSWORD = "password-reset-dummy";
   private static final Duration IP_WINDOW = Duration.ofHours(1);
 
   private final AuthThrottle authThrottle;
@@ -100,10 +101,11 @@ public class PasswordCommandService {
       throw new AuthException(AuthErrorCode.AUTH_RATE_LIMITED);
     }
 
-    User user =
-        userRepository
-            .findByNormalizedIdentifier(normalizedIdentifier)
-            .orElseThrow(() -> new AuthException(AuthErrorCode.USER_NOT_FOUND));
+    passwordHasher.matches(DUMMY_PASSWORD, passwordHasher.dummyHash());
+    User user = userRepository.findByNormalizedIdentifier(normalizedIdentifier).orElse(null);
+    if (user == null) {
+      return;
+    }
     Instant now = Instant.now(clock);
     tokenRepository.invalidateAllForUser(user.getId(), now);
     if (user.getStatus() == UserStatus.DISABLED) {

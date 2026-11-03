@@ -215,7 +215,7 @@ class AuthControllerIT extends AuthIntegrationTestBase {
   }
 
   @Test
-  void forgotPassword_returns404UserNotFound_whenIdentifierDoesNotExist() throws Exception {
+  void forgotPassword_returns204WhenIdentifierDoesNotExist() throws Exception {
     ForgotPasswordRequest request = new ForgotPasswordRequest();
     request.setIdentifier("missing-password-reset@example.com");
 
@@ -225,7 +225,7 @@ class AuthControllerIT extends AuthIntegrationTestBase {
                 .header("X-Real-IP", "203.0.113.18")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
-        .andExpect(status().isNotFound());
+        .andExpect(status().isNoContent());
   }
 
   @Test

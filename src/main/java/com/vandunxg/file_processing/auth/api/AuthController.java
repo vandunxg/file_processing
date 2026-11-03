@@ -95,11 +95,10 @@ public class AuthController {
 
   @Operation(
       summary = "Request a password reset email",
-      description = "Unknown usernames or emails return `404 USER_NOT_FOUND`.")
+      description = "Accepted without revealing whether the username or email exists.")
   @SecurityRequirements
   @ApiResponses({
     @ApiResponse(responseCode = "204", description = "Password-reset request accepted"),
-    @ApiResponse(responseCode = "404", description = "User not found"),
     @ApiResponse(responseCode = "429", description = "Password-reset rate limit exceeded")
   })
   @PostMapping("/forgot-password")

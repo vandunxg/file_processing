@@ -247,6 +247,7 @@ class PasswordCommandServiceTest {
       User user = user(userId, UserStatus.ACTIVE);
       when(authThrottle.tryConsume(anyString(), anyInt(), any())).thenReturn(true);
       when(userRepository.findByNormalizedIdentifier(IDENTIFIER)).thenReturn(Optional.of(user));
+      when(passwordHasher.dummyHash()).thenReturn("{bcrypt}dummy");
       when(verificationTokenGenerator.generate()).thenReturn(RAW_TOKEN);
       when(tokenRepository.save(any(PasswordResetToken.class)))
           .thenAnswer(invocation -> invocation.getArgument(0));
@@ -279,25 +280,20 @@ class PasswordCommandServiceTest {
       assertThat(auditCaptor.getValue().getOperation())
           .isEqualTo(OperationType.PASSWORD_RESET_REQUESTED);
       verify(authMetrics).passwordResetRequested();
+      verify(passwordHasher).matches("password-reset-dummy", "{bcrypt}dummy");
     }
 
     @Test
-    void requestResetReturnsUserNotFoundForUnknownIdentifierAfterBothRateLimitsAllow() {
+    void requestResetDoesNotRevealAnUnknownIdentifierAndBurnsDummyHashWork() {
       when(authThrottle.tryConsume(anyString(), anyInt(), any())).thenReturn(true);
       when(userRepository.findByNormalizedIdentifier(IDENTIFIER)).thenReturn(Optional.empty());
+      when(passwordHasher.dummyHash()).thenReturn("{bcrypt}dummy");
 
-      assertThatThrownBy(
-              () ->
-                  passwordCommandService.requestReset(
-                      ForgotPasswordCommand.builder()
-                          .identifier(IDENTIFIER)
-                          .ipAddress("203.0.113.5")
-                          .build()))
-          .isInstanceOf(AuthException.class)
-          .extracting("error")
-          .isEqualTo(AuthErrorCode.USER_NOT_FOUND);
+      passwordCommandService.requestReset(
+          ForgotPasswordCommand.builder().identifier(IDENTIFIER).ipAddress("203.0.113.5").build());
 
       verifyNoInteractions(tokenRepository, verificationTokenGenerator, emailSender);
+      verify(passwordHasher).matches("password-reset-dummy", "{bcrypt}dummy");
     }
 
     @Test
@@ -306,6 +302,7 @@ class PasswordCommandServiceTest {
       when(authThrottle.tryConsume(anyString(), anyInt(), any())).thenReturn(true);
       when(userRepository.findByNormalizedIdentifier(IDENTIFIER))
           .thenReturn(Optional.of(user(userId, UserStatus.DISABLED)));
+      when(passwordHasher.dummyHash()).thenReturn("{bcrypt}dummy");
 
       passwordCommandService.requestReset(
           ForgotPasswordCommand.builder().identifier(IDENTIFIER).ipAddress("203.0.113.5").build());
@@ -313,6 +310,7 @@ class PasswordCommandServiceTest {
       verify(tokenRepository).invalidateAllForUser(userId, NOW);
       verify(tokenRepository, never()).save(any());
       verifyNoInteractions(verificationTokenGenerator, emailSender, auditLogEventPublisher);
+      verify(passwordHasher).matches("password-reset-dummy", "{bcrypt}dummy");
     }
 
     @Test
