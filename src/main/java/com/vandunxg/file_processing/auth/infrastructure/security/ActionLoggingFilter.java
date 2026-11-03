@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -26,7 +27,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.springframework.core.annotation.Order;
@@ -66,9 +66,14 @@ public class ActionLoggingFilter extends OncePerRequestFilter {
           "currentPassword",
           "newPassword",
           "temporaryPassword",
+          "confirmPassword",
           "clientSecret",
           "token",
-          "refreshToken");
+          "refreshToken",
+          "accessToken",
+          "resetToken",
+          "secret",
+          "apiKey");
 
   private static final String MASKED_VALUE = "********";
   private static final String UNPARSEABLE_BODY = "[redacted-unparseable-body]";
@@ -182,7 +187,7 @@ public class ActionLoggingFilter extends OncePerRequestFilter {
     Object exceptionObj =
         request.getAttribute(Constants.EXCEPTION_MESSAGE, RequestAttributes.SCOPE_REQUEST);
     if (exceptionObj instanceof Exception exception) {
-      return ExceptionUtils.getStackTrace(exception);
+      return exception.getClass().getName();
     }
     return null;
   }
@@ -261,7 +266,7 @@ public class ActionLoggingFilter extends OncePerRequestFilter {
           .properties()
           .forEach(
               entry -> {
-                if (MASK_FIELD_NAME.contains(entry.getKey())) {
+                if (isSensitiveField(entry.getKey())) {
                   objectNode.put(entry.getKey(), MASKED_VALUE);
                 } else {
                   mask(entry.getValue());
@@ -270,5 +275,12 @@ public class ActionLoggingFilter extends OncePerRequestFilter {
     } else if (node instanceof ArrayNode arrayNode) {
       arrayNode.forEach(ActionLoggingFilter::mask);
     }
+  }
+
+  private static boolean isSensitiveField(String fieldName) {
+    String normalized = fieldName.replaceAll("[_-]", "").toLowerCase(Locale.ROOT);
+    return MASK_FIELD_NAME.stream()
+        .map(name -> name.replaceAll("[_-]", "").toLowerCase(Locale.ROOT))
+        .anyMatch(normalized::equals);
   }
 }
