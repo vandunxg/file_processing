@@ -54,21 +54,32 @@ issuer/audience/key identifiers, secrets, positive durations, and positive
 rate limits. Invalid configuration fails at application startup rather than in
 an authentication flow. This phase does not alter valid runtime configuration.
 
-## Phase 6: Durable Auth Audit And Email Delivery
+## Phase 6: Durable Audit Delivery
 
-Auth writes persist an outbox record in the same database transaction as the
-business change. A scheduled worker atomically claims a bounded batch using
-PostgreSQL `FOR UPDATE SKIP LOCKED`, publishes to RabbitMQ, and records the
-delivery attempt/result. Transient failures use bounded exponential backoff;
-permanent or exhausted events are marked failed and emit metrics/logs without
-secrets. The worker reclaims expired leases after a process crash.
+Auth audit writes persist an outbox record in the same database transaction as
+the business change. A scheduled worker atomically claims a bounded batch using
+PostgreSQL `FOR UPDATE SKIP LOCKED`, publishes to RabbitMQ with publisher
+confirms, and sets `delivered_at` only after a positive broker acknowledgement.
+Confirm timeouts and nacks release the lease and schedule a bounded retry with
+exponential backoff; exhausted events are marked failed and emit metrics/logs
+without secrets. The worker reclaims expired leases after a process crash.
 
-The first migration moves audit-log publication to the outbox. The same commit
-also introduces a generic event envelope and idempotent audit consumer keyed
-by event ID. Verification and password-reset emails are then moved together to
-the same outbox pipeline so an auth write has one durable post-commit delivery
-mechanism. These are separately deployable because the existing consumers keep
-accepting the current RabbitMQ routes throughout the migration.
+This phase moves audit-log publication to the outbox and makes the audit
+consumer idempotent by event ID. The existing audit RabbitMQ route remains the
+external contract.
+
+## Phase 7: Durable Verification Email Delivery
+
+Verification-email requests persist into the established outbox rather than
+publishing after commit. The existing verification RabbitMQ route and consumer
+remain unchanged, so this change is independently deployable and reversible.
+
+## Phase 8: Durable Password Reset Email Delivery
+
+Password-reset requests persist their email event into the established outbox
+rather than calling the mail sender after commit. This migration is separate
+from verification-email delivery; it has its own regression tests, commit, and
+review.
 
 ## Data Model
 
