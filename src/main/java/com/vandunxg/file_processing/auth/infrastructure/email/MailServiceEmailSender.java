@@ -7,6 +7,7 @@ import jakarta.mail.MessagingException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.HtmlUtils;
 
 @Component
 @RequiredArgsConstructor
@@ -49,7 +50,7 @@ public class MailServiceEmailSender implements EmailSender {
 
   private String buildHtmlContent(String displayName, String verificationLink) {
     return "<p>Hello "
-        + displayName
+        + HtmlUtils.htmlEscape(displayName)
         + ",</p>"
         + "<p>Please verify your email address by clicking the link below:</p>"
         + "<p><a href=\""
@@ -59,7 +60,7 @@ public class MailServiceEmailSender implements EmailSender {
 
   private String buildResetHtmlContent(String displayName, String resetLink) {
     return "<p>Hello "
-        + displayName
+        + HtmlUtils.htmlEscape(displayName)
         + ",</p>"
         + "<p>Reset your password by clicking the link below:</p>"
         + "<p><a href=\""
